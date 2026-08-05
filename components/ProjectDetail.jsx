@@ -238,17 +238,19 @@ export function ProjectDetail({ projectId, actor, onBack }) {
       {/* Header block — fixed height, never scrolls. Only the phases/
           timeline region below it (flex:1) scrolls. */}
       <Box sx={{ flexShrink: 0 }}>
-        <Button startIcon={<ArrowBackIcon />} onClick={onBack} size="small" sx={{ mb: 1, color: "text.secondary" }}>Portfolio</Button>
-
         <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={2}
           sx={{ borderBottom: "1px solid", borderColor: "divider", pb: 1.25 }}>
           <Box sx={{ minWidth: 0 }}>
             <Stack direction="row" spacing={1} alignItems="center">
-              <Chip label={detail.meta.type || "Product"} size="small" variant="outlined" />
+              <Tooltip title="Back to portfolio">
+                <IconButton size="small" onClick={onBack} sx={{ ml: -0.75, color: "text.secondary" }}>
+                  <ArrowBackIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              <Typography variant="h5" fontWeight={600} noWrap>{detail.meta.name}</Typography>
               <Chip label={bucket} size="small" color={bucketColor} />
             </Stack>
-            <Typography variant="h5" fontWeight={600} sx={{ mt: 0.25 }}>{detail.meta.name}</Typography>
-            <Stack direction="row" spacing={2} sx={{ mt: 0.5 }} color="text.secondary" flexWrap="wrap">
+            <Stack direction="row" spacing={2} sx={{ mt: 0.5, ml: 0.5 }} color="text.secondary" flexWrap="wrap">
               <Stack direction="row" spacing={0.5} alignItems="center"><BusinessIcon sx={{ fontSize: 14 }} /><Typography variant="caption">{detail.meta.customer}</Typography></Stack>
               {detail.meta.owner && (
                 <Stack direction="row" spacing={0.5} alignItems="center">

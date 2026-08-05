@@ -1,0 +1,23 @@
+{
+  "name": "converge-projects",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "next": "16.3.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "@mui/material": "9.3.0",
+    "@mui/icons-material": "9.3.0",
+    "@mui/lab": "9.0.0-beta.7",
+    "@mui/x-data-grid": "9.10.1",
+    "@emotion/react": "11.14.0",
+    "@emotion/styled": "11.14.1",
+    "@emotion/cache": "11.14.0"
+  }
+}

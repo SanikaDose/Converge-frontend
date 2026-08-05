@@ -19,7 +19,7 @@ import BusinessIcon from "@mui/icons-material/Business";
 import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 
 import { CompletionRing } from "./CompletionRing.jsx";
-import { PhaseNavList, EditPhaseDialog, DeletePhaseDialog, AddTaskDialog, PhaseTaskPanel } from "./PhaseManager.jsx";
+import { PhaseNavList, AddTaskDialog, PhaseTaskPanel } from "./PhaseManager.jsx";
 import { TaskDetailsDialog } from "./TaskDetailsDialog.jsx";
 import { TaskHistoryDialog } from "./TaskHistoryDialog.jsx";
 import { TimelineView } from "./TimelineView.jsx";
@@ -44,8 +44,6 @@ export function ProjectDetail({ projectId, actor, onBack }) {
   const [savingSettings, setSavingSettings] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [historyTask, setHistoryTask] = useState(null);
-  const [editingPhase, setEditingPhase] = useState(null);
-  const [deletingPhase, setDeletingPhase] = useState(null);
   const [addTaskPhaseId, setAddTaskPhaseId] = useState(null);
   const today = todayISO();
 
@@ -212,26 +210,6 @@ export function ProjectDetail({ projectId, actor, onBack }) {
     });
   };
 
-  const handleEditPhase = ({ name, critical }) => {
-    setDetail(prev => {
-      const next = { ...prev, phases: prev.phases.map(p => p.id === editingPhase.id ? { ...p, name, critical } : p) };
-      persist(next);
-      return next;
-    });
-    setEditingPhase(null);
-  };
-  const handleDeletePhase = () => {
-    const phaseId = deletingPhase.id;
-    setDetail(prev => {
-      const remainingPhases = prev.phases.filter(p => p.id !== phaseId);
-      const next = { ...prev, phases: remainingPhases, tasks: prev.tasks.filter(t => t.phaseId !== phaseId) };
-      persist(next);
-      if (activePhaseId === phaseId) setActivePhaseId(remainingPhases[0]?.id || null);
-      return next;
-    });
-    setDeletingPhase(null);
-  };
-
   const saveSettings = async (meta) => {
     if (!canEditProjectSettings) return;
     setSavingSettings(true);
@@ -256,84 +234,85 @@ export function ProjectDetail({ projectId, actor, onBack }) {
   const bucketColor = bucket === "Delayed" ? "error" : bucket === "In Progress" ? "warning" : "success";
 
   return (
-    <Box>
-      <Button startIcon={<ArrowBackIcon />} onClick={onBack} size="small" sx={{ mb: 1.5, color: "text.secondary" }}>Portfolio</Button>
+    <Box sx={{ display: "flex", flexDirection: "column", height: { xs: "calc(100vh - 96px)", md: "calc(100vh - 116px)" } }}>
+      {/* Header block — fixed height, never scrolls. Only the phases/
+          timeline region below it (flex:1) scrolls. */}
+      <Box sx={{ flexShrink: 0 }}>
+        <Button startIcon={<ArrowBackIcon />} onClick={onBack} size="small" sx={{ mb: 1, color: "text.secondary" }}>Portfolio</Button>
 
-      <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={2}
-        sx={{ borderBottom: "1px solid", borderColor: "divider", pb: 1.75 }}>
-        <Box sx={{ minWidth: 0 }}>
-          <Stack direction="row" spacing={1} alignItems="center">
-            <Chip label={detail.meta.type || "Product"} size="small" variant="outlined" />
-            <Chip label={bucket} size="small" color={bucketColor} />
-          </Stack>
-          <Typography variant="h5" fontWeight={600} sx={{ mt: 0.5 }}>{detail.meta.name}</Typography>
-          <Stack direction="row" spacing={2} sx={{ mt: 0.75 }} color="text.secondary" flexWrap="wrap">
-            <Stack direction="row" spacing={0.5} alignItems="center"><BusinessIcon sx={{ fontSize: 14 }} /><Typography variant="caption">{detail.meta.customer}</Typography></Stack>
-            {detail.meta.owner && (
-              <Stack direction="row" spacing={0.5} alignItems="center">
-                <EmployeeAvatar employeeId={detail.meta.owner} size={18} />
-                <Typography variant="caption">{employeeLabel(detail.meta.owner)}</Typography>
-              </Stack>
-            )}
-            <Stack direction="row" spacing={0.5} alignItems="center"><CalendarMonthIcon sx={{ fontSize: 14 }} /><Typography variant="caption" sx={{ fontFamily: "IBM Plex Mono, monospace" }}>{fmt(detail.meta.startDate)} → {fmt(detail.meta.endDate)}</Typography></Stack>
-          </Stack>
-        </Box>
-        <Stack direction="row" spacing={1.5} alignItems="center">
-          {canEditProjectSettings && (
-            <Tooltip title="Project settings"><IconButton size="small" onClick={() => setShowSettings(true)}><SettingsIcon fontSize="small" /></IconButton></Tooltip>
-          )}
-          <CompletionRing pct={s.pct} size={52} />
-        </Stack>
-      </Stack>
-
-      <Stack direction="row" spacing={3} sx={{ my: 1.75 }} flexWrap="wrap">
-        <Stat label="Tasks completed" value={`${s.completed} / ${s.total}`} />
-        <Stat label="Delayed" value={s.delayed} color={s.delayed > 0 ? "error.main" : "success.main"} />
-        <Stat label="Target end date" value={fmt(detail.meta.endDate)} mono />
-        <Stat label="Planned finish" value={fmt(s.plannedEnd)} mono />
-      </Stack>
-
-      <Stack direction="row" justifyContent="flex-end" sx={{ mb: 1.5 }}>
-        <ToggleButtonGroup size="small" exclusive value={viewMode} onChange={(e, v) => v && setViewMode(v)}>
-          <ToggleButton value="phases"><GridViewIcon sx={{ fontSize: 16, mr: 0.75 }} />Phases</ToggleButton>
-          <ToggleButton value="timeline"><TimelineIcon sx={{ fontSize: 16, mr: 0.75 }} />Timeline</ToggleButton>
-        </ToggleButtonGroup>
-      </Stack>
-
-      {viewMode === "phases" ? (
-        <Stack direction="row" spacing={2} alignItems="flex-start">
-          {/* Sticky + independently scrollable: stays put while the task
-              panel's own content scrolls the page, instead of scrolling
-              away together as one long column. */}
-          <Box sx={{
-            position: "sticky", top: 96, alignSelf: "flex-start", flexShrink: 0,
-            maxHeight: "calc(100vh - 112px)", overflowY: "auto", pr: 0.5,
-          }}>
-            <PhaseNavList
-              phases={phaseRows} activeId={activePhaseRow?.id} onSelect={setActivePhaseId}
-              canManage={canManagePhases} onEditPhase={setEditingPhase} onDeletePhase={setDeletingPhase}
-            />
+        <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={2}
+          sx={{ borderBottom: "1px solid", borderColor: "divider", pb: 1.25 }}>
+          <Box sx={{ minWidth: 0 }}>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Chip label={detail.meta.type || "Product"} size="small" variant="outlined" />
+              <Chip label={bucket} size="small" color={bucketColor} />
+            </Stack>
+            <Typography variant="h5" fontWeight={600} sx={{ mt: 0.25 }}>{detail.meta.name}</Typography>
+            <Stack direction="row" spacing={2} sx={{ mt: 0.5 }} color="text.secondary" flexWrap="wrap">
+              <Stack direction="row" spacing={0.5} alignItems="center"><BusinessIcon sx={{ fontSize: 14 }} /><Typography variant="caption">{detail.meta.customer}</Typography></Stack>
+              {detail.meta.owner && (
+                <Stack direction="row" spacing={0.5} alignItems="center">
+                  <EmployeeAvatar employeeId={detail.meta.owner} size={18} />
+                  <Typography variant="caption">{employeeLabel(detail.meta.owner)}</Typography>
+                </Stack>
+              )}
+              <Stack direction="row" spacing={0.5} alignItems="center"><CalendarMonthIcon sx={{ fontSize: 14 }} /><Typography variant="caption" sx={{ fontFamily: "IBM Plex Mono, monospace" }}>{fmt(detail.meta.startDate)} → {fmt(detail.meta.endDate)}</Typography></Stack>
+            </Stack>
           </Box>
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            {activePhaseRow && (
-              <PhaseTaskPanel
-                phase={activePhaseRow} tasks={activeTasks} projectStartDate={detail.meta.startDate} today={today}
-                canEdit={canEditTask} canManage={canManagePhases} canApprove={canApprove}
-                onUpdateTask={handleStatusChange}
-                onOpenEditor={setEditingTask} onOpenHistory={setHistoryTask}
-                onDeleteTask={handleDeleteTask} onApprove={handleApprove} onReject={handleReject}
-                onAddTask={() => setAddTaskPhaseId(activePhaseRow.id)}
-                onReorder={handleReorder}
-                onCommitOwner={handleCommitOwner} onCommitOffset={handleCommitOffset}
-                onCommitStartDate={handleCommitStartDate} onCommitDuration={handleCommitDuration}
-                onCommitDescription={handleCommitDescription}
-              />
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            {canEditProjectSettings && (
+              <Tooltip title="Project settings"><IconButton size="small" onClick={() => setShowSettings(true)}><SettingsIcon fontSize="small" /></IconButton></Tooltip>
             )}
-          </Box>
+            <CompletionRing pct={s.pct} size={48} />
+          </Stack>
         </Stack>
-      ) : (
-        <TimelineView phases={detail.phases} tasks={detail.tasks} projectStartDate={detail.meta.startDate} projectEndDate={detail.meta.endDate} today={today} />
-      )}
+
+        <Stack direction="row" spacing={3} sx={{ my: 1.25 }} flexWrap="wrap">
+          <Stat label="Tasks completed" value={`${s.completed} / ${s.total}`} />
+          <Stat label="Delayed" value={s.delayed} color={s.delayed > 0 ? "error.main" : "success.main"} />
+          <Stat label="Target end date" value={fmt(detail.meta.endDate)} mono />
+          <Stat label="Planned finish" value={fmt(s.plannedEnd)} mono />
+        </Stack>
+
+        <Stack direction="row" justifyContent="flex-end" sx={{ mb: 1 }}>
+          <ToggleButtonGroup size="small" exclusive value={viewMode} onChange={(e, v) => v && setViewMode(v)}>
+            <ToggleButton value="phases"><GridViewIcon sx={{ fontSize: 16, mr: 0.75 }} />Phases</ToggleButton>
+            <ToggleButton value="timeline"><TimelineIcon sx={{ fontSize: 16, mr: 0.75 }} />Timeline</ToggleButton>
+          </ToggleButtonGroup>
+        </Stack>
+      </Box>
+
+      {/* Content region — fills whatever height remains below the header
+          and never grows past it; phases view splits into two
+          independently-scrolling panes (nav list / task panel) instead
+          of one long page that scrolls both together. */}
+      <Box sx={{ flex: 1, minHeight: 0 }}>
+        {viewMode === "phases" ? (
+          <Stack direction="row" spacing={2} sx={{ height: "100%" }}>
+            <PhaseNavList phases={phaseRows} activeId={activePhaseRow?.id} onSelect={setActivePhaseId} />
+            <Box sx={{ flex: 1, minWidth: 0, height: "100%", overflowY: "auto", pr: 0.5 }}>
+              {activePhaseRow && (
+                <PhaseTaskPanel
+                  phase={activePhaseRow} tasks={activeTasks} projectStartDate={detail.meta.startDate} today={today}
+                  canEdit={canEditTask} canManage={canManagePhases} canApprove={canApprove}
+                  onUpdateTask={handleStatusChange}
+                  onOpenEditor={setEditingTask} onOpenHistory={setHistoryTask}
+                  onDeleteTask={handleDeleteTask} onApprove={handleApprove} onReject={handleReject}
+                  onAddTask={() => setAddTaskPhaseId(activePhaseRow.id)}
+                  onReorder={handleReorder}
+                  onCommitOwner={handleCommitOwner} onCommitOffset={handleCommitOffset}
+                  onCommitStartDate={handleCommitStartDate} onCommitDuration={handleCommitDuration}
+                  onCommitDescription={handleCommitDescription}
+                />
+              )}
+            </Box>
+          </Stack>
+        ) : (
+          <Box sx={{ height: "100%", overflowY: "auto" }}>
+            <TimelineView phases={detail.phases} tasks={detail.tasks} projectStartDate={detail.meta.startDate} projectEndDate={detail.meta.endDate} today={today} />
+          </Box>
+        )}
+      </Box>
 
       {showSettings && (
         <ProjectForm title="Project settings" initial={detail.meta} submitLabel="Save changes" busy={savingSettings}
@@ -347,11 +326,6 @@ export function ProjectDetail({ projectId, actor, onBack }) {
         />
       )}
       {historyTask && <TaskHistoryDialog task={detail.tasks.find(t => t.id === historyTask.id) || historyTask} onClose={() => setHistoryTask(null)} />}
-      {editingPhase && <EditPhaseDialog phase={editingPhase} onClose={() => setEditingPhase(null)} onSave={handleEditPhase} />}
-      {deletingPhase && (
-        <DeletePhaseDialog phase={deletingPhase} taskCount={detail.tasks.filter(t => t.phaseId === deletingPhase.id).length}
-          onClose={() => setDeletingPhase(null)} onConfirm={handleDeletePhase} />
-      )}
       {addTaskPhaseId && (
         <AddTaskDialog projectStartDate={detail.meta.startDate} onClose={() => setAddTaskPhaseId(null)} onCreate={handleAddTask} />
       )}

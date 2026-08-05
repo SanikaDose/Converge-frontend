@@ -2,7 +2,6 @@
 import React, { useState } from "react";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
 import Button from "@mui/material/Button";
 import Dialog from "@mui/material/Dialog";
@@ -10,12 +9,7 @@ import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
 import DialogActions from "@mui/material/DialogActions";
 import TextField from "@mui/material/TextField";
-import FormControlLabel from "@mui/material/FormControlLabel";
-import Switch from "@mui/material/Switch";
 import Stack from "./Stack.jsx";
-import Alert from "@mui/material/Alert";
-import EditIcon from "@mui/icons-material/Edit";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
 import AddIcon from "@mui/icons-material/Add";
 import { OrgSelect } from "./common.jsx";
 import { CompletionRing } from "./CompletionRing.jsx";
@@ -24,10 +18,15 @@ import { fmt } from "@/lib/dateUtils";
 import { computePlanned } from "@/lib/businessLogic";
 import { STATUS_HEX } from "@/lib/theme";
 
-/** Left-hand phase navigation list — one row per phase, with edit/delete icons for managers. */
-export function PhaseNavList({ phases, activeId, onSelect, canManage, onEditPhase, onDeletePhase }) {
+/**
+ * Left-hand phase navigation list — one row per phase. Phases are a
+ * fixed 12-phase template; there is deliberately no edit/delete/rename
+ * control for the phase itself here (only tasks within a phase are
+ * editable — see PhaseTaskPanel's "Add task" and each TaskCard).
+ */
+export function PhaseNavList({ phases, activeId, onSelect }) {
   return (
-    <Stack spacing={1} sx={{ width: 260, flexShrink: 0 }}>
+    <Stack spacing={1} sx={{ width: 260, flexShrink: 0, height: "100%", overflowY: "auto", pr: 0.5 }}>
       {phases.map((p) => (
         <Box
           key={p.id}
@@ -36,7 +35,7 @@ export function PhaseNavList({ phases, activeId, onSelect, canManage, onEditPhas
             display: "flex", alignItems: "center", gap: 1.5, cursor: "pointer",
             bgcolor: p.id === activeId ? "background.default" : "background.paper",
             border: "1px solid", borderColor: p.id === activeId ? (p.color === "slate" ? "divider" : STATUS_HEX[p.color]) : "divider",
-            borderRadius: 2.5, p: 1.25,
+            borderRadius: 2.5, p: 1.25, flexShrink: 0,
           }}
         >
           <CompletionRing pct={p.total ? Math.round((p.completed / p.total) * 100) : 0} size={40} color={p.color} />
@@ -52,55 +51,9 @@ export function PhaseNavList({ phases, activeId, onSelect, canManage, onEditPhas
               {p.completed}/{p.total} done{p.delayed > 0 ? ` · ${p.delayed} late` : ""}
             </Typography>
           </Box>
-          {canManage && (
-            <Stack direction="row">
-              <Tooltip title="Edit phase">
-                <IconButton size="small" onClick={(e) => { e.stopPropagation(); onEditPhase(p); }}><EditIcon sx={{ fontSize: 15 }} /></IconButton>
-              </Tooltip>
-              <Tooltip title="Delete phase">
-                <IconButton size="small" color="error" onClick={(e) => { e.stopPropagation(); onDeletePhase(p); }}><DeleteOutlineIcon sx={{ fontSize: 15 }} /></IconButton>
-              </Tooltip>
-            </Stack>
-          )}
         </Box>
       ))}
     </Stack>
-  );
-}
-
-export function EditPhaseDialog({ phase, onClose, onSave }) {
-  const [name, setName] = useState(phase.name);
-  const [critical, setCritical] = useState(phase.critical);
-  return (
-    <Dialog open onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle>Edit phase</DialogTitle>
-      <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1 }}>
-        <TextField label="Phase name" value={name} onChange={(e) => setName(e.target.value)} fullWidth autoFocus />
-        <FormControlLabel
-          control={<Switch checked={critical} onChange={(e) => setCritical(e.target.checked)} />}
-          label="Critical phase (a delay here delays the whole project)"
-        />
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
-        <Button variant="contained" disabled={!name.trim()} onClick={() => onSave({ name: name.trim(), critical })}>Save</Button>
-      </DialogActions>
-    </Dialog>
-  );
-}
-
-export function DeletePhaseDialog({ phase, taskCount, onClose, onConfirm }) {
-  return (
-    <Dialog open onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle>Delete "{phase.name}"?</DialogTitle>
-      <DialogContent>
-        <Alert severity="warning">This permanently removes the phase and all {taskCount} of its tasks (with their history).</Alert>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
-        <Button color="error" variant="contained" onClick={onConfirm}>Delete phase</Button>
-      </DialogActions>
-    </Dialog>
   );
 }
 

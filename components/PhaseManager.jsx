@@ -169,7 +169,7 @@ export function PhaseTaskPanel({
           {canManage && <Button size="small" startIcon={<AddIcon />} onClick={onAddTask}>Add task</Button>}
         </Stack>
       </Box>
-      <Stack spacing={1.25} sx={{ p: 2 }}>
+      <Stack spacing={2} sx={{ p: 2 }}>
         {sorted.map((t) => (
           <Box
             key={t.id}

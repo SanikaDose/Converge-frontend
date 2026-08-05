@@ -257,43 +257,43 @@ export function ProjectDetail({ projectId, actor, onBack }) {
 
   return (
     <Box>
-      <Button startIcon={<ArrowBackIcon />} onClick={onBack} sx={{ mb: 2, color: "text.secondary" }}>Portfolio</Button>
+      <Button startIcon={<ArrowBackIcon />} onClick={onBack} size="small" sx={{ mb: 1.5, color: "text.secondary" }}>Portfolio</Button>
 
-      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" flexWrap="wrap" gap={2}
-        sx={{ borderBottom: "1px solid", borderColor: "divider", pb: 2.5 }}>
-        <Box>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={2}
+        sx={{ borderBottom: "1px solid", borderColor: "divider", pb: 1.75 }}>
+        <Box sx={{ minWidth: 0 }}>
           <Stack direction="row" spacing={1} alignItems="center">
             <Chip label={detail.meta.type || "Product"} size="small" variant="outlined" />
             <Chip label={bucket} size="small" color={bucketColor} />
           </Stack>
-          <Typography variant="h4" sx={{ mt: 0.75 }}>{detail.meta.name}</Typography>
-          <Stack direction="row" spacing={2.5} sx={{ mt: 1 }} color="text.secondary" flexWrap="wrap">
-            <Stack direction="row" spacing={0.6} alignItems="center"><BusinessIcon sx={{ fontSize: 15 }} /><Typography variant="body2">{detail.meta.customer}</Typography></Stack>
+          <Typography variant="h5" fontWeight={600} sx={{ mt: 0.5 }}>{detail.meta.name}</Typography>
+          <Stack direction="row" spacing={2} sx={{ mt: 0.75 }} color="text.secondary" flexWrap="wrap">
+            <Stack direction="row" spacing={0.5} alignItems="center"><BusinessIcon sx={{ fontSize: 14 }} /><Typography variant="caption">{detail.meta.customer}</Typography></Stack>
             {detail.meta.owner && (
-              <Stack direction="row" spacing={0.6} alignItems="center">
-                <EmployeeAvatar employeeId={detail.meta.owner} size={20} />
-                <Typography variant="body2">{employeeLabel(detail.meta.owner)}</Typography>
+              <Stack direction="row" spacing={0.5} alignItems="center">
+                <EmployeeAvatar employeeId={detail.meta.owner} size={18} />
+                <Typography variant="caption">{employeeLabel(detail.meta.owner)}</Typography>
               </Stack>
             )}
-            <Stack direction="row" spacing={0.6} alignItems="center"><CalendarMonthIcon sx={{ fontSize: 15 }} /><Typography variant="body2" sx={{ fontFamily: "IBM Plex Mono, monospace" }}>{fmt(detail.meta.startDate)} → {fmt(detail.meta.endDate)}</Typography></Stack>
+            <Stack direction="row" spacing={0.5} alignItems="center"><CalendarMonthIcon sx={{ fontSize: 14 }} /><Typography variant="caption" sx={{ fontFamily: "IBM Plex Mono, monospace" }}>{fmt(detail.meta.startDate)} → {fmt(detail.meta.endDate)}</Typography></Stack>
           </Stack>
         </Box>
-        <Stack direction="row" spacing={2} alignItems="center">
+        <Stack direction="row" spacing={1.5} alignItems="center">
           {canEditProjectSettings && (
-            <Tooltip title="Project settings"><IconButton onClick={() => setShowSettings(true)}><SettingsIcon /></IconButton></Tooltip>
+            <Tooltip title="Project settings"><IconButton size="small" onClick={() => setShowSettings(true)}><SettingsIcon fontSize="small" /></IconButton></Tooltip>
           )}
-          <CompletionRing pct={s.pct} size={72} />
+          <CompletionRing pct={s.pct} size={52} />
         </Stack>
       </Stack>
 
-      <Stack direction="row" spacing={4} sx={{ my: 3 }} flexWrap="wrap">
+      <Stack direction="row" spacing={3} sx={{ my: 1.75 }} flexWrap="wrap">
         <Stat label="Tasks completed" value={`${s.completed} / ${s.total}`} />
         <Stat label="Delayed" value={s.delayed} color={s.delayed > 0 ? "error.main" : "success.main"} />
         <Stat label="Target end date" value={fmt(detail.meta.endDate)} mono />
-        <Stat label="Planned finish (from tasks)" value={fmt(s.plannedEnd)} mono />
+        <Stat label="Planned finish" value={fmt(s.plannedEnd)} mono />
       </Stack>
 
-      <Stack direction="row" justifyContent="flex-end" sx={{ mb: 2 }}>
+      <Stack direction="row" justifyContent="flex-end" sx={{ mb: 1.5 }}>
         <ToggleButtonGroup size="small" exclusive value={viewMode} onChange={(e, v) => v && setViewMode(v)}>
           <ToggleButton value="phases"><GridViewIcon sx={{ fontSize: 16, mr: 0.75 }} />Phases</ToggleButton>
           <ToggleButton value="timeline"><TimelineIcon sx={{ fontSize: 16, mr: 0.75 }} />Timeline</ToggleButton>
@@ -302,10 +302,18 @@ export function ProjectDetail({ projectId, actor, onBack }) {
 
       {viewMode === "phases" ? (
         <Stack direction="row" spacing={2} alignItems="flex-start">
-          <PhaseNavList
-            phases={phaseRows} activeId={activePhaseRow?.id} onSelect={setActivePhaseId}
-            canManage={canManagePhases} onEditPhase={setEditingPhase} onDeletePhase={setDeletingPhase}
-          />
+          {/* Sticky + independently scrollable: stays put while the task
+              panel's own content scrolls the page, instead of scrolling
+              away together as one long column. */}
+          <Box sx={{
+            position: "sticky", top: 96, alignSelf: "flex-start", flexShrink: 0,
+            maxHeight: "calc(100vh - 112px)", overflowY: "auto", pr: 0.5,
+          }}>
+            <PhaseNavList
+              phases={phaseRows} activeId={activePhaseRow?.id} onSelect={setActivePhaseId}
+              canManage={canManagePhases} onEditPhase={setEditingPhase} onDeletePhase={setDeletingPhase}
+            />
+          </Box>
           <Box sx={{ flex: 1, minWidth: 0 }}>
             {activePhaseRow && (
               <PhaseTaskPanel
@@ -354,8 +362,11 @@ export function ProjectDetail({ projectId, actor, onBack }) {
 function Stat({ label, value, color, mono }) {
   return (
     <Box>
-      <Typography variant="caption" color="text.secondary" sx={{ textTransform: "uppercase", letterSpacing: 0.5 }}>{label}</Typography>
-      <Typography variant="h6" sx={{ fontFamily: mono ? "IBM Plex Mono, monospace" : '"Space Grotesk", sans-serif', color: color || "text.primary" }}>
+      <Typography variant="caption" color="text.secondary" sx={{ textTransform: "uppercase", letterSpacing: 0.5, fontSize: 10.5, lineHeight: 1.6 }}>{label}</Typography>
+      <Typography sx={{
+        fontFamily: mono ? "IBM Plex Mono, monospace" : '"Space Grotesk", sans-serif',
+        fontSize: 16.5, fontWeight: 600, color: color || "text.primary",
+      }}>
         {value}
       </Typography>
     </Box>

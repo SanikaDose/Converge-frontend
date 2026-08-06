@@ -19,11 +19,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>
-        <ThemeRegistry>
-          <AppProvider>
+        <AppProvider>
+          <ThemeRegistry>
             <AppShell>{children}</AppShell>
-          </AppProvider>
-        </ThemeRegistry>
+          </ThemeRegistry>
+        </AppProvider>
       </body>
     </html>
   );

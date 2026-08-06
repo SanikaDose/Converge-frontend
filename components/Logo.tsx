@@ -1,5 +1,7 @@
+"use client";
 import React from "react";
 import Image from "next/image";
+import { useTheme } from "@mui/material/styles";
 
 /**
  * "Converge" logo mark — the real uploaded asset (public/ApplicationIcon.png,
@@ -32,6 +34,7 @@ export function LogoMark({ size = 28, tile = true }: { size?: number; tile?: boo
 }
 
 export function LogoLockup({ markSize = 30, wordmarkSize = 17 }: { markSize?: number; wordmarkSize?: number }) {
+  const theme = useTheme();
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
       <LogoMark size={markSize} />
@@ -44,7 +47,7 @@ export function LogoLockup({ markSize = 30, wordmarkSize = 17 }: { markSize?: nu
         }}>
           Converge
         </span>
-        <span style={{ fontSize: wordmarkSize * 0.5, color: "#8b94a3", letterSpacing: 2, textTransform: "uppercase" }}>
+        <span style={{ fontSize: wordmarkSize * 0.5, color: theme.palette.text.secondary, letterSpacing: 2, textTransform: "uppercase" }}>
           Projects
         </span>
       </div>

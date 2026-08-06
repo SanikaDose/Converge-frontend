@@ -5,6 +5,9 @@
  * in client-only dependencies.
  */
 
+/** UI color scheme — independent of AppRole ("viewing as"), see AppContext. */
+export type ThemeMode = "light" | "dark";
+
 /* ---------------------------------------------------------------------
    ORGANIZATION DIRECTORY
 ------------------------------------------------------------------------ */

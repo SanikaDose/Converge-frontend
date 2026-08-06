@@ -16,7 +16,7 @@ import { CompletionRing } from "./CompletionRing";
 import { TaskCard } from "./TaskCard";
 import { fmt } from "@/lib/dateUtils";
 import { computePlanned } from "@/lib/businessLogic";
-import { STATUS_HEX } from "@/lib/theme";
+import { useStatusHex } from "@/lib/theme";
 import type { PhaseSummary, Task, TaskStatus, WeekDay } from "@/lib/types";
 
 /**
@@ -30,6 +30,7 @@ export function PhaseNavList({ phases, activeId, onSelect }: {
   activeId: string | undefined;
   onSelect: (id: string) => void;
 }) {
+  const STATUS_HEX = useStatusHex();
   return (
     <Stack spacing={1} sx={{ width: 260, flexShrink: 0, height: "100%", overflowY: "auto", pr: 0.5 }}>
       {phases.map((p) => (

@@ -8,12 +8,34 @@ html, body {
   box-sizing: border-box;
 }
 
-/* Dark-themed scrollbars everywhere — the browser default (light/white
-   thumb+track) reads as a bug against this app's dark ground, especially
-   in the always-visible phase nav list and task panel scroll regions. */
+/* Mode-aware document background + themed scrollbars. Both follow
+   `[data-theme]` on <html>, set by ThemeRegistry from the same `mode`
+   the MUI theme uses; default (pre-hydration) matches dark mode since
+   that's the app's default. MUI's CssBaseline sets `body`'s background
+   from the theme too, but that's a one-shot global-style injection that
+   doesn't reliably re-run on a client-side theme swap — this CSS-variable
+   version is the one that actually tracks live toggling, and also covers
+   page content taller than one viewport (where `body`'s box can end
+   before the content does, leaving an uncolored gap below the fold). */
+:root {
+  --bg-default: #12161c;
+  --scrollbar-thumb: #3a4453;
+  --scrollbar-thumb-hover: #4c5768;
+}
+
+[data-theme="light"] {
+  --bg-default: #f3f5f7;
+  --scrollbar-thumb: #c7ccd3;
+  --scrollbar-thumb-hover: #aab0ba;
+}
+
+html, body {
+  background-color: var(--bg-default);
+}
+
 * {
   scrollbar-width: thin;
-  scrollbar-color: #3a4453 transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 *::-webkit-scrollbar {
@@ -26,12 +48,12 @@ html, body {
 }
 
 *::-webkit-scrollbar-thumb {
-  background-color: #3a4453;
+  background-color: var(--scrollbar-thumb);
   border-radius: 8px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background-color: #4c5768;
+  background-color: var(--scrollbar-thumb-hover);
 }

@@ -11,14 +11,17 @@ npm install
 npm run dev
 ```
 
-Opens on http://localhost:3000. Seed data (one example project + one ticket) is created the
-first time `lib/mockDb.ts` loads in a given server process.
+Opens on http://localhost:3000. Seed data (two example projects — one early-stage, one well
+underway with realistic delays/achievements — plus four tickets) is created the first time
+`lib/mockDb.ts` loads in a given server process.
 
 ## Architecture at a glance
 
 ```
 app/
-  layout.tsx                 Root layout: ThemeRegistry + AppProvider + AppShell wrap every page.
+  layout.tsx                 Root layout: AppProvider + ThemeRegistry + AppShell wrap every page,
+                              in that order — ThemeRegistry reads AppContext's `mode` to build the
+                              MUI theme, so AppProvider has to be the outer one.
                               metadata.icons points at public/ApplicationIcon.png (real favicon).
   page.tsx                   Dashboard route ("/")
   team-performance/page.tsx  Team Performance route
@@ -70,13 +73,16 @@ components/                  All "use client" — this app has no server compone
                                EmployeeAvatar, AchievementBadge, PendingApprovalChip, StatCard
                                (shared KPI tile used by Dashboard and TeamPerformance).
   Stack.tsx                       Wrapper around MUI's Stack — see "MUI v9 gotchas" below.
-  ThemeRegistry.tsx                Standard MUI + Next.js App Router emotion-SSR cache wiring.
+  ThemeRegistry.tsx                Builds the MUI theme from AppContext's `mode` (createAppTheme)
+                               and stamps `data-theme` on <html> for the CSS-variable-driven
+                               scrollbar/body-background in app/globals.css — plus the standard
+                               Next.js App Router emotion-SSR cache wiring.
 
 lib/                          Framework-agnostic — no React imports, safe to use from API
                               routes or components alike.
   types.ts                     Shared domain types (Task, Phase, ProjectMeta, Employee, Ticket,
-                               Actor, permission/role unions, etc.) — every other lib/* and
-                               component file imports from here rather than re-declaring shapes.
+                               Actor, permission/role unions, ThemeMode, etc.) — every other lib/*
+                               and component file imports from here rather than re-declaring shapes.
   data.ts                      TEMPLATE (12 phases / 62 tasks), TEAMS/EMPLOYEES org directory,
                                ROLES + PERMISSIONS, roleCan(), genId().
   dateUtils.ts                 UTC-consistent date arithmetic + working-day (Mon–Fri) calendar.
@@ -85,10 +91,13 @@ lib/                          Framework-agnostic — no React imports, safe to u
                                approveScheduleChange / rejectScheduleChange), team-performance
                                aggregation, live dashboard-stats recompute.
   mockDb.ts                    In-memory "database" — see "Mock data" below.
-  theme.ts                     MUI theme: dark ground, blue/teal brand palette from the logo.
+  theme.ts                     createAppTheme(mode) builds the light/dark MUI theme; useStatusHex()
+                               is how components read the mode-appropriate status color map — see
+                               "Light/dark theme" below.
   api.ts                       fetch() wrappers, one per API route.
 
-context/AppContext.tsx        role / selfId / actor React Context, persisted to localStorage.
+context/AppContext.tsx        role / selfId / actor / mode (+ toggleMode) React Context, all
+                              persisted together to localStorage.
 
 public/ApplicationIcon.png    The real Converge logo (uploaded by the user) — used for both
                               the navbar mark and the browser favicon.
@@ -148,6 +157,39 @@ Projects created before this feature existed have no `meta.weekOff` — `ensureP
 `lib/businessLogic.ts` defaults it to `DEFAULT_WEEK_OFF` the first time such a project loads, so
 old data doesn't crash the date math.
 
+## Light/dark theme
+
+Toggled from the sun/moon icon button in the navbar (`AppShell.tsx`); state lives in
+`AppContext`'s `mode`/`toggleMode`, persisted to localStorage alongside role/selfId. Default is
+dark (the original look).
+
+- **`lib/theme.ts`**: `createAppTheme(mode)` returns a full MUI theme per mode — separate
+  background/paper/text/divider/primary values for light vs dark, not just an inverted palette.
+- **Status colors need two maps, not one.** `STATUS_HEX_DARK`'s bright/high-chroma values were
+  tuned to pop on a dark ground and are used directly as *text* color on a translucent tint of
+  themselves (`StatusChip`, achievement/pending-approval badges, timeline bars). On white those
+  same values (amber especially) fail contrast badly. `STATUS_HEX_LIGHT` darkens/saturates each
+  hue enough to stay legible on white. Components call `useStatusHex()` (reads `theme.palette.mode`
+  via `useTheme()`) rather than importing a static object, so status colors follow the active
+  mode — every component that renders a status color does this (`common.tsx`, `TaskCard.tsx`,
+  `TimelineView.tsx`, `ProjectCard.tsx`, `PhaseManager.tsx`, `CompletionRing.tsx`,
+  `TeamPerformance.tsx`). If you add a new status-colored element, pull the map from
+  `useStatusHex()`, not the deprecated `STATUS_HEX` export — and if it lives inside a
+  `useMemo`/`useCallback`, add the `STATUS_HEX` variable to that hook's dependency array (see
+  `TeamPerformance.tsx`'s DataGrid `columns`) or it'll render with a stale map after a mode switch.
+- **`app/layout.tsx` nests `AppProvider` outside `ThemeRegistry`** deliberately — `ThemeRegistry`
+  calls `useAppContext()` to read `mode` and build the theme, so `AppProvider` has to be the
+  ancestor. Reversing this order breaks with "must be used within AppProvider".
+- **MUI's `CssBaseline` doesn't reliably repaint `<body>`'s background on a live theme swap** —
+  it's a one-shot global-style injection via emotion that doesn't re-run cleanly on client-side
+  mode toggles (verified: `document.body`'s computed background stayed on the old mode's color
+  after toggling, even though every `sx`-driven `Paper`/`Box` updated correctly). Don't rely on
+  it for the page background. Fixed two ways instead: `AppShell.tsx`'s root `Box` sets
+  `bgcolor: "background.default"` explicitly, and `app/globals.css` sets `html, body`'s
+  background from a `--bg-default` CSS variable keyed off `[data-theme]` on `<html>` (which
+  `ThemeRegistry` sets in a `useEffect`) — the CSS-variable version also covers page content
+  taller than one viewport, where `body`'s own box can end before the visible content does.
+
 ## Known limitations
 
 - No real authentication — the role switcher in the top bar is a pure client-side simulation.
@@ -194,44 +236,74 @@ changed several APIs from what older MUI docs/examples show:
 
 ## History of notable decisions (most recent first)
 
-1. Added a per-project week-off calendar (see "Business-day calendar" above) — a day-of-week
+1. Added a light/dark theme toggle (see "Light/dark theme" above) — navbar sun/moon button,
+   `AppContext.mode` persisted to localStorage, `createAppTheme(mode)` in `lib/theme.ts`. Required
+   splitting status colors into `STATUS_HEX_DARK`/`STATUS_HEX_LIGHT` (the dark-tuned bright hues
+   had bad contrast as text on white) and reworking every component that renders a status color to
+   pull from `useStatusHex()` instead of a static import. Also surfaced that `CssBaseline` doesn't
+   reliably repaint `<body>`'s background on a live client-side theme swap — worked around with an
+   explicit `bgcolor` on `AppShell`'s root `Box` plus a `data-theme`-keyed CSS variable in
+   `app/globals.css`, not something to re-break by reverting to relying on `CssBaseline` alone.
+2. Reworked the 12-phase task template's day-offsets to close a real scheduling gap: Phase 01's
+   tasks were bunched onto day 0–1 while Phase 02 didn't start until day 7, leaving days 2–6
+   reserved-but-empty on the Gantt chart. Re-sequenced with explicit parallel/sequential modeling
+   (kickoff → requirement-gathering ‖ site-survey in parallel → planning → scope-freeze, each
+   depending on the previous step finishing) so Phase 01 now fills the full week Phase 02 was
+   already waiting on. Also fixed Engineering Release being scheduled the same day as the Design
+   Review that approves it. Improved `TimelineView.tsx` alongside this: bars/dots now color by
+   actual overdue-ness (`isOverdue`) rather than literal task status (a "Not Started" task past its
+   planned finish was rendering as neutral gray, not red — the whole point of a Gantt chart is to
+   surface that), Month/Quarter zoom now show calendar-month labels instead of the same weekly
+   cadence crowding into unreadable overlapping marks, phases are collapsible, the header row and
+   phase names are sticky while scrolling, the view auto-scrolls to "today" on load, and clicking
+   any task bar jumps to that task in Phases view.
+3. Enriched the seed data (`lib/mockDb.ts`) for demo/screenshot purposes: a second project
+   ("Vertex Robotics", Solution type, well underway with real delays and achievements — contrast
+   against the original early-stage "TE Connectivity" project) and a `simulateProgress` helper
+   that stamps realistic status/owner/achievement data across both without hand-authoring every
+   task. Surfaced and fixed a real bug in `computeAchievement` (`lib/businessLogic.ts`): it called
+   `businessDaysBetween(actualStart, actualFinish)` with the earlier date first, which that
+   function's signed "a minus b" convention turns negative — on-time multi-day task completions
+   were incorrectly earning "Outstanding Performance" badges. Args are swapped now
+   (`actualFinish, actualStart`).
+4. Added a per-project week-off calendar (see "Business-day calendar" above) — a day-of-week
    picker on the New Project / Project Settings form, max 2 days, defaulting to Saturday+Sunday.
    Every business-day calculation in `lib/dateUtils.ts`/`lib/businessLogic.ts` now takes the
    project's `weekOff` instead of hardcoding Sat/Sun. Also removed the seed project's
    auto-assigned task owners — every task (seeded or newly created) now starts unassigned.
-2. Migrated the entire app from JavaScript/JSX to TypeScript (`strict` mode, no `.js`/`.jsx`
+5. Migrated the entire app from JavaScript/JSX to TypeScript (`strict` mode, no `.js`/`.jsx`
    remaining under `app/`, `components/`, `lib/`, `context/`) — see "TypeScript" above. Surfaced
    one real latent bug in the process: `OrgSelect` (`components/common.tsx`) never accepted or
    forwarded a `disabled` prop, so `TaskCard`'s owner dropdown wasn't actually being locked for
    Pending-Approval tasks; fixed as part of the migration.
-3. Team Performance page decluttered: KPI summary row added (`StatCard`, extracted from
+6. Team Performance page decluttered: KPI summary row added (`StatCard`, extracted from
    `Dashboard.tsx` into `common.tsx` for reuse), Total/Completed/Pending columns merged into one
    "Tasks" cell, zero-task rows show muted "—"/"No tasks" instead of repeated literal zeros, and
    the name/role cell's line-height bug (MUI DataGrid forces cell `line-height` to match row
    height, which was pushing two-line cell content up into the row above) was fixed.
-4. Project detail header compacted: back button is icon-only (no "Portfolio" label), and the
+7. Project detail header compacted: back button is icon-only (no "Portfolio" label), and the
    separate "Product"/status-chip row above the title was merged onto the title's own line to
    save vertical space.
-5. Added a global dark-themed scrollbar (`app/globals.css`) — the browser-default light/white
+8. Added a global dark-themed scrollbar (`app/globals.css`) — the browser-default light/white
    scrollbar thumb read as a bug against this app's dark ground, especially in the always-visible
    phase nav list and task panel scroll regions.
-6. Replaced the hand-vectorized SVG logo approximation with the real uploaded asset
+9. Replaced the hand-vectorized SVG logo approximation with the real uploaded asset
    (`public/ApplicationIcon.png`), used via `next/image` for both the navbar mark and the
    browser favicon (`app/layout.tsx` metadata).
-7. Removed the "On Track Projects" dashboard accordion — folded into "In Progress".
-8. Simplified `ROLES` from a 5-role simulation (Admin/PM/Team Lead/Team Member/Viewer) down to
+10. Removed the "On Track Projects" dashboard accordion — folded into "In Progress".
+11. Simplified `ROLES` from a 5-role simulation (Admin/PM/Team Lead/Team Member/Viewer) down to
    Admin + Developer, both full access, per user request — see "Roles" above.
-9. Redesigned `TaskCard` to match a supplied reference screenshot: inline always-editable
+12. Redesigned `TaskCard` to match a supplied reference screenshot: inline always-editable
    Owner/Day-from-start/Planned-start/Duration fields (commit on blur) instead of a side Drawer.
    `TaskEditorDrawer.jsx` was deleted and replaced by `TaskDetailsDialog.tsx` (a centered modal,
    consistent with every other editor in the app) for name/priority/dependencies only.
    description/owner/scheduling moved to the inline card fields.
-10. `TicketsPanel` reorganized into three accordions (Raised/In Progress/Completed) matching the
+13. `TicketsPanel` reorganized into three accordions (Raised/In Progress/Completed) matching the
     dashboard's project-accordion pattern.
-11. Converted the whole app from a single-file MUI artifact (built earlier, still published as a
+14. Converted the whole app from a single-file MUI artifact (built earlier, still published as a
     Claude.ai Artifact) into this proper Next.js project with real API routes + mock DB + React
     state, sidebar removed in favor of top nav only.
-12. Fixed a real timezone bug in the original date math: mixing local-time `Date` parsing with
+15. Fixed a real timezone bug in the original date math: mixing local-time `Date` parsing with
     UTC serialization silently shifted every computed date back a day (and the shift compounded
     between planned-start and planned-finish, occasionally putting finish before start). All
     date arithmetic in `lib/dateUtils.ts` is now UTC-consistent except `todayISO()`, which

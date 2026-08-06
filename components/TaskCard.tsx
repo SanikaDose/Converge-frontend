@@ -25,7 +25,7 @@ import { StatusChip, AchievementBadge, PendingApprovalChip, EmployeeAvatar } fro
 import { OrgSelect } from "./common";
 import { isOverdue, overdueWorkingDays } from "@/lib/businessLogic";
 import { fmt } from "@/lib/dateUtils";
-import { STATUS_HEX } from "@/lib/theme";
+import { useStatusHex } from "@/lib/theme";
 import type { Task, TaskStatus, WeekDay } from "@/lib/types";
 
 const monoLabel = {
@@ -66,6 +66,7 @@ export function TaskCard({
   onCommitDescription: (description: string) => void;
   dragHandleProps?: HTMLAttributes<HTMLDivElement>;
 }) {
+  const STATUS_HEX = useStatusHex();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectComment, setRejectComment] = useState("");

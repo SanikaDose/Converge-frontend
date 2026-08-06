@@ -8,10 +8,11 @@ import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Tooltip from "@mui/material/Tooltip";
 import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import { useTheme } from "@mui/material/styles";
 import { STATUS_COLOR } from "@/lib/data";
 import { isOverdue } from "@/lib/businessLogic";
 import { fmt, addDays, diffDays, isWeekend } from "@/lib/dateUtils";
-import { STATUS_HEX } from "@/lib/theme";
+import { useStatusHex } from "@/lib/theme";
 import type { Phase, Task, WeekDay } from "@/lib/types";
 
 const ROW_H = 34;
@@ -53,6 +54,9 @@ export function TimelineView({ phases, tasks, projectStartDate, projectEndDate, 
   weekOff: WeekDay[];
   onOpenPhase?: (phaseId: string) => void;
 }) {
+  const STATUS_HEX = useStatusHex();
+  const theme = useTheme();
+  const achievementIconColor = theme.palette.mode === "light" ? "#ffffff" : "#0c2b1e";
   const [zoom, setZoom] = useState("Week");
   const [collapsedPhases, setCollapsedPhases] = useState<Record<string, boolean>>({});
   const pxPerDay = ZOOM_PX[zoom];
@@ -138,7 +142,7 @@ export function TimelineView({ phases, tasks, projectStartDate, projectEndDate, 
             <Typography variant="caption" color="text.secondary">Achievement</Typography>
           </Stack>
           <Stack direction="row" alignItems="center" spacing={0.75}>
-            <Box sx={{ width: 12, height: 12, borderRadius: 0.5, bgcolor: "rgba(139,148,163,0.18)", border: "1px solid #2a323d" }} />
+            <Box sx={{ width: 12, height: 12, borderRadius: 0.5, bgcolor: "rgba(139,148,163,0.18)", border: "1px solid", borderColor: "divider" }} />
             <Typography variant="caption" color="text.secondary">Week off</Typography>
           </Stack>
         </Stack>
@@ -222,7 +226,7 @@ export function TimelineView({ phases, tasks, projectStartDate, projectEndDate, 
                     <React.Fragment key={i}>
                       <Box
                         onClick={() => onOpenPhase?.(t.phaseId)}
-                        sx={{ position: "absolute", left: 0, right: 0, top: rowY, height: ROW_H, cursor: onOpenPhase ? "pointer" : "default", "&:hover": { bgcolor: "rgba(255,255,255,0.03)" } }}
+                        sx={{ position: "absolute", left: 0, right: 0, top: rowY, height: ROW_H, cursor: onOpenPhase ? "pointer" : "default", "&:hover": { bgcolor: "action.hover" } }}
                       />
                       <Tooltip title={`${t.name} · ${fmt(t.plannedStart)} → ${fmt(t.plannedFinish)} · ${overdue ? "Overdue · " : ""}${t.status}`}>
                         <Box
@@ -233,7 +237,7 @@ export function TimelineView({ phases, tasks, projectStartDate, projectEndDate, 
                             boxShadow: "0 1px 2px rgba(0,0,0,0.35)", cursor: onOpenPhase ? "pointer" : "default",
                             display: "flex", alignItems: "center", justifyContent: "flex-end", pr: 0.25,
                           }}>
-                          {t.achievement && <EmojiEventsIcon sx={{ fontSize: 11, color: "#0c2b1e" }} />}
+                          {t.achievement && <EmojiEventsIcon sx={{ fontSize: 11, color: achievementIconColor }} />}
                         </Box>
                       </Tooltip>
                     </React.Fragment>

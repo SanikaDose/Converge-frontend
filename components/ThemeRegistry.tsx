@@ -6,7 +6,8 @@ import { useServerInsertedHTML } from "next/navigation";
 import { CacheProvider } from "@emotion/react";
 import { ThemeProvider } from "@mui/material/styles";
 import CssBaseline from "@mui/material/CssBaseline";
-import theme from "@/lib/theme";
+import { createAppTheme } from "@/lib/theme";
+import { useAppContext } from "@/context/AppContext";
 
 /**
  * Standard MUI + Next.js App Router wiring: emotion needs its inserted
@@ -16,6 +17,15 @@ import theme from "@/lib/theme";
  * Next.js App Router docs use — copy verbatim, no app-specific logic.
  */
 export default function ThemeRegistry({ children }: { children: React.ReactNode }) {
+  const { mode } = useAppContext();
+  const theme = React.useMemo(() => createAppTheme(mode), [mode]);
+
+  // Drives the mode-aware scrollbar colors in app/globals.css — CSS alone
+  // can't see the AppContext-driven `mode`, so this is the bridge.
+  React.useEffect(() => {
+    document.documentElement.dataset.theme = mode;
+  }, [mode]);
+
   const [{ cache, flush }] = React.useState(() => {
     const cache = createCache({ key: "mui" });
     cache.compat = true;

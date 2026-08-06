@@ -8,11 +8,12 @@ import BusinessIcon from "@mui/icons-material/Business";
 import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 import { CompletionRing } from "./CompletionRing";
 import { fmt } from "@/lib/dateUtils";
-import { STATUS_HEX } from "@/lib/theme";
+import { useStatusHex } from "@/lib/theme";
 import type { ProjectWithLiveStats } from "@/lib/types";
 
 /** Unchanged card content from the original build — now an MUI Paper-ish Box, inside the status accordions. */
 export function ProjectCard({ project, onOpen }: { project: ProjectWithLiveStats; onOpen: (id: string) => void }) {
+  const STATUS_HEX = useStatusHex();
   const delayed = project.delayed > 0;
   return (
     <Box onClick={() => onOpen(project.id)} sx={{

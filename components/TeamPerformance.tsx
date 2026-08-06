@@ -15,7 +15,7 @@ import AssignmentIcon from "@mui/icons-material/Assignment";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import { EmployeeAvatar, StatCard } from "./common";
 import { fetchTeamPerformance } from "@/lib/api";
-import { STATUS_HEX } from "@/lib/theme";
+import { useStatusHex } from "@/lib/theme";
 import type { TeamPerformanceRow } from "@/lib/types";
 
 /**
@@ -33,6 +33,7 @@ import type { TeamPerformanceRow } from "@/lib/types";
  * zeros so the eye isn't drawn to noise.
  */
 export function TeamPerformance({ refreshKey }: { refreshKey: number }) {
+  const STATUS_HEX = useStatusHex();
   const [rows, setRows] = useState<TeamPerformanceRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -107,7 +108,7 @@ export function TeamPerformance({ refreshKey }: { refreshKey: number }) {
         );
       },
     },
-  ], []);
+  ], [STATUS_HEX]);
 
   return (
     <Box>

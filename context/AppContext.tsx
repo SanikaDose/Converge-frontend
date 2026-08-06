@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { ROLES, employeeLabel, roleCan } from "@/lib/data";
-import type { Actor, AppRole, PermissionAction } from "@/lib/types";
+import type { Actor, AppRole, PermissionAction, ThemeMode } from "@/lib/types";
 
 interface AppContextValue {
   role: AppRole;
@@ -10,6 +10,8 @@ interface AppContextValue {
   selfId: string | null;
   setSelfId: (id: string | null) => void;
   actor: Actor;
+  mode: ThemeMode;
+  toggleMode: () => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -19,6 +21,7 @@ const STORAGE_KEY = "converge_projects_role_pref_v1";
 interface StoredPref {
   role?: AppRole;
   selfId?: string | null;
+  mode?: ThemeMode;
 }
 
 /**
@@ -26,11 +29,13 @@ interface StoredPref {
  * there is no real backend auth, this just reshapes the UI per role so
  * the team can validate the role-based design. Role + selfId (which
  * organization member "you are") persist to localStorage so a reload
- * doesn't reset the demo.
+ * doesn't reset the demo. `mode` (light/dark) rides along in the same
+ * stored blob since it's the same kind of per-visitor UI preference.
  */
 export function AppProvider({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<AppRole>("Admin");
   const [selfId, setSelfId] = useState<string | null>(null);
+  const [mode, setMode] = useState<ThemeMode>("dark");
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -40,6 +45,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const pref: StoredPref = JSON.parse(raw);
         if (pref.role && (ROLES as string[]).includes(pref.role)) setRole(pref.role);
         if (pref.selfId) setSelfId(pref.selfId);
+        if (pref.mode === "light" || pref.mode === "dark") setMode(pref.mode);
       }
     } catch { /* no stored preference yet */ }
     setLoaded(true);
@@ -47,15 +53,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!loaded) return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ role, selfId }));
-  }, [role, selfId, loaded]);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ role, selfId, mode }));
+  }, [role, selfId, mode, loaded]);
+
+  const toggleMode = () => setMode(m => m === "dark" ? "light" : "dark");
 
   const actor = useMemo<Actor>(() => ({
     role, id: selfId, name: selfId ? employeeLabel(selfId) : role,
     can: (action: PermissionAction) => roleCan(role, action),
   }), [role, selfId]);
 
-  const value = useMemo<AppContextValue>(() => ({ role, setRole, selfId, setSelfId, actor }), [role, selfId, actor]);
+  const value = useMemo<AppContextValue>(() => ({ role, setRole, selfId, setSelfId, actor, mode, toggleMode }), [role, selfId, actor, mode]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

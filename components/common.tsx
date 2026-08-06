@@ -12,13 +12,14 @@ import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
 import HourglassTopIcon from "@mui/icons-material/HourglassTop";
 import { alpha, useTheme } from "@mui/material/styles";
 import { TEAMS, EMPLOYEE_BY_ID, initials, avatarColor } from "@/lib/data";
-import { STATUS_HEX } from "@/lib/theme";
+import { useStatusHex } from "@/lib/theme";
 import type { Achievement, StatusColorKey } from "@/lib/types";
 
 /** Small colored status pill, used for task/project/ticket status everywhere. */
 export function StatusChip({ label, color = "slate", size = "small", variant = "filled" }: {
   label: string; color?: StatusColorKey; size?: ChipProps["size"]; variant?: "filled" | "outlined";
 }) {
+  const STATUS_HEX = useStatusHex();
   const hex = STATUS_HEX[color] || STATUS_HEX.slate;
   return (
     <Chip
@@ -54,6 +55,7 @@ export function EmployeeAvatar({ employeeId, size = 28 }: { employeeId?: string 
 
 /** 🏆 achievement badge — used on task cards, timeline tooltips, dashboard. */
 export function AchievementBadge({ achievement, size = "small" }: { achievement?: Achievement | null; size?: ChipProps["size"] }) {
+  const STATUS_HEX = useStatusHex();
   if (!achievement) return null;
   return (
     <Tooltip title={achievement.label}>
@@ -68,6 +70,7 @@ export function AchievementBadge({ achievement, size = "small" }: { achievement?
 }
 
 export function PendingApprovalChip({ size = "small" }: { size?: ChipProps["size"] }) {
+  const STATUS_HEX = useStatusHex();
   return (
     <Chip
       icon={<HourglassTopIcon sx={{ fontSize: 14 }} />}

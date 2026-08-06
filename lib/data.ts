@@ -17,11 +17,17 @@ import type { AppRole, Employee, PermissionAction, Team, TemplatePhase, WeekDay 
 ------------------------------------------------------------------------ */
 export const TEMPLATE: TemplatePhase[] = [
   { phase: "01 · Project Initialization", critical: true, tasks: [
+    // Kickoff first (sequential). Requirement gathering and the on-site
+    // survey are independent workstreams, so they run in parallel right
+    // after. Planning needs both finished as inputs, and scope freeze
+    // needs planning finished — those two stay sequential. This fills
+    // the full week (day 0 → day 6) so Engineering starts immediately
+    // on day 7 with no idle gap in between.
     ["Project Kick-off Meeting", 0, 1],
-    ["Requirement Gathering & Analysis", 1, 1],
-    ["Site Survey & Feasibility Study", 1, 1],
-    ["Project Planning & Resource Allocation", 1, 1],
-    ["Scope Freeze & Customer Approval (DAP)", 1, 1],
+    ["Requirement Gathering & Analysis", 1, 2],
+    ["Site Survey & Feasibility Study", 1, 2],
+    ["Project Planning & Resource Allocation", 3, 2],
+    ["Scope Freeze & Customer Approval (DAP)", 5, 2],
   ]},
   { phase: "02 · Engineering", critical: true, tasks: [
     ["Requirement Review", 7, 1],
@@ -33,7 +39,9 @@ export const TEMPLATE: TemplatePhase[] = [
     ["Database Architecture", 8, 1],
     ["Application Flow", 8, 1],
     ["Design Review", 9, 1],
-    ["Engineering Release", 9, 1],
+    // Release depends on design review's approval, so it follows on the
+    // next day rather than running the same day as its own review.
+    ["Engineering Release", 10, 1],
   ]},
   { phase: "03 · Infrastructure", critical: false, tasks: [
     ["Windows / Linux Setup", 10, 1],

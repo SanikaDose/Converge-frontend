@@ -1,5 +1,5 @@
 "use client";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Box from "@mui/material/Box";
 import Stack from "./Stack";
 import Typography from "@mui/material/Typography";
@@ -7,6 +7,7 @@ import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Tooltip from "@mui/material/Tooltip";
 import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { STATUS_COLOR } from "@/lib/data";
 import { fmt, addDays, diffDays, isWeekend } from "@/lib/dateUtils";
 import { STATUS_HEX } from "@/lib/theme";
@@ -14,6 +15,7 @@ import type { Phase, Task, WeekDay } from "@/lib/types";
 
 const ROW_H = 34;
 const PHASE_ROW_H = 30;
+const HEADER_H = 34;
 const ZOOM_PX: Record<string, number> = { Week: 26, Month: 11, Quarter: 4.5 };
 
 function LegendSwatch({ color, label, textColor }: { color: string; label: string; textColor?: string }) {
@@ -25,15 +27,19 @@ function LegendSwatch({ color, label, textColor }: { color: string; label: strin
   );
 }
 
-type Row = { type: "phase"; name: string; id: string } | { type: "task"; task: Task };
+type Row =
+  | { type: "phase"; name: string; id: string; critical: boolean; total: number; completed: number }
+  | { type: "task"; task: Task };
 
 /**
  * Enhanced Gantt/timeline. Bars are positioned from each task's actual
  * calendar `plannedStart`/`plannedFinish` (not the business-day
  * dayOffset, which is a *working-day* count and no longer matches the
- * pixel-per-calendar-day x-axis once weekends are skipped). Weekend
- * columns are shaded, today gets a marker line, achievement tasks get a
- * trophy glyph, and a zoom control switches Week/Month/Quarter density.
+ * pixel-per-calendar-day x-axis once weekends/week-off days are
+ * skipped). Weekend/week-off columns are shaded, today gets a marker
+ * line the view auto-scrolls to on load, achievement tasks get a
+ * trophy glyph, phases collapse to tame the 62-task row count, and a
+ * zoom control switches Week/Month/Quarter density.
  */
 export function TimelineView({ phases, tasks, projectStartDate, projectEndDate, today, weekOff }: {
   phases: Phase[];
@@ -44,16 +50,25 @@ export function TimelineView({ phases, tasks, projectStartDate, projectEndDate, 
   weekOff: WeekDay[];
 }) {
   const [zoom, setZoom] = useState("Week");
+  const [collapsedPhases, setCollapsedPhases] = useState<Record<string, boolean>>({});
   const pxPerDay = ZOOM_PX[zoom];
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const togglePhase = (id: string) => setCollapsedPhases(prev => ({ ...prev, [id]: !prev[id] }));
 
   const rows = useMemo<Row[]>(() => {
     const out: Row[] = [];
     phases.forEach((p) => {
-      out.push({ type: "phase", name: p.name, id: p.id });
-      tasks.filter(t => t.phaseId === p.id).sort((a, b) => a.order - b.order).forEach(t => out.push({ type: "task", task: t }));
+      const phaseTasks = tasks.filter(t => t.phaseId === p.id);
+      out.push({
+        type: "phase", name: p.name, id: p.id, critical: p.critical,
+        total: phaseTasks.length, completed: phaseTasks.filter(t => t.status === "Completed").length,
+      });
+      if (collapsedPhases[p.id]) return;
+      phaseTasks.sort((a, b) => a.order - b.order).forEach(t => out.push({ type: "task", task: t }));
     });
     return out;
-  }, [phases, tasks]);
+  }, [phases, tasks, collapsedPhases]);
 
   const totalDays = useMemo(() => {
     const finishes = tasks.map(t => t.plannedFinish);
@@ -79,6 +94,15 @@ export function TimelineView({ phases, tasks, projectStartDate, projectEndDate, 
   const todayOffset = diffDays(today, projectStartDate);
   const bodyHeight = rows.reduce((h, r) => h + (r.type === "phase" ? PHASE_ROW_H : ROW_H), 0);
 
+  // Bring "today" into view on load and whenever zoom density changes,
+  // instead of leaving the viewer to hunt for it by scrolling right.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollLeft = Math.max(0, todayOffset * pxPerDay - el.clientWidth / 2);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zoom]);
+
   return (
     <Box>
       <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={2} sx={{ mb: 1.5 }}>
@@ -94,7 +118,7 @@ export function TimelineView({ phases, tasks, projectStartDate, projectEndDate, 
           </Stack>
           <Stack direction="row" alignItems="center" spacing={0.75}>
             <Box sx={{ width: 12, height: 12, borderRadius: 0.5, bgcolor: "rgba(139,148,163,0.18)", border: "1px solid #2a323d" }} />
-            <Typography variant="caption" color="text.secondary">Weekend</Typography>
+            <Typography variant="caption" color="text.secondary">Week off</Typography>
           </Stack>
         </Stack>
         <ToggleButtonGroup size="small" exclusive value={zoom} onChange={(_e, v: string | null) => v && setZoom(v)}>
@@ -104,13 +128,26 @@ export function TimelineView({ phases, tasks, projectStartDate, projectEndDate, 
 
       <Box sx={{ display: "flex", border: "1px solid", borderColor: "divider", borderRadius: 3, bgcolor: "background.paper", overflow: "hidden" }}>
         <Box sx={{ flexShrink: 0, width: 220, borderRight: "1px solid", borderColor: "divider" }}>
-          <Box sx={{ height: 34, borderBottom: "1px solid", borderColor: "divider" }} />
+          <Box sx={{ height: HEADER_H, borderBottom: "1px solid", borderColor: "divider", position: "sticky", top: 0, zIndex: 3, bgcolor: "background.paper" }} />
           {rows.map((r, i) => r.type === "phase" ? (
-            <Box key={i} sx={{ height: PHASE_ROW_H, display: "flex", alignItems: "center", px: 1.75, bgcolor: "background.default", borderBottom: "1px solid", borderColor: "divider", textTransform: "uppercase", letterSpacing: 0.3 }}>
-              <Typography variant="caption" color="text.secondary" noWrap sx={{ fontWeight: 700 }}>{r.name}</Typography>
+            <Box
+              key={i} onClick={() => togglePhase(r.id)}
+              sx={{
+                height: PHASE_ROW_H, display: "flex", alignItems: "center", gap: 0.5, px: 1, cursor: "pointer",
+                bgcolor: "background.default", borderBottom: "1px solid", borderColor: "divider",
+                textTransform: "uppercase", letterSpacing: 0.3, userSelect: "none",
+                "&:hover": { bgcolor: "rgba(139,148,163,0.08)" },
+              }}
+            >
+              <ExpandMoreIcon sx={{ fontSize: 16, color: "text.secondary", flexShrink: 0, transition: "transform .15s ease", transform: collapsedPhases[r.id] ? "rotate(-90deg)" : "none" }} />
+              {r.critical && <Tooltip title="Critical phase — delays here delay the whole project"><Box sx={{ width: 5, height: 5, borderRadius: "50%", bgcolor: STATUS_HEX.red, flexShrink: 0 }} /></Tooltip>}
+              <Typography variant="caption" color="text.secondary" noWrap sx={{ fontWeight: 700, flex: 1, minWidth: 0 }}>{r.name}</Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 10, flexShrink: 0, textTransform: "none" }}>
+                {r.completed}/{r.total}
+              </Typography>
             </Box>
           ) : (
-            <Box key={i} sx={{ height: ROW_H, display: "flex", alignItems: "center", gap: 1, px: 1.75, borderBottom: "1px solid", borderColor: "divider" }}>
+            <Box key={i} sx={{ height: ROW_H, display: "flex", alignItems: "center", gap: 1, px: 1.75, borderBottom: "1px solid", borderColor: "divider", "&:hover": { bgcolor: "rgba(139,148,163,0.06)" } }}>
               <Box sx={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, bgcolor: STATUS_HEX[STATUS_COLOR[r.task.status]] }} />
               <Typography variant="caption" noWrap title={r.task.name}>{r.task.name}</Typography>
               {r.task.achievement && <EmojiEventsIcon sx={{ fontSize: 12, color: STATUS_HEX.green, flexShrink: 0 }} />}
@@ -118,12 +155,12 @@ export function TimelineView({ phases, tasks, projectStartDate, projectEndDate, 
           ))}
         </Box>
 
-        <Box sx={{ flex: 1, overflowX: "auto" }}>
+        <Box ref={scrollRef} sx={{ flex: 1, overflowX: "auto" }}>
           <Box sx={{ position: "relative", width: contentWidth }}>
             {weekendBands.map(d => (
               <Box key={d} sx={{ position: "absolute", top: 0, bottom: 0, left: d * pxPerDay, width: pxPerDay, bgcolor: "rgba(139,148,163,0.08)", zIndex: 0 }} />
             ))}
-            <Box sx={{ height: 34, borderBottom: "1px solid", borderColor: "divider", position: "relative", bgcolor: "background.default" }}>
+            <Box sx={{ height: HEADER_H, borderBottom: "1px solid", borderColor: "divider", position: "sticky", top: 0, zIndex: 2, bgcolor: "background.default" }}>
               {weeks.map((w, i) => (
                 <Typography key={i} variant="caption" color="text.secondary" sx={{ position: "absolute", top: 0, height: "100%", display: "flex", alignItems: "center", left: i * 7 * pxPerDay + 4, borderLeft: "1px solid", borderColor: "divider", pl: 0.5, fontFamily: "IBM Plex Mono, monospace" }}>
                   Wk {w}
@@ -149,15 +186,18 @@ export function TimelineView({ phases, tasks, projectStartDate, projectEndDate, 
                   const width = Math.max((diffDays(t.plannedFinish, t.plannedStart) + 1) * pxPerDay - 2, 6);
                   const color = STATUS_HEX[STATUS_COLOR[t.status]];
                   return (
-                    <Tooltip key={i} title={`${t.name} · ${fmt(t.plannedStart)} → ${fmt(t.plannedFinish)} · ${t.status}`}>
-                      <Box sx={{
-                        position: "absolute", top: rowY + (ROW_H - 16) / 2, left, width, height: 16, borderRadius: 0.75, bgcolor: color,
-                        border: t.status === "Pending Approval" ? `1px dashed ${STATUS_HEX.violet}` : "none",
-                        display: "flex", alignItems: "center", justifyContent: "flex-end", pr: 0.25,
-                      }}>
-                        {t.achievement && <EmojiEventsIcon sx={{ fontSize: 11, color: "#0c2b1e" }} />}
-                      </Box>
-                    </Tooltip>
+                    <React.Fragment key={i}>
+                      <Box sx={{ position: "absolute", left: 0, right: 0, top: rowY, height: ROW_H, "&:hover": { bgcolor: "rgba(255,255,255,0.03)" } }} />
+                      <Tooltip title={`${t.name} · ${fmt(t.plannedStart)} → ${fmt(t.plannedFinish)} · ${t.status}`}>
+                        <Box sx={{
+                          position: "absolute", top: rowY + (ROW_H - 16) / 2, left, width, height: 16, borderRadius: 0.75, bgcolor: color,
+                          border: t.status === "Pending Approval" ? `1px dashed ${STATUS_HEX.violet}` : "none",
+                          display: "flex", alignItems: "center", justifyContent: "flex-end", pr: 0.25,
+                        }}>
+                          {t.achievement && <EmojiEventsIcon sx={{ fontSize: 11, color: "#0c2b1e" }} />}
+                        </Box>
+                      </Tooltip>
+                    </React.Fragment>
                   );
                 });
               })()}

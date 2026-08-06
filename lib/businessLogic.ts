@@ -191,7 +191,11 @@ export function computeAchievement(task: Task, weekOff: WeekDay[] = DEFAULT_WEEK
   if (daysEarly >= 2) return { label: `Completed ${daysEarly} Days Early`, days: daysEarly };
   if (daysEarly === 1) return { label: "Finished Before Deadline", days: 1 };
   if (task.actualStart) {
-    const actualDuration = businessDaysBetween(task.actualStart, task.actualFinish, weekOff) + 1;
+    // businessDaysBetween(a, b) is signed "a minus b" — actualFinish is
+    // the later date, so it must come first or a same-duration (or even
+    // early-but-longer-than-planned) completion comes out negative and
+    // misfires "Outstanding Performance" on ordinary on-time work.
+    const actualDuration = businessDaysBetween(task.actualFinish, task.actualStart, weekOff) + 1;
     if (actualDuration < task.duration) return { label: "Outstanding Performance", days: task.duration - actualDuration };
   }
   return null;

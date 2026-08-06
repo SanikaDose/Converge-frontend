@@ -5,11 +5,11 @@
  * can be unit-reasoned-about independently of the components that call it.
  */
 import { TEMPLATE, EMPLOYEES, genId } from "./data";
-import { addWorkingDays, businessDaysBetween, todayISO } from "./dateUtils";
+import { addWorkingDays, businessDaysBetween, todayISO, DEFAULT_WEEK_OFF } from "./dateUtils";
 import type {
   Achievement, Actor, HistoryEntry, LivePhaseRow, Phase, PhaseLite, PhaseSummary,
   ProjectBucket, ProjectDetailData, ProjectIndexRow, ProjectWithLiveStats, StatusColorKey,
-  Summary, Task, TaskLite, TaskStatus, TeamPerformanceRow,
+  Summary, Task, TaskLite, TaskStatus, TeamPerformanceRow, WeekDay,
 } from "./types";
 
 /* ----------------------------- phases & tasks ----------------------------- */
@@ -26,19 +26,19 @@ export function buildProjectPhases(): Phase[] {
   }));
 }
 
-export function computePlanned(startDate: string, dayOffset: number, duration: number): { plannedStart: string; plannedFinish: string } {
-  const plannedStart = addWorkingDays(startDate, dayOffset);
+export function computePlanned(startDate: string, dayOffset: number, duration: number, weekOff: WeekDay[] = DEFAULT_WEEK_OFF): { plannedStart: string; plannedFinish: string } {
+  const plannedStart = addWorkingDays(startDate, dayOffset, weekOff);
   // duration of N working days means N-1 further working days after the start.
-  const plannedFinish = addWorkingDays(plannedStart, Math.max(1, duration) - 1);
+  const plannedFinish = addWorkingDays(plannedStart, Math.max(1, duration) - 1, weekOff);
   return { plannedStart, plannedFinish };
 }
 
-export function buildTasks(startDate: string, phases: Phase[]): Task[] {
+export function buildTasks(startDate: string, phases: Phase[], weekOff: WeekDay[] = DEFAULT_WEEK_OFF): Task[] {
   const tasks: Task[] = [];
   TEMPLATE.forEach((p, pi) => {
     const phase = phases[pi];
     p.tasks.forEach(([name, offset, duration], ti) => {
-      const { plannedStart, plannedFinish } = computePlanned(startDate, offset, duration);
+      const { plannedStart, plannedFinish } = computePlanned(startDate, offset, duration, weekOff);
       tasks.push({
         id: `p${pi}_t${ti}`,
         phaseId: phase.id,
@@ -64,12 +64,12 @@ export function buildTasks(startDate: string, phases: Phase[]): Task[] {
   return tasks;
 }
 
-export function suggestedEndDate(startDate: string): string {
+export function suggestedEndDate(startDate: string, weekOff: WeekDay[] = DEFAULT_WEEK_OFF): string {
   let maxOffsetPlusDuration = 0;
   TEMPLATE.forEach(p => p.tasks.forEach(([, offset, duration]) => {
     maxOffsetPlusDuration = Math.max(maxOffsetPlusDuration, offset + duration);
   }));
-  return addWorkingDays(startDate, maxOffsetPlusDuration);
+  return addWorkingDays(startDate, maxOffsetPlusDuration, weekOff);
 }
 
 /* ---------------------------------------------------------------------
@@ -111,7 +111,10 @@ export function ensureProjectShape(detail: LegacyProjectDetail | null | undefine
       phaseId,
     } as Task;
   });
-  return { ...detail, phases, tasks };
+  // Projects created before the week-off picker existed have no
+  // meta.weekOff — default them to the traditional Sat+Sun calendar.
+  const meta = detail.meta.weekOff ? detail.meta : { ...detail.meta, weekOff: DEFAULT_WEEK_OFF };
+  return { ...detail, meta, phases, tasks };
 }
 
 // Best-effort match of an old free-text name (e.g. "Bharat") to an
@@ -130,9 +133,9 @@ export function isOverdue(task: { status: TaskStatus; plannedFinish: string }, t
   return task.status !== "Completed" && today > task.plannedFinish;
 }
 
-export function overdueWorkingDays(task: { status: TaskStatus; plannedFinish: string }, today: string): number {
+export function overdueWorkingDays(task: { status: TaskStatus; plannedFinish: string }, today: string, weekOff: WeekDay[] = DEFAULT_WEEK_OFF): number {
   if (!isOverdue(task, today)) return 0;
-  return businessDaysBetween(today, task.plannedFinish);
+  return businessDaysBetween(today, task.plannedFinish, weekOff);
 }
 
 export function summarize(tasks: Task[], today: string): Summary {
@@ -182,13 +185,13 @@ export function projectStatusFromPhases(phaseRows: { critical: boolean; color: S
 
 // A task earns an achievement badge when it finished early against its
 // planned finish date, or under its own estimated duration.
-export function computeAchievement(task: Task): Achievement | null {
+export function computeAchievement(task: Task, weekOff: WeekDay[] = DEFAULT_WEEK_OFF): Achievement | null {
   if (task.status !== "Completed" || !task.actualFinish) return null;
-  const daysEarly = businessDaysBetween(task.plannedFinish, task.actualFinish);
+  const daysEarly = businessDaysBetween(task.plannedFinish, task.actualFinish, weekOff);
   if (daysEarly >= 2) return { label: `Completed ${daysEarly} Days Early`, days: daysEarly };
   if (daysEarly === 1) return { label: "Finished Before Deadline", days: 1 };
   if (task.actualStart) {
-    const actualDuration = businessDaysBetween(task.actualStart, task.actualFinish) + 1;
+    const actualDuration = businessDaysBetween(task.actualStart, task.actualFinish, weekOff) + 1;
     if (actualDuration < task.duration) return { label: "Outstanding Performance", days: task.duration - actualDuration };
   }
   return null;

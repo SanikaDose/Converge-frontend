@@ -26,7 +26,7 @@ import { OrgSelect } from "./common";
 import { isOverdue, overdueWorkingDays } from "@/lib/businessLogic";
 import { fmt } from "@/lib/dateUtils";
 import { STATUS_HEX } from "@/lib/theme";
-import type { Task, TaskStatus } from "@/lib/types";
+import type { Task, TaskStatus, WeekDay } from "@/lib/types";
 
 const monoLabel = {
   fontSize: 10, textTransform: "uppercase", letterSpacing: 0.6, color: "text.secondary", display: "block", mb: 0.5,
@@ -42,7 +42,7 @@ const monoInput = { fontFamily: "IBM Plex Mono, monospace", fontSize: 12.5 };
  * dependencies); there is no side drawer.
  */
 export function TaskCard({
-  task, canEdit, canApprove, canReorder, today,
+  task, canEdit, canApprove, canReorder, today, weekOff,
   onStatusChange, onOpenEditor, onOpenHistory, onDelete, onApprove, onReject,
   onCommitOwner, onCommitOffset, onCommitStartDate, onCommitDuration, onCommitDescription,
   dragHandleProps,
@@ -52,6 +52,7 @@ export function TaskCard({
   canApprove: boolean;
   canReorder: boolean;
   today: string;
+  weekOff: WeekDay[];
   onStatusChange: (status: TaskStatus) => void;
   onOpenEditor: () => void;
   onOpenHistory: () => void;
@@ -82,7 +83,7 @@ export function TaskCard({
 
   const overdue = isOverdue(task, today);
   const color = STATUS_COLOR[task.status] || "slate";
-  const overdueDays = overdueWorkingDays(task, today);
+  const overdueDays = overdueWorkingDays(task, today, weekOff);
   const locked = task.status === "Pending Approval";
 
   return (

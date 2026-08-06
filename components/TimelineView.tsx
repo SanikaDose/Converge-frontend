@@ -10,7 +10,7 @@ import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
 import { STATUS_COLOR } from "@/lib/data";
 import { fmt, addDays, diffDays, isWeekend } from "@/lib/dateUtils";
 import { STATUS_HEX } from "@/lib/theme";
-import type { Phase, Task } from "@/lib/types";
+import type { Phase, Task, WeekDay } from "@/lib/types";
 
 const ROW_H = 34;
 const PHASE_ROW_H = 30;
@@ -35,12 +35,13 @@ type Row = { type: "phase"; name: string; id: string } | { type: "task"; task: T
  * columns are shaded, today gets a marker line, achievement tasks get a
  * trophy glyph, and a zoom control switches Week/Month/Quarter density.
  */
-export function TimelineView({ phases, tasks, projectStartDate, projectEndDate, today }: {
+export function TimelineView({ phases, tasks, projectStartDate, projectEndDate, today, weekOff }: {
   phases: Phase[];
   tasks: Task[];
   projectStartDate: string;
   projectEndDate: string;
   today: string;
+  weekOff: WeekDay[];
 }) {
   const [zoom, setZoom] = useState("Week");
   const pxPerDay = ZOOM_PX[zoom];
@@ -69,10 +70,10 @@ export function TimelineView({ phases, tasks, projectStartDate, projectEndDate, 
   const weekendBands = useMemo(() => {
     const bands: number[] = [];
     for (let d = 0; d <= totalDays; d++) {
-      if (isWeekend(addDays(projectStartDate, d))) bands.push(d);
+      if (isWeekend(addDays(projectStartDate, d), weekOff)) bands.push(d);
     }
     return bands;
-  }, [totalDays, projectStartDate]);
+  }, [totalDays, projectStartDate, weekOff]);
 
   const contentWidth = totalDays * pxPerDay;
   const todayOffset = diffDays(today, projectStartDate);

@@ -12,7 +12,7 @@
  */
 import { genId } from "./data";
 import { buildProjectPhases, buildTasks, summarize, phaseSummaries, projectStatusFromPhases, toTaskLite, toPhasesLite } from "./businessLogic";
-import { todayISO, addWorkingDays } from "./dateUtils";
+import { todayISO, addWorkingDays, DEFAULT_WEEK_OFF } from "./dateUtils";
 import type { Phase, ProjectDetailData, ProjectIndexRow, ProjectMeta, Task, Ticket } from "./types";
 
 interface Store {
@@ -36,22 +36,19 @@ function seed(): void {
   const tasks = buildTasks(startDate, phases);
 
   // Give the seed project some real-looking activity so the dashboard
-  // accordions, timeline, and team performance grid aren't empty on
-  // first run: assign the first few tasks, complete one early.
-  const assignments = ["sanika-dose", "shubham-tanapure", "viren-patil", "krishna-kumbhar", "nikhil-warokar"];
-  tasks.forEach((t, i) => {
-    if (i < assignments.length) t.assignedTo = assignments[i];
-  });
+  // accordions, timeline, and team performance grid aren't empty on first
+  // run — complete one task early, start another — without pre-assigning
+  // any task owners (that's left for whoever picks the task up).
   if (tasks[0]) {
     tasks[0].status = "Completed";
     tasks[0].actualStart = tasks[0].plannedStart;
     tasks[0].actualFinish = tasks[0].plannedStart;
-    tasks[0].history = [{ ts: new Date().toISOString(), field: "Status", from: "Not Started", to: "Completed", editedBy: "Sanika Dose", reason: "" }];
+    tasks[0].history = [{ ts: new Date().toISOString(), field: "Status", from: "Not Started", to: "Completed", editedBy: "Admin", reason: "" }];
   }
   if (tasks[1]) {
     tasks[1].status = "In Progress";
     tasks[1].actualStart = tasks[1].plannedStart;
-    tasks[1].history = [{ ts: new Date().toISOString(), field: "Status", from: "Not Started", to: "In Progress", editedBy: "Shubham Tanapure", reason: "" }];
+    tasks[1].history = [{ ts: new Date().toISOString(), field: "Status", from: "Not Started", to: "In Progress", editedBy: "Admin", reason: "" }];
   }
 
   const id = genId("proj");
@@ -65,6 +62,7 @@ function seed(): void {
       startDate,
       endDate: addWorkingDays(startDate, 60),
       createdAt: todayISO(),
+      weekOff: DEFAULT_WEEK_OFF,
     },
     phases,
     tasks,
@@ -130,13 +128,15 @@ export interface CreateProjectInput {
   owner: string | null;
   startDate: string;
   endDate: string;
+  weekOff: ProjectMeta["weekOff"];
 }
 
-export function createProject({ name, type, customer, owner, startDate, endDate }: CreateProjectInput): ProjectDetailData {
+export function createProject({ name, type, customer, owner, startDate, endDate, weekOff }: CreateProjectInput): ProjectDetailData {
   const id = genId("proj");
+  const resolvedWeekOff = weekOff && weekOff.length ? weekOff.slice(0, 2) : DEFAULT_WEEK_OFF;
   const phases = buildProjectPhases();
-  const tasks = buildTasks(startDate, phases);
-  const project: ProjectDetailData = { id, meta: { name, type, customer, owner, startDate, endDate, createdAt: todayISO() }, phases, tasks };
+  const tasks = buildTasks(startDate, phases, resolvedWeekOff);
+  const project: ProjectDetailData = { id, meta: { name, type, customer, owner, startDate, endDate, createdAt: todayISO(), weekOff: resolvedWeekOff }, phases, tasks };
   store.projects.set(id, project);
   return project;
 }

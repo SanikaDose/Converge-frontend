@@ -6,7 +6,7 @@
  * logic (business-day math, task generation, team aggregation) and UI
  * components all read from one place.
  */
-import type { AppRole, Employee, PermissionAction, Team, TemplatePhase } from "./types";
+import type { AppRole, Employee, PermissionAction, Team, TemplatePhase, WeekDay } from "./types";
 
 /* ---------------------------------------------------------------------
    TEMPLATE — derived from the project plan spreadsheet.
@@ -115,6 +115,19 @@ export const STATUS_COLOR = {
 
 export const PRIORITY_OPTIONS = ["Low", "Medium", "High", "Critical"] as const;
 export const PRIORITY_COLOR = { Low: "slate", Medium: "amber", High: "red", Critical: "red" } as const;
+
+/* ---------------------------------------------------------------------
+   WEEK-OFF (non-working days) — per-project, chosen at creation time.
+   Index matches Date#getUTCDay() (0 = Sunday … 6 = Saturday), which is
+   also what WeekDay values in lib/types.ts use.
+------------------------------------------------------------------------ */
+export const WEEKDAY_LABELS: Record<WeekDay, string> = {
+  0: "Sunday", 1: "Monday", 2: "Tuesday", 3: "Wednesday", 4: "Thursday", 5: "Friday", 6: "Saturday",
+};
+export const WEEKDAY_SHORT: Record<WeekDay, string> = {
+  0: "Sun", 1: "Mon", 2: "Tue", 3: "Wed", 4: "Thu", 5: "Fri", 6: "Sat",
+};
+export const MAX_WEEK_OFF_DAYS = 2;
 
 /* ---------------------------------------------------------------------
    ORGANIZATION DIRECTORY — replaces every free-text owner/assignee

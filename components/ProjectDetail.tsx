@@ -108,7 +108,7 @@ export function ProjectDetail({ projectId, actor, onBack }: { projectId: string;
         updates.actualFinish = status === "Completed" ? (t.actualFinish || today) : null;
       }
       const merged: Task = { ...t, ...updates };
-      merged.achievement = status === "Completed" ? computeAchievement(merged) : null;
+      merged.achievement = status === "Completed" ? computeAchievement(merged, detail?.meta.weekOff) : null;
       merged.history = [...(t.history || []), { ts: new Date().toISOString(), field: "Status", from: t.status, to: status, editedBy: actor.name || actor.role, reason: "" }];
       return merged;
     }));
@@ -169,26 +169,26 @@ export function ProjectDetail({ projectId, actor, onBack }: { projectId: string;
     if (!task || !detail) return;
     const offset = Math.max(0, Number(rawOffset) || 0);
     if (offset === task.dayOffset) return;
-    const { plannedStart, plannedFinish } = computePlanned(detail.meta.startDate, offset, task.duration);
+    const { plannedStart, plannedFinish } = computePlanned(detail.meta.startDate, offset, task.duration, detail.meta.weekOff);
     commitSchedule(taskId, { dayOffset: offset, plannedStart, plannedFinish });
   };
   const handleCommitStartDate = (taskId: string, nextDate: string) => {
     const task = detail?.tasks.find(t => t.id === taskId);
     if (!task || !detail || !nextDate || nextDate === task.plannedStart) return;
     const offset = Math.max(0, diffDays(nextDate, detail.meta.startDate));
-    const { plannedStart, plannedFinish } = computePlanned(detail.meta.startDate, offset, task.duration);
+    const { plannedStart, plannedFinish } = computePlanned(detail.meta.startDate, offset, task.duration, detail.meta.weekOff);
     commitSchedule(taskId, { dayOffset: offset, plannedStart, plannedFinish });
   };
   const handleCommitDuration = (taskId: string, rawDuration: string | number) => {
     const task = detail?.tasks.find(t => t.id === taskId);
     const duration = Math.max(1, Number(rawDuration) || 1);
     if (!task || !detail || duration === task.duration) return;
-    const { plannedFinish } = computePlanned(detail.meta.startDate, task.dayOffset, duration);
+    const { plannedFinish } = computePlanned(detail.meta.startDate, task.dayOffset, duration, detail.meta.weekOff);
     commitSchedule(taskId, { duration, plannedFinish });
   };
   const handleAddTask = ({ name, assignedTo, dayOffset, duration }: NewTaskPayload) => {
     if (!addTaskPhaseId || !detail) return;
-    const { plannedStart, plannedFinish } = computePlanned(detail.meta.startDate, dayOffset, duration);
+    const { plannedStart, plannedFinish } = computePlanned(detail.meta.startDate, dayOffset, duration, detail.meta.weekOff);
     const siblingOrders = detail.tasks.filter(t => t.phaseId === addTaskPhaseId).map(t => t.order);
     const newTask: Task = {
       id: genId("task"), phaseId: addTaskPhaseId, order: siblingOrders.length ? Math.max(...siblingOrders) + 1 : 0,
@@ -219,8 +219,9 @@ export function ProjectDetail({ projectId, actor, onBack }: { projectId: string;
     if (!canEditProjectSettings || !detail) return;
     setSavingSettings(true);
     const startChanged = meta.startDate !== detail.meta.startDate;
-    const tasks = startChanged
-      ? detail.tasks.map(t => ({ ...t, ...computePlanned(meta.startDate, t.dayOffset, t.duration) }))
+    const weekOffChanged = JSON.stringify(meta.weekOff.slice().sort()) !== JSON.stringify(detail.meta.weekOff.slice().sort());
+    const tasks = (startChanged || weekOffChanged)
+      ? detail.tasks.map(t => ({ ...t, ...computePlanned(meta.startDate, t.dayOffset, t.duration, meta.weekOff) }))
       : detail.tasks;
     const next = { ...detail, meta: { ...detail.meta, ...meta }, phases: detail.phases, tasks };
     await persist(next);
@@ -300,7 +301,7 @@ export function ProjectDetail({ projectId, actor, onBack }: { projectId: string;
             <Box sx={{ flex: 1, minWidth: 0, height: "100%", overflowY: "auto", pr: 0.5 }}>
               {activePhaseRow && (
                 <PhaseTaskPanel
-                  phase={activePhaseRow} tasks={activeTasks} projectStartDate={detail.meta.startDate} today={today}
+                  phase={activePhaseRow} tasks={activeTasks} projectStartDate={detail.meta.startDate} today={today} weekOff={detail.meta.weekOff}
                   canEdit={canEditTask} canManage={canManagePhases} canApprove={canApprove}
                   onUpdateTask={handleStatusChange}
                   onOpenEditor={setEditingTask} onOpenHistory={setHistoryTask}
@@ -316,7 +317,7 @@ export function ProjectDetail({ projectId, actor, onBack }: { projectId: string;
           </Stack>
         ) : (
           <Box sx={{ height: "100%", overflowY: "auto" }}>
-            <TimelineView phases={detail.phases} tasks={detail.tasks} projectStartDate={detail.meta.startDate} projectEndDate={detail.meta.endDate} today={today} />
+            <TimelineView phases={detail.phases} tasks={detail.tasks} projectStartDate={detail.meta.startDate} projectEndDate={detail.meta.endDate} today={today} weekOff={detail.meta.weekOff} />
           </Box>
         )}
       </Box>
@@ -334,7 +335,7 @@ export function ProjectDetail({ projectId, actor, onBack }: { projectId: string;
       )}
       {historyTask && <TaskHistoryDialog task={detail.tasks.find(t => t.id === historyTask.id) || historyTask} onClose={() => setHistoryTask(null)} />}
       {addTaskPhaseId && (
-        <AddTaskDialog projectStartDate={detail.meta.startDate} onClose={() => setAddTaskPhaseId(null)} onCreate={handleAddTask} />
+        <AddTaskDialog projectStartDate={detail.meta.startDate} projectWeekOff={detail.meta.weekOff} onClose={() => setAddTaskPhaseId(null)} onCreate={handleAddTask} />
       )}
     </Box>
   );

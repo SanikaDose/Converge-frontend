@@ -17,6 +17,7 @@
  * browser's *local* calendar date, since that's the date the person
  * looking at the screen actually calls "today".
  */
+import type { WeekDay } from "./types";
 
 export const toISO = (d: Date): string => d.toISOString().slice(0, 10);
 
@@ -51,37 +52,42 @@ export const todayISO = (): string => {
 /* ---------------------------------------------------------------------
    WORKING-DAY (business-day) CALENDAR
 
-   Saturday and Sunday are never working days. Day offsets and task
+   Which days count as "off" is per-project (`ProjectMeta.weekOff`, at
+   most 2 days) rather than hardcoded — every function below takes a
+   `weekOff` list and falls back to the traditional Saturday+Sunday
+   default when the caller doesn't have project context yet (e.g. the
+   "New project" form before a project exists). Day offsets and task
    durations are expressed in working days: "Duration = 5 working days,
-   Start = Monday" finishes Friday, not Sunday.
+   Start = Monday" finishes Friday, not Sunday (for the default calendar).
 ------------------------------------------------------------------------ */
-export function isWeekend(isoDate: string): boolean {
-  const day = parseISO(isoDate).getUTCDay(); // 0 = Sun, 6 = Sat
-  return day === 0 || day === 6;
+export const DEFAULT_WEEK_OFF: WeekDay[] = [0, 6]; // Sunday + Saturday
+
+export function isWeekend(isoDate: string, weekOff: WeekDay[] = DEFAULT_WEEK_OFF): boolean {
+  const day = parseISO(isoDate).getUTCDay() as WeekDay; // 0 = Sun, 6 = Sat
+  return weekOff.includes(day);
 }
 
 // Advance `isoDate` by `count` working days (count may be 0). Landing on
-// a weekend is never a valid result — this always lands on a weekday.
-export function addWorkingDays(isoDate: string, count: number): string {
+// an off-day is never a valid result — this always lands on a working day.
+export function addWorkingDays(isoDate: string, count: number, weekOff: WeekDay[] = DEFAULT_WEEK_OFF): string {
   const d = parseISO(isoDate);
   let remaining = Math.trunc(Number(count) || 0);
   const step = remaining >= 0 ? 1 : -1;
   remaining = Math.abs(remaining);
   while (remaining > 0) {
     d.setUTCDate(d.getUTCDate() + step);
-    const day = d.getUTCDay();
-    if (day !== 0 && day !== 6) remaining--;
+    if (!weekOff.includes(d.getUTCDay() as WeekDay)) remaining--;
   }
-  // If count was 0 but the start date itself is a weekend, nudge forward
-  // to the next working day — an offset of 0 should still land on a
-  // real working day.
-  while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d.setUTCDate(d.getUTCDate() + (step || 1));
+  // If count was 0 but the start date itself falls on an off-day, nudge
+  // forward to the next working day — an offset of 0 should still land
+  // on a real working day.
+  while (weekOff.includes(d.getUTCDay() as WeekDay)) d.setUTCDate(d.getUTCDate() + (step || 1));
   return toISO(d);
 }
 
 // Count working days strictly between two ISO dates (a - b), signed.
-// Used for "Xd overdue" so weekends sitting inside the gap don't count.
-export function businessDaysBetween(a: string, b: string): number {
+// Used for "Xd overdue" so off-days sitting inside the gap don't count.
+export function businessDaysBetween(a: string, b: string, weekOff: WeekDay[] = DEFAULT_WEEK_OFF): number {
   if (a === b) return 0;
   const sign = parseISO(a) > parseISO(b) ? 1 : -1;
   const [start, end] = sign === 1 ? [b, a] : [a, b];
@@ -90,8 +96,7 @@ export function businessDaysBetween(a: string, b: string): number {
   let count = 0;
   while (d < endD) {
     d.setUTCDate(d.getUTCDate() + 1);
-    const day = d.getUTCDay();
-    if (day !== 0 && day !== 6) count++;
+    if (!weekOff.includes(d.getUTCDay() as WeekDay)) count++;
   }
   return count * sign;
 }

@@ -8,17 +8,19 @@ import TextField from "@mui/material/TextField";
 import Button from "@mui/material/Button";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
+import Tooltip from "@mui/material/Tooltip";
 import Stack from "./Stack";
 import Typography from "@mui/material/Typography";
 import CircularProgress from "@mui/material/CircularProgress";
 import AddIcon from "@mui/icons-material/Add";
 import { OrgSelect } from "./common";
-import { TEMPLATE, EMPLOYEE_BY_ID } from "@/lib/data";
+import { TEMPLATE, EMPLOYEE_BY_ID, WEEKDAY_SHORT, WEEKDAY_LABELS, MAX_WEEK_OFF_DAYS } from "@/lib/data";
 import { suggestedEndDate, guessEmployeeIdFromFreeText } from "@/lib/businessLogic";
-import { todayISO } from "@/lib/dateUtils";
-import type { ProjectMeta, ProjectType } from "@/lib/types";
+import { todayISO, DEFAULT_WEEK_OFF } from "@/lib/dateUtils";
+import type { ProjectMeta, ProjectType, WeekDay } from "@/lib/types";
 
 const TASK_COUNT = TEMPLATE.reduce((a, p) => a + p.tasks.length, 0);
+const ALL_WEEKDAYS: WeekDay[] = [0, 1, 2, 3, 4, 5, 6];
 
 export interface ProjectFormPayload {
   name: string;
@@ -27,6 +29,7 @@ export interface ProjectFormPayload {
   owner: string | null;
   startDate: string;
   endDate: string;
+  weekOff: WeekDay[];
 }
 
 // Projects created before the org directory existed stored `owner` as a
@@ -52,14 +55,24 @@ export function ProjectForm({ title, initial, onClose, onSubmit, busy, submitLab
   const [customer, setCustomer] = useState(initial?.customer || "");
   const [owner, setOwner] = useState(normalizeOwner(initial?.owner));
   const [startDate, setStartDate] = useState(initial?.startDate || todayISO());
-  const [endDate, setEndDate] = useState(initial?.endDate || suggestedEndDate(initial?.startDate || todayISO()));
+  const [weekOff, setWeekOff] = useState<WeekDay[]>(initial?.weekOff?.length ? initial.weekOff : DEFAULT_WEEK_OFF);
+  const [endDate, setEndDate] = useState(initial?.endDate || suggestedEndDate(initial?.startDate || todayISO(), weekOff));
   const [endTouched, setEndTouched] = useState(!!initial?.endDate);
 
   useEffect(() => {
-    if (!endTouched) setEndDate(suggestedEndDate(startDate));
-  }, [startDate, endTouched]);
+    if (!endTouched) setEndDate(suggestedEndDate(startDate, weekOff));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startDate, endTouched, weekOff]);
 
   const canSubmit = name.trim() && customer.trim() && startDate && endDate;
+
+  const toggleWeekOffDay = (day: WeekDay) => {
+    setWeekOff(prev => {
+      if (prev.includes(day)) return prev.filter(d => d !== day);
+      if (prev.length >= MAX_WEEK_OFF_DAYS) return prev;
+      return [...prev, day];
+    });
+  };
 
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
@@ -85,16 +98,42 @@ export function ProjectForm({ title, initial, onClose, onSubmit, busy, submitLab
             value={endDate} onChange={(e) => { setEndDate(e.target.value); setEndTouched(true); }} />
         </Stack>
 
+        <Stack spacing={0.75}>
+          <Typography variant="caption" color="text.secondary" sx={{ textTransform: "uppercase", letterSpacing: 0.5, fontSize: 10.5 }}>
+            Week off (max {MAX_WEEK_OFF_DAYS})
+          </Typography>
+          <Stack direction="row" spacing={0.75} flexWrap="wrap" rowGap={0.75}>
+            {ALL_WEEKDAYS.map(day => {
+              const selected = weekOff.includes(day);
+              return (
+                <Tooltip key={day} title={WEEKDAY_LABELS[day]}>
+                  <ToggleButton
+                    value={day} selected={selected} size="small"
+                    disabled={!selected && weekOff.length >= MAX_WEEK_OFF_DAYS}
+                    onChange={() => toggleWeekOffDay(day)}
+                    sx={{ width: 52, px: 0 }}
+                  >
+                    {WEEKDAY_SHORT[day]}
+                  </ToggleButton>
+                </Tooltip>
+              );
+            })}
+          </Stack>
+          <Typography variant="caption" color="text.secondary">
+            Non-working days for this project's schedule — task dates skip these instead of the default Saturday/Sunday.
+          </Typography>
+        </Stack>
+
         <Typography variant="caption" color="text.secondary">
           {!initial
             ? `Creates the full 12-phase, ${TASK_COUNT}-task plan automatically (business-day scheduled). Phases and tasks can be edited afterwards.`
-            : "Changing the start date will re-calculate every task's planned dates using its current day-offset and duration."}
+            : "Changing the start date or week off will re-calculate every task's planned dates using its current day-offset and duration."}
         </Typography>
       </DialogContent>
       <DialogActions sx={{ p: 2 }}>
         <Button onClick={onClose}>Cancel</Button>
         <Button variant="contained" disabled={!canSubmit || busy} startIcon={busy ? <CircularProgress size={16} /> : <AddIcon />}
-          onClick={() => onSubmit({ name: name.trim(), type, customer: customer.trim(), owner, startDate, endDate })}>
+          onClick={() => onSubmit({ name: name.trim(), type, customer: customer.trim(), owner, startDate, endDate, weekOff })}>
           {busy ? "Saving…" : submitLabel}
         </Button>
       </DialogActions>

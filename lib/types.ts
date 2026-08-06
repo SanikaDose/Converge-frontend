@@ -141,6 +141,9 @@ export interface PhaseSummary extends Phase, Summary {
 export type ProjectType = "Product" | "Solution";
 export type ProjectBucket = "Delayed" | "In Progress" | "On Track";
 
+/** 0 = Sunday … 6 = Saturday, matching Date#getUTCDay(). */
+export type WeekDay = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+
 export interface ProjectMeta {
   name: string;
   type: ProjectType;
@@ -149,6 +152,8 @@ export interface ProjectMeta {
   startDate: string;
   endDate: string;
   createdAt: string;
+  /** Non-working days for this project's business-day calendar — at most 2, defaults to Sat+Sun. */
+  weekOff: WeekDay[];
 }
 
 export interface ProjectDetailData {

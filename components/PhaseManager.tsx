@@ -17,7 +17,7 @@ import { TaskCard } from "./TaskCard";
 import { fmt } from "@/lib/dateUtils";
 import { computePlanned } from "@/lib/businessLogic";
 import { STATUS_HEX } from "@/lib/theme";
-import type { PhaseSummary, Task, TaskStatus } from "@/lib/types";
+import type { PhaseSummary, Task, TaskStatus, WeekDay } from "@/lib/types";
 
 /**
  * Left-hand phase navigation list — one row per phase. Phases are a
@@ -69,8 +69,9 @@ export interface NewTaskPayload {
   duration: number;
 }
 
-export function AddTaskDialog({ projectStartDate, onClose, onCreate }: {
+export function AddTaskDialog({ projectStartDate, projectWeekOff, onClose, onCreate }: {
   projectStartDate: string;
+  projectWeekOff: WeekDay[];
   onClose: () => void;
   onCreate: (payload: NewTaskPayload) => void;
 }) {
@@ -79,7 +80,7 @@ export function AddTaskDialog({ projectStartDate, onClose, onCreate }: {
   const [dayOffset, setDayOffset] = useState<string | number>(0);
   const [duration, setDuration] = useState<string | number>(1);
   const canSubmit = name.trim() && Number(duration) >= 1;
-  const preview = computePlanned(projectStartDate, Number(dayOffset) || 0, Number(duration) || 1);
+  const preview = computePlanned(projectStartDate, Number(dayOffset) || 0, Number(duration) || 1, projectWeekOff);
   return (
     <Dialog open onClose={onClose} maxWidth="xs" fullWidth>
       <DialogTitle>Add task</DialogTitle>
@@ -113,7 +114,7 @@ export function AddTaskDialog({ projectStartDate, onClose, onCreate }: {
  * a card over another swaps their `order` values via `onReorder`.
  */
 export function PhaseTaskPanel({
-  phase, tasks, today, canEdit, canManage, canApprove,
+  phase, tasks, today, weekOff, canEdit, canManage, canApprove,
   onUpdateTask, onOpenEditor, onOpenHistory, onDeleteTask, onApprove, onReject,
   onAddTask, onReorder,
   onCommitOwner, onCommitOffset, onCommitStartDate, onCommitDuration, onCommitDescription,
@@ -122,6 +123,7 @@ export function PhaseTaskPanel({
   tasks: Task[];
   projectStartDate: string;
   today: string;
+  weekOff: WeekDay[];
   canEdit: boolean;
   canManage: boolean;
   canApprove: boolean;
@@ -174,7 +176,7 @@ export function PhaseTaskPanel({
             sx={{ opacity: dragId === t.id ? 0.5 : 1 }}
           >
             <TaskCard
-              task={t} canEdit={canEdit} canApprove={canApprove} canReorder={canManage} today={today}
+              task={t} canEdit={canEdit} canApprove={canApprove} canReorder={canManage} today={today} weekOff={weekOff}
               onStatusChange={(status) => onUpdateTask(t.id, status)}
               onOpenEditor={() => onOpenEditor(t)}
               onOpenHistory={() => onOpenHistory(t)}

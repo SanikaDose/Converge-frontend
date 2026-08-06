@@ -100,6 +100,12 @@ public/ApplicationIcon.png    The real Converge logo (uploaded by the user) — 
 permission** (`PERMISSIONS` maps every action to `ALL_ROLES`). This was a deliberate
 simplification requested by the user ("all access for now").
 
+Task owners are **never pre-assigned** — every task (seed data included) is created with
+`assignedTo: null`. This was a deliberate change: the seed project used to auto-assign its first
+five tasks to specific employees for demo purposes, which read as if the app were picking owners
+for you. Whoever picks up a task assigns it to themselves (or someone else) via the task card's
+Owner dropdown.
+
 The approval workflow (a task's scheduling edit by someone without `editScheduleDirectly`
 creates a Pending-Approval change request instead of applying immediately) is still fully
 implemented in `businessLogic.ts` and wired into `TaskCard`/`ProjectDetail`, but it's currently
@@ -119,6 +125,28 @@ This means:
   (`listProjectsIndex`, `getProject`, `createProject`, `updateProject`, `listTickets`,
   `createTicket`, `updateTicket`) — the API routes and every component calling `lib/api.ts`
   should not need to change.
+
+## Business-day calendar (week off)
+
+Every project has its own `meta.weekOff: WeekDay[]` (0 = Sunday … 6 = Saturday, matching
+`Date#getUTCDay()`), chosen when the project is created and editable afterwards from Project
+Settings — a day-of-week picker in `ProjectForm.tsx`, capped at `MAX_WEEK_OFF_DAYS` (2) via
+`lib/data.ts`. It defaults to Saturday + Sunday (`DEFAULT_WEEK_OFF` in `lib/dateUtils.ts`) but can
+be any 0–2 days — there's nothing Sat/Sun-specific about the underlying math.
+
+This is **not cosmetic** — `weekOff` is threaded through every business-day calculation:
+`isWeekend`/`addWorkingDays`/`businessDaysBetween` (`lib/dateUtils.ts`) all take it as a parameter,
+and everything built on them (`computePlanned`, `buildTasks`, `suggestedEndDate`,
+`overdueWorkingDays`, `computeAchievement` in `lib/businessLogic.ts`) accepts and forwards it
+rather than hardcoding Saturday/Sunday. Every call site — `ProjectDetail.tsx`'s scheduling
+handlers, `PhaseManager.tsx`'s `AddTaskDialog` preview, `TaskCard.tsx`'s overdue-days badge,
+`TimelineView.tsx`'s weekend shading — reads it from `detail.meta.weekOff` and passes it down.
+Changing a project's week-off in Project Settings re-plans every task's dates the same way
+changing the start date does (see `ProjectDetail.saveSettings`).
+
+Projects created before this feature existed have no `meta.weekOff` — `ensureProjectShape` in
+`lib/businessLogic.ts` defaults it to `DEFAULT_WEEK_OFF` the first time such a project loads, so
+old data doesn't crash the date math.
 
 ## Known limitations
 
@@ -166,39 +194,44 @@ changed several APIs from what older MUI docs/examples show:
 
 ## History of notable decisions (most recent first)
 
-1. Migrated the entire app from JavaScript/JSX to TypeScript (`strict` mode, no `.js`/`.jsx`
+1. Added a per-project week-off calendar (see "Business-day calendar" above) — a day-of-week
+   picker on the New Project / Project Settings form, max 2 days, defaulting to Saturday+Sunday.
+   Every business-day calculation in `lib/dateUtils.ts`/`lib/businessLogic.ts` now takes the
+   project's `weekOff` instead of hardcoding Sat/Sun. Also removed the seed project's
+   auto-assigned task owners — every task (seeded or newly created) now starts unassigned.
+2. Migrated the entire app from JavaScript/JSX to TypeScript (`strict` mode, no `.js`/`.jsx`
    remaining under `app/`, `components/`, `lib/`, `context/`) — see "TypeScript" above. Surfaced
    one real latent bug in the process: `OrgSelect` (`components/common.tsx`) never accepted or
    forwarded a `disabled` prop, so `TaskCard`'s owner dropdown wasn't actually being locked for
    Pending-Approval tasks; fixed as part of the migration.
-2. Team Performance page decluttered: KPI summary row added (`StatCard`, extracted from
+3. Team Performance page decluttered: KPI summary row added (`StatCard`, extracted from
    `Dashboard.tsx` into `common.tsx` for reuse), Total/Completed/Pending columns merged into one
    "Tasks" cell, zero-task rows show muted "—"/"No tasks" instead of repeated literal zeros, and
    the name/role cell's line-height bug (MUI DataGrid forces cell `line-height` to match row
    height, which was pushing two-line cell content up into the row above) was fixed.
-3. Project detail header compacted: back button is icon-only (no "Portfolio" label), and the
+4. Project detail header compacted: back button is icon-only (no "Portfolio" label), and the
    separate "Product"/status-chip row above the title was merged onto the title's own line to
    save vertical space.
-4. Added a global dark-themed scrollbar (`app/globals.css`) — the browser-default light/white
+5. Added a global dark-themed scrollbar (`app/globals.css`) — the browser-default light/white
    scrollbar thumb read as a bug against this app's dark ground, especially in the always-visible
    phase nav list and task panel scroll regions.
-5. Replaced the hand-vectorized SVG logo approximation with the real uploaded asset
+6. Replaced the hand-vectorized SVG logo approximation with the real uploaded asset
    (`public/ApplicationIcon.png`), used via `next/image` for both the navbar mark and the
    browser favicon (`app/layout.tsx` metadata).
-6. Removed the "On Track Projects" dashboard accordion — folded into "In Progress".
-7. Simplified `ROLES` from a 5-role simulation (Admin/PM/Team Lead/Team Member/Viewer) down to
+7. Removed the "On Track Projects" dashboard accordion — folded into "In Progress".
+8. Simplified `ROLES` from a 5-role simulation (Admin/PM/Team Lead/Team Member/Viewer) down to
    Admin + Developer, both full access, per user request — see "Roles" above.
-8. Redesigned `TaskCard` to match a supplied reference screenshot: inline always-editable
+9. Redesigned `TaskCard` to match a supplied reference screenshot: inline always-editable
    Owner/Day-from-start/Planned-start/Duration fields (commit on blur) instead of a side Drawer.
    `TaskEditorDrawer.jsx` was deleted and replaced by `TaskDetailsDialog.tsx` (a centered modal,
    consistent with every other editor in the app) for name/priority/dependencies only.
    description/owner/scheduling moved to the inline card fields.
-9. `TicketsPanel` reorganized into three accordions (Raised/In Progress/Completed) matching the
-   dashboard's project-accordion pattern.
-10. Converted the whole app from a single-file MUI artifact (built earlier, still published as a
+10. `TicketsPanel` reorganized into three accordions (Raised/In Progress/Completed) matching the
+    dashboard's project-accordion pattern.
+11. Converted the whole app from a single-file MUI artifact (built earlier, still published as a
     Claude.ai Artifact) into this proper Next.js project with real API routes + mock DB + React
     state, sidebar removed in favor of top nav only.
-11. Fixed a real timezone bug in the original date math: mixing local-time `Date` parsing with
+12. Fixed a real timezone bug in the original date math: mixing local-time `Date` parsing with
     UTC serialization silently shifted every computed date back a day (and the shift compounded
     between planned-start and planned-finish, occasionally putting finish before start). All
     date arithmetic in `lib/dateUtils.ts` is now UTC-consistent except `todayISO()`, which

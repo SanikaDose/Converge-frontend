@@ -317,7 +317,10 @@ export function ProjectDetail({ projectId, actor, onBack }: { projectId: string;
           </Stack>
         ) : (
           <Box sx={{ height: "100%", overflowY: "auto" }}>
-            <TimelineView phases={detail.phases} tasks={detail.tasks} projectStartDate={detail.meta.startDate} projectEndDate={detail.meta.endDate} today={today} weekOff={detail.meta.weekOff} />
+            <TimelineView
+              phases={detail.phases} tasks={detail.tasks} projectStartDate={detail.meta.startDate} projectEndDate={detail.meta.endDate} today={today} weekOff={detail.meta.weekOff}
+              onOpenPhase={(phaseId) => { setActivePhaseId(phaseId); setViewMode("phases"); }}
+            />
           </Box>
         )}
       </Box>

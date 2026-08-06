@@ -9,6 +9,7 @@ import Tooltip from "@mui/material/Tooltip";
 import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { STATUS_COLOR } from "@/lib/data";
+import { isOverdue } from "@/lib/businessLogic";
 import { fmt, addDays, diffDays, isWeekend } from "@/lib/dateUtils";
 import { STATUS_HEX } from "@/lib/theme";
 import type { Phase, Task, WeekDay } from "@/lib/types";
@@ -16,7 +17,9 @@ import type { Phase, Task, WeekDay } from "@/lib/types";
 const ROW_H = 34;
 const PHASE_ROW_H = 30;
 const HEADER_H = 34;
+const BAR_H = 18;
 const ZOOM_PX: Record<string, number> = { Week: 26, Month: 11, Quarter: 4.5 };
+const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 function LegendSwatch({ color, label, textColor }: { color: string; label: string; textColor?: string }) {
   return (
@@ -41,13 +44,14 @@ type Row =
  * trophy glyph, phases collapse to tame the 62-task row count, and a
  * zoom control switches Week/Month/Quarter density.
  */
-export function TimelineView({ phases, tasks, projectStartDate, projectEndDate, today, weekOff }: {
+export function TimelineView({ phases, tasks, projectStartDate, projectEndDate, today, weekOff, onOpenPhase }: {
   phases: Phase[];
   tasks: Task[];
   projectStartDate: string;
   projectEndDate: string;
   today: string;
   weekOff: WeekDay[];
+  onOpenPhase?: (phaseId: string) => void;
 }) {
   const [zoom, setZoom] = useState("Week");
   const [collapsedPhases, setCollapsedPhases] = useState<Record<string, boolean>>({});
@@ -76,11 +80,28 @@ export function TimelineView({ phases, tasks, projectStartDate, projectEndDate, 
     return Math.max(diffDays(maxFinish, projectStartDate), diffDays(projectEndDate, projectStartDate)) + 3;
   }, [tasks, projectStartDate, projectEndDate]);
 
-  const weeks = useMemo(() => {
-    const arr: number[] = [];
-    for (let d = 0; d <= totalDays; d += 7) arr.push(Math.floor(d / 7) + 1);
+  // Week zoom has room for a mark every 7 days ("Wk N"); at Month/Quarter
+  // density that same cadence would crowd into unreadable overlapping
+  // labels, so those two switch to one mark per calendar month instead.
+  const headerMarks = useMemo(() => {
+    if (zoom === "Week") {
+      const arr: { offset: number; label: string }[] = [];
+      for (let d = 0; d <= totalDays; d += 7) arr.push({ offset: d, label: `Wk ${Math.floor(d / 7) + 1}` });
+      return arr;
+    }
+    const arr: { offset: number; label: string }[] = [];
+    let lastMonthKey = "";
+    for (let d = 0; d <= totalDays; d++) {
+      const iso = addDays(projectStartDate, d);
+      const monthKey = iso.slice(0, 7);
+      if (monthKey !== lastMonthKey) {
+        lastMonthKey = monthKey;
+        const [y, m] = iso.split("-");
+        arr.push({ offset: d, label: `${MONTH_ABBR[Number(m) - 1]} ${y}` });
+      }
+    }
     return arr;
-  }, [totalDays]);
+  }, [zoom, totalDays, projectStartDate]);
 
   const weekendBands = useMemo(() => {
     const bands: number[] = [];
@@ -147,8 +168,14 @@ export function TimelineView({ phases, tasks, projectStartDate, projectEndDate, 
               </Typography>
             </Box>
           ) : (
-            <Box key={i} sx={{ height: ROW_H, display: "flex", alignItems: "center", gap: 1, px: 1.75, borderBottom: "1px solid", borderColor: "divider", "&:hover": { bgcolor: "rgba(139,148,163,0.06)" } }}>
-              <Box sx={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, bgcolor: STATUS_HEX[STATUS_COLOR[r.task.status]] }} />
+            <Box
+              key={i} onClick={() => onOpenPhase?.(r.task.phaseId)}
+              sx={{
+                height: ROW_H, display: "flex", alignItems: "center", gap: 1, px: 1.75, borderBottom: "1px solid", borderColor: "divider",
+                cursor: onOpenPhase ? "pointer" : "default", "&:hover": { bgcolor: "rgba(139,148,163,0.06)" },
+              }}
+            >
+              <Box sx={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, bgcolor: isOverdue(r.task, today) ? STATUS_HEX.red : STATUS_HEX[STATUS_COLOR[r.task.status]] }} />
               <Typography variant="caption" noWrap title={r.task.name}>{r.task.name}</Typography>
               {r.task.achievement && <EmojiEventsIcon sx={{ fontSize: 12, color: STATUS_HEX.green, flexShrink: 0 }} />}
             </Box>
@@ -161,9 +188,9 @@ export function TimelineView({ phases, tasks, projectStartDate, projectEndDate, 
               <Box key={d} sx={{ position: "absolute", top: 0, bottom: 0, left: d * pxPerDay, width: pxPerDay, bgcolor: "rgba(139,148,163,0.08)", zIndex: 0 }} />
             ))}
             <Box sx={{ height: HEADER_H, borderBottom: "1px solid", borderColor: "divider", position: "sticky", top: 0, zIndex: 2, bgcolor: "background.default" }}>
-              {weeks.map((w, i) => (
-                <Typography key={i} variant="caption" color="text.secondary" sx={{ position: "absolute", top: 0, height: "100%", display: "flex", alignItems: "center", left: i * 7 * pxPerDay + 4, borderLeft: "1px solid", borderColor: "divider", pl: 0.5, fontFamily: "IBM Plex Mono, monospace" }}>
-                  Wk {w}
+              {headerMarks.map((mark, i) => (
+                <Typography key={i} variant="caption" color="text.secondary" sx={{ position: "absolute", top: 0, height: "100%", display: "flex", alignItems: "center", left: mark.offset * pxPerDay + 4, borderLeft: "1px solid", borderColor: "divider", pl: 0.5, fontFamily: "IBM Plex Mono, monospace", whiteSpace: "nowrap" }}>
+                  {mark.label}
                 </Typography>
               ))}
             </Box>
@@ -184,16 +211,28 @@ export function TimelineView({ phases, tasks, projectStartDate, projectEndDate, 
                   const rowY = y; y += ROW_H;
                   const left = diffDays(t.plannedStart, projectStartDate) * pxPerDay;
                   const width = Math.max((diffDays(t.plannedFinish, t.plannedStart) + 1) * pxPerDay - 2, 6);
-                  const color = STATUS_HEX[STATUS_COLOR[t.status]];
+                  // Bars color by whether the task is actually overdue, not
+                  // just its literal status field — a "Not Started" task
+                  // whose planned finish has already passed is exactly what
+                  // a Gantt chart exists to surface, so it renders red here
+                  // even though nobody flipped its status to "Delayed".
+                  const overdue = isOverdue(t, today);
+                  const color = overdue ? STATUS_HEX.red : STATUS_HEX[STATUS_COLOR[t.status]];
                   return (
                     <React.Fragment key={i}>
-                      <Box sx={{ position: "absolute", left: 0, right: 0, top: rowY, height: ROW_H, "&:hover": { bgcolor: "rgba(255,255,255,0.03)" } }} />
-                      <Tooltip title={`${t.name} · ${fmt(t.plannedStart)} → ${fmt(t.plannedFinish)} · ${t.status}`}>
-                        <Box sx={{
-                          position: "absolute", top: rowY + (ROW_H - 16) / 2, left, width, height: 16, borderRadius: 0.75, bgcolor: color,
-                          border: t.status === "Pending Approval" ? `1px dashed ${STATUS_HEX.violet}` : "none",
-                          display: "flex", alignItems: "center", justifyContent: "flex-end", pr: 0.25,
-                        }}>
+                      <Box
+                        onClick={() => onOpenPhase?.(t.phaseId)}
+                        sx={{ position: "absolute", left: 0, right: 0, top: rowY, height: ROW_H, cursor: onOpenPhase ? "pointer" : "default", "&:hover": { bgcolor: "rgba(255,255,255,0.03)" } }}
+                      />
+                      <Tooltip title={`${t.name} · ${fmt(t.plannedStart)} → ${fmt(t.plannedFinish)} · ${overdue ? "Overdue · " : ""}${t.status}`}>
+                        <Box
+                          onClick={() => onOpenPhase?.(t.phaseId)}
+                          sx={{
+                            position: "absolute", top: rowY + (ROW_H - BAR_H) / 2, left, width, height: BAR_H, borderRadius: 1, bgcolor: color,
+                            border: t.status === "Pending Approval" ? `1px dashed ${STATUS_HEX.violet}` : "none",
+                            boxShadow: "0 1px 2px rgba(0,0,0,0.35)", cursor: onOpenPhase ? "pointer" : "default",
+                            display: "flex", alignItems: "center", justifyContent: "flex-end", pr: 0.25,
+                          }}>
                           {t.achievement && <EmojiEventsIcon sx={{ fontSize: 11, color: "#0c2b1e" }} />}
                         </Box>
                       </Tooltip>

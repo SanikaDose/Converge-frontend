@@ -18,7 +18,7 @@ import GroupsIcon from "@mui/icons-material/Groups";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import { LogoLockup } from "./Logo";
-import { ROLES, ROLE_INFO } from "@/lib/data";
+import { ROLES } from "@/lib/data";
 import { OrgSelect } from "./common";
 import { useAppContext } from "@/context/AppContext";
 import type { AppRole } from "@/lib/types";
@@ -84,11 +84,6 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <OrgSelect label="You are" value={selfId} onChange={setSelfId} allowUnassigned size="small" />
               </Box>
             )}
-            <Tooltip title={ROLE_INFO[role].blurb}>
-              <Typography variant="caption" sx={{ color: "text.secondary", fontStyle: "italic", maxWidth: 240, display: { xs: "none", lg: "block" } }}>
-                {ROLE_INFO[role].blurb}
-              </Typography>
-            </Tooltip>
           </Box>
         </Toolbar>
       </AppBar>

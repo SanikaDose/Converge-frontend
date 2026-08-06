@@ -96,7 +96,7 @@ export function TeamPerformance({ refreshKey }: { refreshKey: number }) {
         if (!params.row.total) return <Typography variant="body2" color="text.disabled">—</Typography>;
         return (
           <Stack sx={{ width: "100%" }} spacing={0.4} justifyContent="center">
-            <Typography variant="caption" sx={{ fontFamily: "IBM Plex Mono, monospace" }}>{params.value}%</Typography>
+            <Typography variant="caption">{params.value}%</Typography>
             <LinearProgress
               variant="determinate" value={params.value}
               sx={{

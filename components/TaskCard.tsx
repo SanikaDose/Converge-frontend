@@ -29,9 +29,9 @@ import { useStatusHex } from "@/lib/theme";
 import type { Task, TaskStatus, WeekDay } from "@/lib/types";
 
 const monoLabel = {
-  fontSize: 10, textTransform: "uppercase", letterSpacing: 0.6, color: "text.secondary", display: "block", mb: 0.5,
+  fontSize: 10.5, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary", display: "block", mb: 0.75,
 } as const;
-const monoInput = { fontFamily: "IBM Plex Mono, monospace", fontSize: 12.5 };
+const fieldInputSx = { fontSize: 13 };
 
 /**
  * One task's card, quick-edit style: owner/day-offset/planned-start/
@@ -90,7 +90,7 @@ export function TaskCard({
   return (
     <Box sx={{
       bgcolor: "background.paper", border: "1px solid", borderColor: "divider",
-      borderLeft: "3px solid", borderLeftColor: STATUS_HEX[color], borderRadius: 2, p: 2,
+      borderLeft: "3px solid", borderLeftColor: STATUS_HEX[color], borderRadius: 2, p: 2.5,
     }}>
       <Stack direction="row" justifyContent="space-between" alignItems="flex-start" gap={2}>
         <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ minWidth: 0 }}>
@@ -101,25 +101,25 @@ export function TaskCard({
           )}
           <Box sx={{ minWidth: 0 }}>
             <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
-              <Typography variant="body2" sx={{ fontWeight: 600, fontSize: 14.5 }}>{task.name}</Typography>
+              <Typography variant="body1" sx={{ fontWeight: 600, fontSize: 15.5 }}>{task.name}</Typography>
               {task.priority && task.priority !== "Medium" && (
-                <Chip label={task.priority} size="small" sx={{ height: 18, fontSize: 10, color: STATUS_HEX[PRIORITY_COLOR[task.priority]], borderColor: STATUS_HEX[PRIORITY_COLOR[task.priority]] }} variant="outlined" />
+                <Chip label={task.priority} size="small" sx={{ height: 19, fontSize: 10.5, fontWeight: 700, color: STATUS_HEX[PRIORITY_COLOR[task.priority]], borderColor: STATUS_HEX[PRIORITY_COLOR[task.priority]] }} variant="outlined" />
               )}
               <AchievementBadge achievement={task.achievement} />
               {task.status === "Pending Approval" && <PendingApprovalChip />}
             </Stack>
-            <Stack direction="row" gap={1.25} flexWrap="wrap" sx={{ mt: 0.4, fontFamily: "IBM Plex Mono, monospace", fontSize: 11, color: "text.secondary" }}>
+            <Stack direction="row" gap={1.5} flexWrap="wrap" sx={{ mt: 0.6, fontSize: 11.5, color: "text.secondary" }}>
               <span>Plan {fmt(task.plannedStart)} → {fmt(task.plannedFinish)}</span>
               {task.actualStart && <span style={{ color: STATUS_HEX.amber }}>Started {fmt(task.actualStart)}</span>}
               {task.actualFinish && <span style={{ color: STATUS_HEX.green }}>Finished {fmt(task.actualFinish)}</span>}
-              {overdue && <span style={{ color: STATUS_HEX.red }}>{overdueDays}d overdue</span>}
+              {overdue && <span style={{ color: STATUS_HEX.red, fontWeight: 700 }}>{overdueDays}d overdue</span>}
             </Stack>
           </Box>
         </Stack>
 
         {canEdit ? (
           <Select size="small" value={task.status} onChange={(e: SelectChangeEvent) => onStatusChange(e.target.value as TaskStatus)}
-            disabled={locked} sx={{ width: 140, flexShrink: 0, fontSize: 12.5 }}>
+            disabled={locked} sx={{ width: 148, flexShrink: 0, fontSize: 12.5 }}>
             {STATUS_OPTIONS.filter(s => s !== "Pending Approval" || locked).map(s => <MenuItem key={s} value={s} sx={{ fontSize: 12.5 }}>{s}</MenuItem>)}
           </Select>
         ) : <StatusChip label={task.status} color={color} />}
@@ -130,10 +130,10 @@ export function TaskCard({
         onBlur={() => canEdit && description !== (task.description || "") && onCommitDescription(description)}
         placeholder={canEdit ? "Add notes about this task…" : "No notes added."}
         disabled={!canEdit} multiline minRows={1} maxRows={4} fullWidth
-        sx={{ mt: 1.25, "& .MuiInputBase-input": { fontSize: 12.5 } }}
+        sx={{ mt: 1.5, "& .MuiInputBase-input": { fontSize: 13 } }}
       />
 
-      <Stack direction="row" spacing={2.5} alignItems="flex-end" flexWrap="wrap" sx={{ mt: 1.5, pt: 1.5, borderTop: "1px solid", borderColor: "divider" }}>
+      <Stack direction="row" spacing={2.5} alignItems="flex-end" flexWrap="wrap" sx={{ mt: 1.75, pt: 1.75, borderTop: "1px solid", borderColor: "divider" }}>
         <Box sx={{ width: 190 }}>
           <Typography sx={monoLabel}>Owner</Typography>
           <OrgSelect label="" value={owner} onChange={(v) => { setOwner(v); canEdit && !locked && onCommitOwner(v); }}
@@ -143,17 +143,22 @@ export function TaskCard({
         <Box sx={{ width: 96 }}>
           <Typography sx={monoLabel}>Day from start</Typography>
           <TextField type="number" size="small" fullWidth value={dayOffset} disabled={!canEdit || locked}
-            slotProps={{ htmlInput: { min: 0, sx: monoInput } }}
+            slotProps={{ htmlInput: { min: 0, sx: fieldInputSx } }}
             onChange={(e) => setDayOffset(e.target.value)}
             onBlur={() => canEdit && !locked && onCommitOffset(dayOffset)} />
         </Box>
 
-        <Typography variant="caption" sx={{ color: "text.secondary", fontStyle: "italic", pb: 1 }}>or</Typography>
+        <Typography variant="caption" sx={{
+          color: "text.secondary", fontWeight: 600, mb: 1, px: 0.85, py: 0.15, borderRadius: 5,
+          bgcolor: "action.hover", textTransform: "uppercase", fontSize: 10, letterSpacing: 0.4,
+        }}>
+          or
+        </Typography>
 
         <Box sx={{ width: 150 }}>
           <Typography sx={monoLabel}>Planned start date</Typography>
           <TextField type="date" size="small" fullWidth value={startDateLocal} disabled={!canEdit || locked}
-            slotProps={{ htmlInput: { sx: monoInput } }}
+            slotProps={{ htmlInput: { sx: fieldInputSx } }}
             onChange={(e) => setStartDateLocal(e.target.value)}
             onBlur={() => canEdit && !locked && onCommitStartDate(startDateLocal)} />
         </Box>
@@ -161,7 +166,7 @@ export function TaskCard({
         <Box sx={{ width: 96 }}>
           <Typography sx={monoLabel}>Duration (days)</Typography>
           <TextField type="number" size="small" fullWidth value={duration} disabled={!canEdit || locked}
-            slotProps={{ htmlInput: { min: 1, sx: monoInput } }}
+            slotProps={{ htmlInput: { min: 1, sx: fieldInputSx } }}
             onChange={(e) => setDuration(e.target.value)}
             onBlur={() => canEdit && !locked && onCommitDuration(duration)} />
         </Box>

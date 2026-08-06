@@ -99,12 +99,12 @@ function TicketRow({ ticket, canUpdate, onUpdate }: {
     <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 1.5, bgcolor: "background.default", border: "1px solid", borderColor: "divider", borderRadius: 2, p: 1.5, flexWrap: "wrap" }}>
       <Box sx={{ minWidth: 0 }}>
         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-          <Typography variant="caption" color="text.secondary" sx={{ fontFamily: "IBM Plex Mono, monospace" }}>#{ticket.seq}</Typography>
+          <Typography variant="caption" color="text.secondary">#{ticket.seq}</Typography>
           <Typography variant="body2">{ticket.title}</Typography>
           {ticket.priority === "High" && <Chip label="High" size="small" color="error" variant="outlined" sx={{ height: 18 }} />}
           <EmployeeAvatar employeeId={ticket.assignedTo} size={20} />
         </Stack>
-        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.4, fontFamily: "IBM Plex Mono, monospace" }}>
+        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.4 }}>
           {ticket.projectName}{ticket.phase ? ` · ${ticket.phase}` : ""} · Raised {ticket.createdAt}
         </Typography>
       </Box>

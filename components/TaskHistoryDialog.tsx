@@ -28,7 +28,7 @@ export function TaskHistoryDialog({ task, onClose }: { task: Task; onClose: () =
   const entries = (task.history || []).slice().reverse();
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1, fontFamily: '"Space Grotesk", sans-serif' }}>
+      <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
         <HistoryIcon fontSize="small" /> Change history — {task.name}
       </DialogTitle>
       <DialogContent dividers>
@@ -38,7 +38,7 @@ export function TaskHistoryDialog({ task, onClose }: { task: Task; onClose: () =
           <Timeline sx={{ p: 0, m: 0, "& .MuiTimelineItem-root:before": { flex: 0, padding: 0 } }}>
             {entries.map((h, i) => (
               <TimelineItem key={i}>
-                <TimelineOppositeContent sx={{ flex: 0.28, color: "text.secondary", fontSize: 11.5, fontFamily: "IBM Plex Mono, monospace" }}>
+                <TimelineOppositeContent sx={{ flex: 0.28, color: "text.secondary", fontSize: 11.5 }}>
                   {fmtDateTime(h.ts)}
                 </TimelineOppositeContent>
                 <TimelineSeparator>

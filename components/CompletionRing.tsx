@@ -16,7 +16,7 @@ export function CompletionRing({ pct, size = 56, color = "amber" }: { pct: numbe
       <Box sx={{
         width: size - 12, height: size - 12, borderRadius: "50%", bgcolor: "background.paper",
         display: "flex", alignItems: "center", justifyContent: "center",
-        fontFamily: "IBM Plex Mono, monospace", fontSize: 13, color: "text.primary",
+        fontSize: 13, fontWeight: 600, color: "text.primary",
       }}>
         {pct}%
       </Box>

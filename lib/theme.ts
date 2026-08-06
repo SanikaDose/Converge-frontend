@@ -41,14 +41,21 @@ export function useStatusHex(): Record<StatusColorKey, string> {
   return theme.palette.mode === "light" ? STATUS_HEX_LIGHT : STATUS_HEX_DARK;
 }
 
+// Standard system font stack — every platform resolves this to its own
+// native UI font (San Francisco on macOS, Segoe UI on Windows, Roboto on
+// Android/Chrome OS) instead of a webfont this app never actually loads
+// (no <link>/next/font for "Inter"/"Space Grotesk"/"IBM Plex Mono", so
+// those names were silently falling through to whatever's next in the
+// stack anyway — inconsistent across machines and the source of the
+// "blurry" look: a requested-but-missing family can trigger the browser's
+// synthetic bold/italic rendering instead of real glyphs).
+const SYSTEM_FONT_STACK = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+
 const typography = {
-  fontFamily: '"Inter", "Segoe UI", system-ui, sans-serif',
-  h1: { fontFamily: '"Space Grotesk", "Inter", sans-serif' },
-  h2: { fontFamily: '"Space Grotesk", "Inter", sans-serif' },
-  h3: { fontFamily: '"Space Grotesk", "Inter", sans-serif' },
-  h4: { fontFamily: '"Space Grotesk", "Inter", sans-serif', fontWeight: 600 },
-  h5: { fontFamily: '"Space Grotesk", "Inter", sans-serif', fontWeight: 600 },
-  h6: { fontFamily: '"Space Grotesk", "Inter", sans-serif', fontWeight: 600 },
+  fontFamily: SYSTEM_FONT_STACK,
+  h4: { fontWeight: 600 },
+  h5: { fontWeight: 600 },
+  h6: { fontWeight: 600 },
   button: { textTransform: "none" as const, fontWeight: 600 },
 };
 

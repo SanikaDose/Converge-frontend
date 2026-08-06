@@ -214,10 +214,6 @@ export function avatarColor(name: string | null | undefined): string {
    approval workflow) is a data change here, not a rewrite.
 ------------------------------------------------------------------------ */
 export const ROLES: AppRole[] = ["Admin", "Developer"];
-export const ROLE_INFO: Record<AppRole, { blurb: string }> = {
-  "Admin": { blurb: "Full portfolio oversight — every project, every control, all breakdowns." },
-  "Developer": { blurb: "Full access for now — every project, every control, all breakdowns." },
-};
 const ALL_ROLES = ROLES;
 export const PERMISSIONS: Record<PermissionAction, AppRole[]> = {
   createProject: ALL_ROLES,

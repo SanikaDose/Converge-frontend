@@ -27,9 +27,9 @@ export function StatusChip({ label, color = "slate", size = "small", variant = "
       size={size}
       sx={variant === "filled" ? {
         bgcolor: `color-mix(in srgb, ${hex} 22%, transparent)`,
-        color: hex, border: `1px solid ${hex}`, fontFamily: "IBM Plex Mono, monospace", fontSize: 11.5,
+        color: hex, border: `1px solid ${hex}`, fontWeight: 700, fontSize: 11.5,
       } : {
-        color: hex, borderColor: hex, fontFamily: "IBM Plex Mono, monospace", fontSize: 11.5,
+        color: hex, borderColor: hex, fontWeight: 700, fontSize: 11.5,
       }}
       variant={variant === "filled" ? "filled" : "outlined"}
     />

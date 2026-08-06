@@ -24,7 +24,7 @@ export function ProjectCard({ project, onOpen }: { project: ProjectWithLiveStats
       <Stack direction="row" justifyContent="space-between" gap={1.5}>
         <Box sx={{ minWidth: 0 }}>
           <Chip label={project.type || "Product"} size="small" variant="outlined" sx={{ fontSize: 10 }} />
-          <Typography sx={{ mt: 0.75, fontFamily: '"Space Grotesk", sans-serif', fontSize: 16, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          <Typography sx={{ mt: 0.75, fontSize: 16, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             {project.name}
           </Typography>
           <Stack direction="row" spacing={0.6} alignItems="center" sx={{ mt: 0.5, color: "text.secondary" }}>
@@ -47,7 +47,7 @@ export function ProjectCard({ project, onOpen }: { project: ProjectWithLiveStats
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 1.75 }}>
         <Stack direction="row" spacing={0.6} alignItems="center" sx={{ color: "text.secondary" }}>
           <CalendarMonthIcon sx={{ fontSize: 13 }} />
-          <Typography variant="caption" sx={{ fontFamily: "IBM Plex Mono, monospace" }}>{fmt(project.startDate)} → {fmt(project.endDate)}</Typography>
+          <Typography variant="caption">{fmt(project.startDate)} → {fmt(project.endDate)}</Typography>
         </Stack>
         {delayed
           ? <Chip label={`${project.delayed} delayed`} size="small" color="error" />

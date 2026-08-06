@@ -40,7 +40,7 @@ export function LogoLockup({ markSize = 30, wordmarkSize = 17 }: { markSize?: nu
       <LogoMark size={markSize} />
       <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.05 }}>
         <span style={{
-          fontFamily: '"Space Grotesk", sans-serif', fontSize: wordmarkSize, fontWeight: 700,
+          fontSize: wordmarkSize, fontWeight: 700,
           background: "linear-gradient(90deg, #6fd6e6, #3f6fb0)",
           WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent",
           letterSpacing: 0.2,

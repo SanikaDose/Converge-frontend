@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState, type ReactNode } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import Box from "@mui/material/Box";
 import Stack from "./Stack";
 import Typography from "@mui/material/Typography";
@@ -10,7 +10,7 @@ import Tooltip from "@mui/material/Tooltip";
 import CircularProgress from "@mui/material/CircularProgress";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
-import Chip, { type ChipProps } from "@mui/material/Chip";
+import Chip from "@mui/material/Chip";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import SettingsIcon from "@mui/icons-material/Settings";
 import GridViewIcon from "@mui/icons-material/GridView";
@@ -28,7 +28,7 @@ import { EmployeeAvatar } from "./common";
 
 import { fetchProject, updateProjectApi } from "@/lib/api";
 import {
-  ensureProjectShape, phaseSummaries, summarize, projectStatusFromPhases, computePlanned,
+  ensureProjectShape, phaseSummaries, summarize, computePlanned,
   approveScheduleChange, rejectScheduleChange, computeAchievement, requestScheduleChange, fieldLabel,
 } from "@/lib/businessLogic";
 import { genId, roleCan, employeeLabel } from "@/lib/data";
@@ -236,8 +236,6 @@ export function ProjectDetail({ projectId, actor, onBack }: { projectId: string;
   const phaseRows = phaseSummaries(detail.phases, detail.tasks, today, detail.meta.startDate);
   const activePhaseRow = phaseRows.find(p => p.id === activePhaseId) || phaseRows[0];
   const activeTasks = detail.tasks.filter(t => t.phaseId === activePhaseRow?.id);
-  const bucket = projectStatusFromPhases(phaseRows);
-  const bucketColor: ChipProps["color"] = bucket === "Delayed" ? "error" : bucket === "In Progress" ? "warning" : "success";
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: { xs: "calc(100vh - 96px)", md: "calc(100vh - 116px)" } }}>
@@ -254,7 +252,6 @@ export function ProjectDetail({ projectId, actor, onBack }: { projectId: string;
                 </IconButton>
               </Tooltip>
               <Typography variant="h5" noWrap sx={{ fontWeight: 600 }}>{detail.meta.name}</Typography>
-              <Chip label={bucket} size="small" color={bucketColor} />
             </Stack>
             <Stack direction="row" spacing={2} sx={{ mt: 0.5, ml: 0.5 }} color="text.secondary" flexWrap="wrap">
               <Stack direction="row" spacing={0.5} alignItems="center"><BusinessIcon sx={{ fontSize: 14 }} /><Typography variant="caption">{detail.meta.customer}</Typography></Stack>
@@ -264,10 +261,15 @@ export function ProjectDetail({ projectId, actor, onBack }: { projectId: string;
                   <Typography variant="caption">{employeeLabel(detail.meta.owner)}</Typography>
                 </Stack>
               )}
-              <Stack direction="row" spacing={0.5} alignItems="center"><CalendarMonthIcon sx={{ fontSize: 14 }} /><Typography variant="caption" sx={{ fontFamily: "IBM Plex Mono, monospace" }}>{fmt(detail.meta.startDate)} → {fmt(detail.meta.endDate)}</Typography></Stack>
+              <Stack direction="row" spacing={0.5} alignItems="center"><CalendarMonthIcon sx={{ fontSize: 14 }} /><Typography variant="caption">{fmt(detail.meta.startDate)} → {fmt(detail.meta.endDate)}</Typography></Stack>
             </Stack>
           </Box>
-          <Stack direction="row" spacing={1.5} alignItems="center">
+          <Stack direction="row" spacing={1.25} alignItems="center">
+            <Chip label={`${s.completed}/${s.total} done`} size="small" variant="outlined" />
+            <Chip
+              label={s.delayed > 0 ? `${s.delayed} delayed` : "On track"} size="small"
+              color={s.delayed > 0 ? "error" : "success"} variant={s.delayed > 0 ? "filled" : "outlined"}
+            />
             {canEditProjectSettings && (
               <Tooltip title="Project settings"><IconButton size="small" onClick={() => setShowSettings(true)}><SettingsIcon fontSize="small" /></IconButton></Tooltip>
             )}
@@ -275,14 +277,7 @@ export function ProjectDetail({ projectId, actor, onBack }: { projectId: string;
           </Stack>
         </Stack>
 
-        <Stack direction="row" spacing={3} sx={{ my: 1.25 }} flexWrap="wrap">
-          <Stat label="Tasks completed" value={`${s.completed} / ${s.total}`} />
-          <Stat label="Delayed" value={s.delayed} color={s.delayed > 0 ? "error.main" : "success.main"} />
-          <Stat label="Target end date" value={fmt(detail.meta.endDate)} mono />
-          <Stat label="Planned finish" value={fmt(s.plannedEnd)} mono />
-        </Stack>
-
-        <Stack direction="row" justifyContent="flex-end" sx={{ mb: 1 }}>
+        <Stack direction="row" justifyContent="flex-end" sx={{ my: 1 }}>
           <ToggleButtonGroup size="small" exclusive value={viewMode} onChange={(_e, v: ViewMode | null) => v && setViewMode(v)}>
             <ToggleButton value="phases"><GridViewIcon sx={{ fontSize: 16, mr: 0.75 }} />Phases</ToggleButton>
             <ToggleButton value="timeline"><TimelineIcon sx={{ fontSize: 16, mr: 0.75 }} />Timeline</ToggleButton>
@@ -340,20 +335,6 @@ export function ProjectDetail({ projectId, actor, onBack }: { projectId: string;
       {addTaskPhaseId && (
         <AddTaskDialog projectStartDate={detail.meta.startDate} projectWeekOff={detail.meta.weekOff} onClose={() => setAddTaskPhaseId(null)} onCreate={handleAddTask} />
       )}
-    </Box>
-  );
-}
-
-function Stat({ label, value, color, mono }: { label: string; value: ReactNode; color?: string; mono?: boolean }) {
-  return (
-    <Box>
-      <Typography variant="caption" color="text.secondary" sx={{ textTransform: "uppercase", letterSpacing: 0.5, fontSize: 10.5, lineHeight: 1.6 }}>{label}</Typography>
-      <Typography sx={{
-        fontFamily: mono ? "IBM Plex Mono, monospace" : '"Space Grotesk", sans-serif',
-        fontSize: 16.5, fontWeight: 600, color: color || "text.primary",
-      }}>
-        {value}
-      </Typography>
     </Box>
   );
 }

@@ -76,7 +76,7 @@ export function ProjectForm({ title, initial, onClose, onSubmit, busy, submitLab
 
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ fontFamily: '"Space Grotesk", sans-serif' }}>{title}</DialogTitle>
+      <DialogTitle>{title}</DialogTitle>
       <DialogContent dividers sx={{ display: "flex", flexDirection: "column", gap: 2.25 }}>
         <ToggleButtonGroup exclusive value={type} onChange={(_e, v: ProjectType | null) => v && setType(v)} size="small">
           <ToggleButton value="Product">Product</ToggleButton>

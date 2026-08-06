@@ -47,13 +47,13 @@ export function PhaseNavList({ phases, activeId, onSelect }: {
           <CompletionRing pct={p.total ? Math.round((p.completed / p.total) * 100) : 0} size={40} color={p.color} />
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Stack direction="row" alignItems="center" gap={0.5}>
-              <Typography variant="caption" color="text.secondary" sx={{ fontFamily: "IBM Plex Mono, monospace" }}>
+              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
                 {p.name.split(" · ")[0]}
               </Typography>
               {p.critical && <Tooltip title="Critical phase — delays here delay the whole project"><Typography variant="caption" sx={{ color: STATUS_HEX.red }}>●</Typography></Tooltip>}
             </Stack>
             <Typography variant="body2" noWrap sx={{ lineHeight: 1.3 }}>{p.name.split(" · ").slice(1).join(" · ")}</Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ fontFamily: "IBM Plex Mono, monospace" }}>
+            <Typography variant="caption" color="text.secondary">
               {p.completed}/{p.total} done{p.delayed > 0 ? ` · ${p.delayed} late` : ""}
             </Typography>
           </Box>
@@ -146,23 +146,37 @@ export function PhaseTaskPanel({
   const sorted = tasks.slice().sort((a, b) => a.order - b.order);
   const wStart = phase.weekStart, wEnd = phase.weekEnd;
 
+  const STATUS_HEX = useStatusHex();
+  const phaseNumber = phase.name.split(" · ")[0];
+  const phaseTitle = phase.name.split(" · ").slice(1).join(" · ");
+
   return (
     <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: 3, overflow: "hidden" }}>
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", p: 2.5, bgcolor: "background.default", borderBottom: "1px solid", borderColor: "divider" }}>
-        <Box>
-          <Typography variant="h6">{phase.name}</Typography>
-          <Typography variant="caption" color="text.secondary" sx={{ fontFamily: "IBM Plex Mono, monospace" }}>
+      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", p: 2.75, bgcolor: "background.default", borderBottom: "1px solid", borderColor: "divider" }}>
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="caption" sx={{ fontWeight: 700, letterSpacing: 0.5, color: "primary.light" }}>
+            PHASE {phaseNumber}
+          </Typography>
+          <Typography variant="h6" noWrap sx={{ fontWeight: 700, lineHeight: 1.25 }}>{phaseTitle}</Typography>
+          <Typography variant="caption" color="text.secondary">
             {fmt(phase.phaseStart)} → {fmt(phase.phaseEnd)}{wStart ? ` · Week ${wStart}${wEnd !== wStart ? `–${wEnd}` : ""}` : ""}
           </Typography>
         </Box>
-        <Stack direction="row" spacing={1.5} alignItems="center">
-          <Typography variant="caption" color="text.secondary" sx={{ fontFamily: "IBM Plex Mono, monospace" }}>
-            {phase.completed}/{phase.total} complete{phase.delayed > 0 ? ` · ${phase.delayed} delayed` : ""}
-          </Typography>
-          {canManage && <Button size="small" startIcon={<AddIcon />} onClick={onAddTask}>Add task</Button>}
+        <Stack direction="row" spacing={2} alignItems="center" sx={{ flexShrink: 0 }}>
+          <Box sx={{ textAlign: "right" }}>
+            <Typography sx={{ fontWeight: 700, fontSize: 15, lineHeight: 1.3 }}>
+              {phase.completed}/{phase.total} <Typography component="span" variant="caption" color="text.secondary" sx={{ fontWeight: 500 }}>complete</Typography>
+            </Typography>
+            {phase.delayed > 0 && (
+              <Typography variant="caption" sx={{ display: "block", color: STATUS_HEX.red, fontWeight: 700 }}>
+                {phase.delayed} delayed
+              </Typography>
+            )}
+          </Box>
+          {canManage && <Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={onAddTask}>Add task</Button>}
         </Stack>
       </Box>
-      <Stack spacing={2} sx={{ p: 2 }}>
+      <Stack spacing={2.25} sx={{ p: 2.5 }}>
         {sorted.map((t) => (
           <Box
             key={t.id}

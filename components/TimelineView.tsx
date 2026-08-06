@@ -167,7 +167,7 @@ export function TimelineView({ phases, tasks, projectStartDate, projectEndDate, 
               <ExpandMoreIcon sx={{ fontSize: 16, color: "text.secondary", flexShrink: 0, transition: "transform .15s ease", transform: collapsedPhases[r.id] ? "rotate(-90deg)" : "none" }} />
               {r.critical && <Tooltip title="Critical phase — delays here delay the whole project"><Box sx={{ width: 5, height: 5, borderRadius: "50%", bgcolor: STATUS_HEX.red, flexShrink: 0 }} /></Tooltip>}
               <Typography variant="caption" color="text.secondary" noWrap sx={{ fontWeight: 700, flex: 1, minWidth: 0 }}>{r.name}</Typography>
-              <Typography variant="caption" color="text.secondary" sx={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 10, flexShrink: 0, textTransform: "none" }}>
+              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, fontSize: 10, flexShrink: 0, textTransform: "none" }}>
                 {r.completed}/{r.total}
               </Typography>
             </Box>
@@ -193,7 +193,7 @@ export function TimelineView({ phases, tasks, projectStartDate, projectEndDate, 
             ))}
             <Box sx={{ height: HEADER_H, borderBottom: "1px solid", borderColor: "divider", position: "sticky", top: 0, zIndex: 2, bgcolor: "background.default" }}>
               {headerMarks.map((mark, i) => (
-                <Typography key={i} variant="caption" color="text.secondary" sx={{ position: "absolute", top: 0, height: "100%", display: "flex", alignItems: "center", left: mark.offset * pxPerDay + 4, borderLeft: "1px solid", borderColor: "divider", pl: 0.5, fontFamily: "IBM Plex Mono, monospace", whiteSpace: "nowrap" }}>
+                <Typography key={i} variant="caption" color="text.secondary" sx={{ position: "absolute", top: 0, height: "100%", display: "flex", alignItems: "center", left: mark.offset * pxPerDay + 4, borderLeft: "1px solid", borderColor: "divider", pl: 0.5, whiteSpace: "nowrap" }}>
                   {mark.label}
                 </Typography>
               ))}
@@ -201,7 +201,7 @@ export function TimelineView({ phases, tasks, projectStartDate, projectEndDate, 
             <Box sx={{ position: "relative", height: bodyHeight }}>
               {todayOffset >= 0 && todayOffset <= totalDays && (
                 <Box sx={{ position: "absolute", top: 0, bottom: 0, left: todayOffset * pxPerDay, width: 2, bgcolor: "primary.light", zIndex: 2 }}>
-                  <Typography variant="caption" sx={{ position: "absolute", top: -18, left: 4, color: "primary.light", whiteSpace: "nowrap", fontFamily: "IBM Plex Mono, monospace" }}>Today</Typography>
+                  <Typography variant="caption" sx={{ position: "absolute", top: -18, left: 4, color: "primary.light", whiteSpace: "nowrap", fontWeight: 700 }}>Today</Typography>
                 </Box>
               )}
               {(() => {

@@ -14,6 +14,10 @@ import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
 import DialogActions from "@mui/material/DialogActions";
 import TextField from "@mui/material/TextField";
+import Accordion from "@mui/material/Accordion";
+import AccordionSummary from "@mui/material/AccordionSummary";
+import AccordionDetails from "@mui/material/AccordionDetails";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import EditIcon from "@mui/icons-material/Edit";
 import HistoryIcon from "@mui/icons-material/History";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
@@ -28,21 +32,24 @@ import { fmt } from "@/lib/dateUtils";
 import { useStatusHex } from "@/lib/theme";
 import type { Task, TaskStatus, WeekDay } from "@/lib/types";
 
-const monoLabel = {
+const fieldLabelSx = {
   fontSize: 10.5, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary", display: "block", mb: 0.75,
 } as const;
 const fieldInputSx = { fontSize: 13 };
 
 /**
- * One task's card, quick-edit style: owner/day-offset/planned-start/
- * duration are editable directly on the card (commit on blur) rather
- * than behind a separate editor — matching the rest of the app's dense,
- * always-visible-fields layout. A pencil icon opens a small modal for
- * the fields that don't belong inline (name/description/priority/
- * dependencies); there is no side drawer.
+ * One task's row, as a Material UI Accordion — collapsed shows just
+ * enough to scan the list (status/overdue dot, name, priority/achievement/
+ * pending-approval badges, planned start, assignee avatar, status chip);
+ * expanding it reveals the full editable detail (notes, status, owner,
+ * day-offset/planned-start/duration commit-on-blur fields, planned
+ * finish, actual dates, history, edit/delete, approval actions). Only
+ * one task is expanded at a time — controlled by the parent
+ * (`expanded`/`onToggleExpand`) rather than local state, so
+ * PhaseTaskPanel can enforce that.
  */
 export function TaskCard({
-  task, canEdit, canApprove, canReorder, today, weekOff,
+  task, canEdit, canApprove, canReorder, today, weekOff, expanded, onToggleExpand,
   onStatusChange, onOpenEditor, onOpenHistory, onDelete, onApprove, onReject,
   onCommitOwner, onCommitOffset, onCommitStartDate, onCommitDuration, onCommitDescription,
   dragHandleProps,
@@ -53,6 +60,8 @@ export function TaskCard({
   canReorder: boolean;
   today: string;
   weekOff: WeekDay[];
+  expanded: boolean;
+  onToggleExpand: () => void;
   onStatusChange: (status: TaskStatus) => void;
   onOpenEditor: () => void;
   onOpenHistory: () => void;
@@ -88,124 +97,162 @@ export function TaskCard({
   const locked = task.status === "Pending Approval";
 
   return (
-    <Box sx={{
-      bgcolor: "background.paper", border: "1px solid", borderColor: "divider",
-      borderLeft: "3px solid", borderLeftColor: STATUS_HEX[color], borderRadius: 2, p: 2.5,
-    }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" gap={2}>
-        <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ minWidth: 0 }}>
+    <>
+      <Accordion
+        expanded={expanded} onChange={onToggleExpand} disableGutters
+        sx={{
+          bgcolor: "background.paper", border: "1px solid", borderColor: "divider",
+          borderLeft: "3px solid", borderLeftColor: STATUS_HEX[color], borderRadius: "10px !important",
+          boxShadow: "0 1px 2px rgba(16,24,40,0.04)", overflow: "hidden", "&:before": { display: "none" },
+        }}
+      >
+        <AccordionSummary
+          expandIcon={<ExpandMoreIcon fontSize="small" />}
+          sx={{
+            px: 2, minHeight: 58,
+            "& .MuiAccordionSummary-content": { display: "flex", alignItems: "center", gap: 1.5, minWidth: 0, my: 1 },
+          }}
+        >
           {canReorder && (
-            <Box {...dragHandleProps} sx={{ cursor: "grab", color: "text.secondary", mt: 0.3 }}>
+            <Box {...dragHandleProps} onClick={(e) => e.stopPropagation()} sx={{ cursor: "grab", color: "text.secondary", display: "flex", flexShrink: 0 }}>
               <DragIndicatorIcon fontSize="small" />
             </Box>
           )}
-          <Box sx={{ minWidth: 0 }}>
+          <Tooltip title={overdue ? `${overdueDays}d overdue` : task.status}>
+            <Box sx={{ width: 9, height: 9, borderRadius: "50%", flexShrink: 0, bgcolor: overdue ? STATUS_HEX.red : STATUS_HEX[color] }} />
+          </Tooltip>
+
+          <Box sx={{ minWidth: 0, flex: 1 }}>
             <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
-              <Typography variant="body1" sx={{ fontWeight: 600, fontSize: 15.5 }}>{task.name}</Typography>
+              <Typography noWrap sx={{ fontWeight: 600, fontSize: 14.5 }}>{task.name}</Typography>
               {task.priority && task.priority !== "Medium" && (
-                <Chip label={task.priority} size="small" sx={{ height: 19, fontSize: 10.5, fontWeight: 700, color: STATUS_HEX[PRIORITY_COLOR[task.priority]], borderColor: STATUS_HEX[PRIORITY_COLOR[task.priority]] }} variant="outlined" />
+                <Chip label={task.priority} size="small" sx={{ height: 18, fontSize: 10, fontWeight: 700, color: STATUS_HEX[PRIORITY_COLOR[task.priority]], borderColor: STATUS_HEX[PRIORITY_COLOR[task.priority]] }} variant="outlined" />
               )}
               <AchievementBadge achievement={task.achievement} />
               {task.status === "Pending Approval" && <PendingApprovalChip />}
             </Stack>
-            <Stack direction="row" gap={1.5} flexWrap="wrap" sx={{ mt: 0.6, fontSize: 11.5, color: "text.secondary" }}>
-              <span>Plan {fmt(task.plannedStart)} → {fmt(task.plannedFinish)}</span>
-              {task.actualStart && <span style={{ color: STATUS_HEX.amber }}>Started {fmt(task.actualStart)}</span>}
-              {task.actualFinish && <span style={{ color: STATUS_HEX.green }}>Finished {fmt(task.actualFinish)}</span>}
-              {overdue && <span style={{ color: STATUS_HEX.red, fontWeight: 700 }}>{overdueDays}d overdue</span>}
-            </Stack>
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.25 }} noWrap>
+              Start {fmt(task.plannedStart)}
+              {overdue && <Box component="span" sx={{ color: STATUS_HEX.red, fontWeight: 700, ml: 1 }}>{overdueDays}d overdue</Box>}
+            </Typography>
           </Box>
-        </Stack>
 
-        {canEdit ? (
-          <Select size="small" value={task.status} onChange={(e: SelectChangeEvent) => onStatusChange(e.target.value as TaskStatus)}
-            disabled={locked} sx={{ width: 148, flexShrink: 0, fontSize: 12.5 }}>
-            {STATUS_OPTIONS.filter(s => s !== "Pending Approval" || locked).map(s => <MenuItem key={s} value={s} sx={{ fontSize: 12.5 }}>{s}</MenuItem>)}
-          </Select>
-        ) : <StatusChip label={task.status} color={color} />}
-      </Stack>
+          <Stack direction="row" spacing={1.25} alignItems="center" sx={{ flexShrink: 0, mr: 0.5 }}>
+            {task.assignedTo && <EmployeeAvatar employeeId={task.assignedTo} size={26} />}
+            <StatusChip label={task.status} color={color} />
+          </Stack>
+        </AccordionSummary>
 
-      <TextField
-        value={description} onChange={(e) => setDescription(e.target.value)}
-        onBlur={() => canEdit && description !== (task.description || "") && onCommitDescription(description)}
-        placeholder={canEdit ? "Add notes about this task…" : "No notes added."}
-        disabled={!canEdit} multiline minRows={1} maxRows={4} fullWidth
-        sx={{ mt: 1.5, "& .MuiInputBase-input": { fontSize: 13 } }}
-      />
+        <AccordionDetails sx={{ px: 2, pt: 0, pb: 2.25 }}>
+          <TextField
+            value={description} onChange={(e) => setDescription(e.target.value)}
+            onBlur={() => canEdit && description !== (task.description || "") && onCommitDescription(description)}
+            placeholder={canEdit ? "Add notes about this task…" : "No notes added."}
+            disabled={!canEdit} multiline minRows={1} maxRows={4} fullWidth
+            sx={{ mb: 2, "& .MuiInputBase-input": { fontSize: 13 } }}
+          />
 
-      <Stack direction="row" spacing={2.5} alignItems="flex-end" flexWrap="wrap" sx={{ mt: 1.75, pt: 1.75, borderTop: "1px solid", borderColor: "divider" }}>
-        <Box sx={{ width: 190 }}>
-          <Typography sx={monoLabel}>Owner</Typography>
-          <OrgSelect label="" value={owner} onChange={(v) => { setOwner(v); canEdit && !locked && onCommitOwner(v); }}
-            size="small" fullWidth disabled={!canEdit || locked} />
-        </Box>
+          <Stack direction="row" gap={1.5} flexWrap="wrap" sx={{ mb: 2, fontSize: 11.5, color: "text.secondary" }}>
+            <span>Plan {fmt(task.plannedStart)} → {fmt(task.plannedFinish)}</span>
+            {task.actualStart && <span style={{ color: STATUS_HEX.amber }}>Started {fmt(task.actualStart)}</span>}
+            {task.actualFinish && <span style={{ color: STATUS_HEX.green }}>Finished {fmt(task.actualFinish)}</span>}
+          </Stack>
 
-        <Box sx={{ width: 96 }}>
-          <Typography sx={monoLabel}>Day from start</Typography>
-          <TextField type="number" size="small" fullWidth value={dayOffset} disabled={!canEdit || locked}
-            slotProps={{ htmlInput: { min: 0, sx: fieldInputSx } }}
-            onChange={(e) => setDayOffset(e.target.value)}
-            onBlur={() => canEdit && !locked && onCommitOffset(dayOffset)} />
-        </Box>
-
-        <Typography variant="caption" sx={{
-          color: "text.secondary", fontWeight: 600, mb: 1, px: 0.85, py: 0.15, borderRadius: 5,
-          bgcolor: "action.hover", textTransform: "uppercase", fontSize: 10, letterSpacing: 0.4,
-        }}>
-          or
-        </Typography>
-
-        <Box sx={{ width: 150 }}>
-          <Typography sx={monoLabel}>Planned start date</Typography>
-          <TextField type="date" size="small" fullWidth value={startDateLocal} disabled={!canEdit || locked}
-            slotProps={{ htmlInput: { sx: fieldInputSx } }}
-            onChange={(e) => setStartDateLocal(e.target.value)}
-            onBlur={() => canEdit && !locked && onCommitStartDate(startDateLocal)} />
-        </Box>
-
-        <Box sx={{ width: 96 }}>
-          <Typography sx={monoLabel}>Duration (days)</Typography>
-          <TextField type="number" size="small" fullWidth value={duration} disabled={!canEdit || locked}
-            slotProps={{ htmlInput: { min: 1, sx: fieldInputSx } }}
-            onChange={(e) => setDuration(e.target.value)}
-            onBlur={() => canEdit && !locked && onCommitDuration(duration)} />
-        </Box>
-
-        <Tooltip title="View history">
-          <span>
-            <Button size="small" startIcon={<HistoryIcon sx={{ fontSize: 15 }} />} onClick={onOpenHistory} disabled={!task.history?.length} sx={{ ml: "auto", fontSize: 12 }}>
-              {task.history?.length ? `${task.history.length} change${task.history.length > 1 ? "s" : ""}` : "No changes"}
-            </Button>
-          </span>
-        </Tooltip>
-        {canEdit && (
-          <Tooltip title="Edit name, description, priority & dependencies">
-            <IconButton size="small" onClick={onOpenEditor}><EditIcon fontSize="small" /></IconButton>
-          </Tooltip>
-        )}
-        {canEdit && (
-          <Tooltip title="Delete task">
-            <IconButton size="small" color="error" onClick={() => setConfirmDelete(true)}><DeleteOutlineIcon fontSize="small" /></IconButton>
-          </Tooltip>
-        )}
-      </Stack>
-
-      {task.status === "Pending Approval" && task.pendingChange && (
-        <Box sx={{ mt: 1.5, p: 1.5, borderRadius: 1.5, bgcolor: "rgba(157,127,224,0.08)", border: `1px dashed ${STATUS_HEX.violet}` }}>
-          <Typography variant="caption" sx={{ color: STATUS_HEX.violet, fontWeight: 700 }}>
-            Requested by {task.pendingChange.requestedByName}
-          </Typography>
-          <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
-            {task.pendingChange.reason || "No reason given."}
-          </Typography>
-          {canApprove && (
-            <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-              <Button size="small" color="success" variant="outlined" startIcon={<CheckIcon />} onClick={onApprove}>Approve</Button>
-              <Button size="small" color="error" variant="outlined" startIcon={<CloseIcon />} onClick={() => setRejectOpen(true)}>Reject</Button>
-            </Stack>
+          {canEdit && (
+            <Box sx={{ mb: 2, width: 180 }}>
+              <Typography sx={fieldLabelSx}>Status</Typography>
+              <Select size="small" fullWidth value={task.status} onChange={(e: SelectChangeEvent) => onStatusChange(e.target.value as TaskStatus)}
+                disabled={locked} sx={{ fontSize: 12.5 }}>
+                {STATUS_OPTIONS.filter(s => s !== "Pending Approval" || locked).map(s => <MenuItem key={s} value={s} sx={{ fontSize: 12.5 }}>{s}</MenuItem>)}
+              </Select>
+            </Box>
           )}
-        </Box>
-      )}
+
+          <Stack direction="row" spacing={2.5} rowGap={2} alignItems="flex-end" flexWrap="wrap">
+            <Box sx={{ width: 190 }}>
+              <Typography sx={fieldLabelSx}>Owner</Typography>
+              <OrgSelect label="" value={owner} onChange={(v) => { setOwner(v); canEdit && !locked && onCommitOwner(v); }}
+                size="small" fullWidth disabled={!canEdit || locked} />
+            </Box>
+
+            <Box sx={{ width: 96 }}>
+              <Typography sx={fieldLabelSx}>Day from start</Typography>
+              <TextField type="number" size="small" fullWidth value={dayOffset} disabled={!canEdit || locked}
+                slotProps={{ htmlInput: { min: 0, sx: fieldInputSx } }}
+                onChange={(e) => setDayOffset(e.target.value)}
+                onBlur={() => canEdit && !locked && onCommitOffset(dayOffset)} />
+            </Box>
+
+            <Typography variant="caption" sx={{
+              color: "text.secondary", fontWeight: 600, mb: 1, px: 0.85, py: 0.15, borderRadius: 5,
+              bgcolor: "action.hover", textTransform: "uppercase", fontSize: 10, letterSpacing: 0.4,
+            }}>
+              or
+            </Typography>
+
+            <Box sx={{ width: 150 }}>
+              <Typography sx={fieldLabelSx}>Planned start date</Typography>
+              <TextField type="date" size="small" fullWidth value={startDateLocal} disabled={!canEdit || locked}
+                slotProps={{ htmlInput: { sx: fieldInputSx } }}
+                onChange={(e) => setStartDateLocal(e.target.value)}
+                onBlur={() => canEdit && !locked && onCommitStartDate(startDateLocal)} />
+            </Box>
+
+            <Box sx={{ width: 96 }}>
+              <Typography sx={fieldLabelSx}>Duration (days)</Typography>
+              <TextField type="number" size="small" fullWidth value={duration} disabled={!canEdit || locked}
+                slotProps={{ htmlInput: { min: 1, sx: fieldInputSx } }}
+                onChange={(e) => setDuration(e.target.value)}
+                onBlur={() => canEdit && !locked && onCommitDuration(duration)} />
+            </Box>
+
+            <Box sx={{ minWidth: 120 }}>
+              <Typography sx={fieldLabelSx}>Planned finish</Typography>
+              <Typography sx={{ fontSize: 13, fontWeight: 600, height: 40, display: "flex", alignItems: "center" }}>
+                {fmt(task.plannedFinish)}
+              </Typography>
+            </Box>
+          </Stack>
+
+          <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 2.5, pt: 2, borderTop: "1px solid", borderColor: "divider" }}>
+            <Tooltip title="View history">
+              <span>
+                <Button size="small" startIcon={<HistoryIcon sx={{ fontSize: 15 }} />} onClick={onOpenHistory} disabled={!task.history?.length} sx={{ fontSize: 12 }}>
+                  {task.history?.length ? `${task.history.length} change${task.history.length > 1 ? "s" : ""}` : "No changes"}
+                </Button>
+              </span>
+            </Tooltip>
+            <Box sx={{ flex: 1 }} />
+            {canEdit && (
+              <Tooltip title="Edit name, description, priority & dependencies">
+                <IconButton size="small" onClick={onOpenEditor}><EditIcon fontSize="small" /></IconButton>
+              </Tooltip>
+            )}
+            {canEdit && (
+              <Tooltip title="Delete task">
+                <IconButton size="small" color="error" onClick={() => setConfirmDelete(true)}><DeleteOutlineIcon fontSize="small" /></IconButton>
+              </Tooltip>
+            )}
+          </Stack>
+
+          {task.status === "Pending Approval" && task.pendingChange && (
+            <Box sx={{ mt: 2, p: 1.5, borderRadius: 1.5, bgcolor: "rgba(157,127,224,0.08)", border: `1px dashed ${STATUS_HEX.violet}` }}>
+              <Typography variant="caption" sx={{ color: STATUS_HEX.violet, fontWeight: 700 }}>
+                Requested by {task.pendingChange.requestedByName}
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                {task.pendingChange.reason || "No reason given."}
+              </Typography>
+              {canApprove && (
+                <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+                  <Button size="small" color="success" variant="outlined" startIcon={<CheckIcon />} onClick={onApprove}>Approve</Button>
+                  <Button size="small" color="error" variant="outlined" startIcon={<CloseIcon />} onClick={() => setRejectOpen(true)}>Reject</Button>
+                </Stack>
+              )}
+            </Box>
+          )}
+        </AccordionDetails>
+      </Accordion>
 
       <Dialog open={confirmDelete} onClose={() => setConfirmDelete(false)}>
         <DialogTitle>Delete &quot;{task.name}&quot;?</DialogTitle>
@@ -229,6 +276,6 @@ export function TaskCard({
           </Button>
         </DialogActions>
       </Dialog>
-    </Box>
+    </>
   );
 }

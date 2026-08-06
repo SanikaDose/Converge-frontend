@@ -291,7 +291,7 @@ export function ProjectDetail({ projectId, actor, onBack }: { projectId: string;
           of one long page that scrolls both together. */}
       <Box sx={{ flex: 1, minHeight: 0 }}>
         {viewMode === "phases" ? (
-          <Stack direction="row" spacing={2} sx={{ height: "100%" }}>
+          <Stack direction="row" spacing={3} sx={{ height: "100%" }}>
             <PhaseNavList phases={phaseRows} activeId={activePhaseRow?.id} onSelect={setActivePhaseId} />
             <Box sx={{ flex: 1, minWidth: 0, height: "100%", overflowY: "auto", pr: 0.5 }}>
               {activePhaseRow && (

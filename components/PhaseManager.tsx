@@ -4,6 +4,7 @@ import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import Tooltip from "@mui/material/Tooltip";
 import Button from "@mui/material/Button";
+import { alpha, useTheme } from "@mui/material/styles";
 import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
@@ -156,12 +157,13 @@ export function PhaseTaskPanel({
   const wStart = phase.weekStart, wEnd = phase.weekEnd;
 
   const STATUS_HEX = useStatusHex();
+  const theme = useTheme();
   const phaseNumber = phase.name.split(" · ")[0];
   const phaseTitle = phase.name.split(" · ").slice(1).join(" · ");
 
   return (
     <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: 3, overflow: "hidden", boxShadow: "0 1px 3px rgba(16,24,40,0.06)" }}>
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", p: 2.75, bgcolor: "background.default", borderBottom: "1px solid", borderColor: "divider" }}>
+      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", p: 2.75, bgcolor: alpha(theme.palette.primary.main, theme.palette.mode === "light" ? 0.06 : 0.1), borderBottom: "1px solid", borderColor: "divider" }}>
         <Box sx={{ minWidth: 0 }}>
           <Typography variant="caption" sx={{ fontWeight: 700, letterSpacing: 0.5, color: "primary.light" }}>
             PHASE {phaseNumber}

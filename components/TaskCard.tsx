@@ -139,7 +139,32 @@ export function TaskCard({
 
           <Stack direction="row" spacing={1.25} alignItems="center" sx={{ flexShrink: 0, mr: 0.5 }}>
             {task.assignedTo && <EmployeeAvatar employeeId={task.assignedTo} size={26} />}
-            <StatusChip label={task.status} color={color} />
+            {canEdit ? (
+              <Box onClick={(e) => e.stopPropagation()}>
+                <Select
+                  size="small"
+                  value={task.status}
+                  onChange={(e: SelectChangeEvent) => onStatusChange(e.target.value as TaskStatus)}
+                  disabled={locked}
+                  MenuProps={{ onClick: (e) => e.stopPropagation() }}
+                  sx={{
+                    fontSize: 11.5, fontWeight: 700, color: STATUS_HEX[color],
+                    bgcolor: `color-mix(in srgb, ${STATUS_HEX[color]} 22%, transparent)`,
+                    borderRadius: 999,
+                    "& .MuiOutlinedInput-notchedOutline": { borderColor: STATUS_HEX[color] },
+                    "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: STATUS_HEX[color] },
+                    "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: STATUS_HEX[color] },
+                    "& .MuiSelect-select": { py: 0.4, pl: 1.25, pr: "26px !important" },
+                  }}
+                >
+                  {STATUS_OPTIONS.filter(s => s !== "Pending Approval" || locked).map(s => (
+                    <MenuItem key={s} value={s} sx={{ fontSize: 12.5 }}>{s}</MenuItem>
+                  ))}
+                </Select>
+              </Box>
+            ) : (
+              <StatusChip label={task.status} color={color} />
+            )}
           </Stack>
         </AccordionSummary>
 
@@ -157,16 +182,6 @@ export function TaskCard({
             {task.actualStart && <span style={{ color: STATUS_HEX.amber }}>Started {fmt(task.actualStart)}</span>}
             {task.actualFinish && <span style={{ color: STATUS_HEX.green }}>Finished {fmt(task.actualFinish)}</span>}
           </Stack>
-
-          {canEdit && (
-            <Box sx={{ mb: 2, width: 180 }}>
-              <Typography sx={fieldLabelSx}>Status</Typography>
-              <Select size="small" fullWidth value={task.status} onChange={(e: SelectChangeEvent) => onStatusChange(e.target.value as TaskStatus)}
-                disabled={locked} sx={{ fontSize: 12.5 }}>
-                {STATUS_OPTIONS.filter(s => s !== "Pending Approval" || locked).map(s => <MenuItem key={s} value={s} sx={{ fontSize: 12.5 }}>{s}</MenuItem>)}
-              </Select>
-            </Box>
-          )}
 
           <Stack direction="row" spacing={2.5} rowGap={2} alignItems="flex-end" flexWrap="wrap">
             <Box sx={{ width: 190 }}>

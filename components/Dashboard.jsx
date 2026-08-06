@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { alpha, useTheme } from "@mui/material/styles";
 import Box from "@mui/material/Box";
 import Stack from "./Stack.jsx";
 import Typography from "@mui/material/Typography";
@@ -30,6 +29,7 @@ import DonutLargeIcon from "@mui/icons-material/DonutLarge";
 
 import { ProjectCard } from "./ProjectCard.jsx";
 import { TicketsPanel } from "./TicketsPanel.jsx";
+import { StatCard } from "./common.jsx";
 import { fetchProjectsIndex } from "@/lib/api";
 import { withLiveStats } from "@/lib/businessLogic";
 import { todayISO } from "@/lib/dateUtils";
@@ -169,30 +169,6 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }) {
           ))}
         </Stack>
       )}
-    </Box>
-  );
-}
-
-function StatCard({ icon: Icon, label, value, color = "primary.light" }) {
-  const theme = useTheme();
-  const [group, shade] = color.split(".");
-  const resolved = theme.palette[group]?.[shade] || theme.palette.primary.light;
-  return (
-    <Box sx={{
-      display: "flex", alignItems: "center", gap: 1.5, p: 1.75,
-      bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: 3,
-    }}>
-      <Box sx={{
-        width: 40, height: 40, borderRadius: 2, flexShrink: 0,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        bgcolor: alpha(resolved, 0.16), color: resolved,
-      }}>
-        <Icon sx={{ fontSize: 21 }} />
-      </Box>
-      <Box sx={{ minWidth: 0 }}>
-        <Typography variant="h6" fontWeight={700} sx={{ lineHeight: 1.1 }}>{value}</Typography>
-        <Typography variant="caption" color="text.secondary" noWrap>{label}</Typography>
-      </Box>
     </Box>
   );
 }

@@ -1,15 +1,43 @@
 "use client";
 import React from "react";
 import Avatar from "@mui/material/Avatar";
+import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
+import Typography from "@mui/material/Typography";
 import Tooltip from "@mui/material/Tooltip";
 import MenuItem from "@mui/material/MenuItem";
 import ListSubheader from "@mui/material/ListSubheader";
 import TextField from "@mui/material/TextField";
 import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
 import HourglassTopIcon from "@mui/icons-material/HourglassTop";
+import { alpha, useTheme } from "@mui/material/styles";
 import { TEAMS, EMPLOYEE_BY_ID, initials, avatarColor } from "@/lib/data";
 import { STATUS_HEX } from "@/lib/theme";
+
+/** Small KPI tile — icon chip + value + label. Used atop the dashboard and team performance page. */
+export function StatCard({ icon: Icon, label, value, color = "primary.light" }) {
+  const theme = useTheme();
+  const [group, shade] = color.split(".");
+  const resolved = theme.palette[group]?.[shade] || theme.palette.primary.light;
+  return (
+    <Box sx={{
+      display: "flex", alignItems: "center", gap: 1.5, p: 1.75,
+      bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: 3,
+    }}>
+      <Box sx={{
+        width: 40, height: 40, borderRadius: 2, flexShrink: 0,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        bgcolor: alpha(resolved, 0.16), color: resolved,
+      }}>
+        <Icon sx={{ fontSize: 21 }} />
+      </Box>
+      <Box sx={{ minWidth: 0 }}>
+        <Typography variant="h6" fontWeight={700} sx={{ lineHeight: 1.1 }}>{value}</Typography>
+        <Typography variant="caption" color="text.secondary" noWrap>{label}</Typography>
+      </Box>
+    </Box>
+  );
+}
 
 /** Small colored status pill, used for task/project/ticket status everywhere. */
 export function StatusChip({ label, color = "slate", size = "small", variant = "filled" }) {

@@ -33,7 +33,7 @@ import type { AppRole, Ticket } from "@/lib/types";
 
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: DashboardIcon },
-  { href: "/team-performance", label: "Team Performance", icon: GroupsIcon },
+  { href: "/team-performance", label: "Team", icon: GroupsIcon },
   { href: "/tickets", label: "Tickets", icon: ConfirmationNumberIcon },
 ];
 

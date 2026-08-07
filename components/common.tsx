@@ -146,14 +146,15 @@ export function StatCard({ icon: Icon, label, value, color = "primary.light", tr
 }) {
   const theme = useTheme();
   const [group, shade] = color.split(".");
-  const resolved = (theme.palette as unknown as Record<string, Record<string, string>>)[group]?.[shade] || theme.palette.primary.light;
+  const paletteMatch = (theme.palette as unknown as Record<string, Record<string, string>>)[group]?.[shade];
+  const resolved = paletteMatch || (color.startsWith("#") ? color : theme.palette.primary.light);
   const toneColor = trend?.tone === "negative" ? theme.palette.error.main : trend?.tone === "positive" ? theme.palette.success.main : theme.palette.text.secondary;
   const TrendIcon = trend?.direction === "up" ? ArrowUpwardIcon : trend?.direction === "down" ? ArrowDownwardIcon : RemoveIcon;
   return (
     <Box sx={{
       display: "flex", alignItems: "center", gap: 1.5, p: 1.75,
       bgcolor: tint ? alpha(resolved, 0.07) : "background.paper", border: "1px solid",
-      borderColor: tint ? alpha(resolved, 0.3) : "divider", borderRadius: 3,
+      borderColor: tint ? alpha(resolved, 0.3) : "divider", borderRadius: 1.5,
     }}>
       <Box sx={{
         width: 40, height: 40, borderRadius: 2, flexShrink: 0,

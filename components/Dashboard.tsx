@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState, type ElementType, type ReactNode } from "react";
 import Link from "next/link";
 import Box from "@mui/material/Box";
+import { alpha } from "@mui/material/styles";
 import Stack from "./Stack";
 import Typography from "@mui/material/Typography";
 import Button from "@mui/material/Button";
@@ -30,6 +31,7 @@ import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import WorkOutlinedIcon from "@mui/icons-material/WorkOutlined";
 import DonutLargeIcon from "@mui/icons-material/DonutLarge";
 import FlagCircleIcon from "@mui/icons-material/FlagCircle";
+import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 
 import { ProjectCard } from "./ProjectCard";
 import { TicketForm } from "./TicketsPanel";
@@ -39,7 +41,7 @@ import { fetchProjectsIndex, createTicketApi, fetchDashboardBaseline } from "@/l
 import { withLiveStats } from "@/lib/businessLogic";
 import { todayISO, addDays, diffDays } from "@/lib/dateUtils";
 import { roleCan } from "@/lib/data";
-import { useStatusHex } from "@/lib/theme";
+import { DASHBOARD_COLORS } from "@/lib/theme";
 import type { CreateTicketInput } from "@/lib/mockDb";
 import type { Actor, DashboardBaseline, ProjectIndexRow, ProjectType, ProjectWithLiveStats } from "@/lib/types";
 
@@ -83,12 +85,34 @@ function dateBadge(iso: string): { month: string; day: string } {
   return { month: d.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" }).toUpperCase(), day: String(d.getUTCDate()).padStart(2, "0") };
 }
 
-function deadlineChip(plannedFinish: string, today: string): { label: string; color: "error" | "warning" | "info" } {
+type DateScope = "all" | "month" | "quarter" | "year";
+
+// Real overlap-based filter (project.startDate..endDate intersects the
+// selected calendar period), not a decorative dropdown — "all" skips
+// filtering entirely.
+function periodBounds(scope: DateScope, todayISOStr: string): [string, string] | null {
+  if (scope === "all") return null;
+  const [y, m] = todayISOStr.split("-").map(Number);
+  const lastDayOf = (year: number, month: number) => new Date(Date.UTC(year, month, 0)).getUTCDate();
+  if (scope === "month") {
+    const end = lastDayOf(y, m);
+    return [`${y}-${String(m).padStart(2, "0")}-01`, `${y}-${String(m).padStart(2, "0")}-${String(end).padStart(2, "0")}`];
+  }
+  if (scope === "quarter") {
+    const qStart = Math.floor((m - 1) / 3) * 3 + 1;
+    const qEnd = qStart + 2;
+    const end = lastDayOf(y, qEnd);
+    return [`${y}-${String(qStart).padStart(2, "0")}-01`, `${y}-${String(qEnd).padStart(2, "0")}-${String(end).padStart(2, "0")}`];
+  }
+  return [`${y}-01-01`, `${y}-12-31`];
+}
+
+function deadlineChip(plannedFinish: string, today: string): { label: string; hex: string } {
   const diff = diffDays(plannedFinish, today);
-  if (diff < 0) return { label: `${Math.abs(diff)}d overdue`, color: "error" };
-  if (diff === 0) return { label: "Due today", color: "warning" };
-  if (diff <= 7) return { label: `In ${diff} day${diff > 1 ? "s" : ""}`, color: "warning" };
-  return { label: `In ${diff} days`, color: "info" };
+  if (diff < 0) return { label: `${Math.abs(diff)}d overdue`, hex: DASHBOARD_COLORS.red };
+  if (diff === 0) return { label: "Due today", hex: DASHBOARD_COLORS.amber };
+  if (diff <= 7) return { label: `In ${diff} day${diff > 1 ? "s" : ""}`, hex: DASHBOARD_COLORS.amber };
+  return { label: `In ${diff} days`, hex: DASHBOARD_COLORS.blue };
 }
 
 function computeStatTrend(current: number, base: number, unit: string, goodDirection: "up" | "down"): StatTrend {
@@ -119,12 +143,12 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
   onNew: () => void;
 }) {
   const { role } = actor;
-  const STATUS_HEX = useStatusHex();
   const [projectsRaw, setProjectsRaw] = useState<ProjectIndexRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [myOnly, setMyOnly] = useState(false);
   const [typeFilter, setTypeFilter] = useState<"All" | ProjectType>("All");
+  const [dateScope, setDateScope] = useState<DateScope>("month");
   const [expanded, setExpanded] = useState<Record<BucketKey, boolean>>({ "In Progress": true, "Completed": true });
   const [showTicketForm, setShowTicketForm] = useState(false);
   const [ticketBusy, setTicketBusy] = useState(false);
@@ -161,9 +185,11 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
     return projects.filter(p => p.owner === actor.id);
   }, [projects, showMyToggle, myOnly, actor.id]);
 
+  const period = periodBounds(dateScope, today);
   const filtered = scoped.filter(p =>
     (!query || p.name.toLowerCase().includes(query.toLowerCase()) || p.customer.toLowerCase().includes(query.toLowerCase())) &&
-    (typeFilter === "All" || p.type === typeFilter)
+    (typeFilter === "All" || p.type === typeFilter) &&
+    (!period || (p.startDate <= period[1] && p.endDate >= period[0]))
   );
 
   const grouped = useMemo(() => {
@@ -196,10 +222,10 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
   }, [projects, today]);
 
   const healthLegend: { key: HealthKey; color: string }[] = [
-    { key: "On Track", color: STATUS_HEX.green },
-    { key: "At Risk", color: STATUS_HEX.amber },
-    { key: "Delayed", color: STATUS_HEX.red },
-    { key: "Completed", color: STATUS_HEX.slate },
+    { key: "On Track", color: DASHBOARD_COLORS.green },
+    { key: "At Risk", color: DASHBOARD_COLORS.amber },
+    { key: "Delayed", color: DASHBOARD_COLORS.red },
+    { key: "Completed", color: DASHBOARD_COLORS.slate },
   ];
 
   // Real historical trend: for each checkpoint date, what % of every
@@ -247,8 +273,8 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
     <Box>
       <Stack direction="row" justifyContent="space-between" alignItems="flex-start" flexWrap="wrap" gap={2}>
         <Box>
-          <Typography variant="h4">Project Portfolio</Typography>
-          <Typography color="text.secondary" sx={{ mt: 0.5 }}>Track all projects, progress, and overall portfolio health.</Typography>
+          {/* <Typography variant="h4">Project Portfolio</Typography> */}
+          <Typography color="text.primary" sx={{ mt: 0.15 }}>Track all projects, progress, and overall portfolio health.</Typography>
         </Box>
         <Stack direction="row" spacing={1.25}>
           {roleCan(role, "raiseTicket") && (
@@ -262,17 +288,17 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
 
       <Grid container spacing={1.5} sx={{ mt: 2.5, mb: 1.5 }}>
         <Grid size={{ xs: 6, sm: 3 }}>
-          <StatCard icon={WorkOutlinedIcon} label="Active Projects" value={portfolio.count} trend={trends?.active} />
+          <StatCard icon={WorkOutlinedIcon} label="Active Projects" value={portfolio.count} color={DASHBOARD_COLORS.blue} trend={trends?.active} />
         </Grid>
         <Grid size={{ xs: 6, sm: 3 }}>
-          <StatCard icon={CheckCircleIcon} label="Completed" value={portfolio.completedCount} color="success.main" trend={trends?.completed} />
+          <StatCard icon={CheckCircleIcon} label="Completed" value={portfolio.completedCount} color={DASHBOARD_COLORS.green} trend={trends?.completed} />
         </Grid>
         <Grid size={{ xs: 6, sm: 3 }}>
-          <StatCard icon={DonutLargeIcon} label="Avg. Completion" value={`${portfolio.avgPct}%`} color="secondary.main" trend={trends?.avg} />
+          <StatCard icon={DonutLargeIcon} label="Avg. Completion" value={`${portfolio.avgPct}%`} color={DASHBOARD_COLORS.violet} trend={trends?.avg} />
         </Grid>
         <Grid size={{ xs: 6, sm: 3 }}>
           <StatCard icon={WarningAmberIcon} label="Delayed Tasks" value={portfolio.totalDelayed}
-            color={portfolio.totalDelayed > 0 ? "error.main" : "success.main"} trend={trends?.delayed} tint={portfolio.totalDelayed > 0} />
+            color={portfolio.totalDelayed > 0 ? DASHBOARD_COLORS.red : DASHBOARD_COLORS.green} trend={trends?.delayed} tint={portfolio.totalDelayed > 0} />
         </Grid>
       </Grid>
 
@@ -343,16 +369,18 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
                     }}>
                       <Box sx={{
                         width: 42, textAlign: "center", flexShrink: 0, borderRadius: 1.5,
-                        bgcolor: "background.default", border: "1px solid", borderColor: "divider", py: 0.5,
+                        bgcolor: "background.paper", border: "1px solid", borderColor: "divider", py: 0.5,
                       }}>
-                        <Typography sx={{ fontSize: 9.5, fontWeight: 700, color: "error.main", lineHeight: 1.3 }}>{badge.month}</Typography>
-                        <Typography sx={{ fontSize: 15, fontWeight: 700, lineHeight: 1.2 }}>{badge.day}</Typography>
+                        <Typography sx={{ fontSize: 9.5, fontWeight: 700, color: chip.hex, lineHeight: 1.3 }}>{badge.month}</Typography>
+                        <Typography sx={{ fontSize: 15, fontWeight: 700, lineHeight: 1.2, color: chip.hex }}>{badge.day}</Typography>
                       </Box>
                       <Box sx={{ minWidth: 0, flex: 1 }}>
                         <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>{d.taskName}</Typography>
                         <Typography variant="caption" color="text.secondary" noWrap sx={{ display: "block" }}>{d.projectName}</Typography>
                       </Box>
-                      <Chip label={chip.label} size="small" color={chip.color} variant="outlined" sx={{ flexShrink: 0, fontSize: 10.5 }} />
+                      <Chip label={chip.label} size="small" variant="outlined" sx={{
+                        flexShrink: 0, fontSize: 10.5, color: chip.hex, borderColor: chip.hex, bgcolor: alpha(chip.hex, 0.1),
+                      }} />
                     </Box>
                   );
                 })}
@@ -373,6 +401,14 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
           <MenuItem value="All">All Projects</MenuItem>
           <MenuItem value="Product">Product</MenuItem>
           <MenuItem value="Solution">Solution</MenuItem>
+        </Select>
+        <Select size="small" value={dateScope} onChange={(e: SelectChangeEvent) => setDateScope(e.target.value as DateScope)}
+          startAdornment={<InputAdornment position="start"><CalendarMonthIcon fontSize="small" sx={{ ml: 0.5 }} /></InputAdornment>}
+          sx={{ minWidth: 160, flexShrink: 0 }}>
+          <MenuItem value="all">All Time</MenuItem>
+          <MenuItem value="month">This Month</MenuItem>
+          <MenuItem value="quarter">This Quarter</MenuItem>
+          <MenuItem value="year">This Year</MenuItem>
         </Select>
         {showMyToggle && (
           <FormControlLabel sx={{ whiteSpace: "nowrap" }} control={

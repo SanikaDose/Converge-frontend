@@ -5,7 +5,6 @@ import Box from "@mui/material/Box";
 import Grid from "@mui/material/Grid";
 import Stack from "./Stack";
 import Typography from "@mui/material/Typography";
-import LinearProgress from "@mui/material/LinearProgress";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
 import { DataGrid, type GridColDef, type GridRenderCellParams } from "@mui/x-data-grid";
@@ -15,7 +14,6 @@ import AssignmentIcon from "@mui/icons-material/Assignment";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import { EmployeeAvatar, StatCard } from "./common";
 import { fetchTeamPerformance } from "@/lib/api";
-import { useStatusHex } from "@/lib/theme";
 import type { TeamPerformanceRow } from "@/lib/types";
 
 /**
@@ -23,8 +21,7 @@ import type { TeamPerformanceRow } from "@/lib/types";
  * computed dynamically by the /api/team-performance route (which scans
  * every project's tasks for `assignedTo === employee.id`, see
  * lib/businessLogic.aggregateTeamPerformance). Uses MUI's DataGrid so
- * team/completion%/pending/delayed sorting comes for free via column
- * headers.
+ * team/tasks/delayed sorting comes for free via column headers.
  *
  * Columns are deliberately consolidated (Total/Completed/Pending merged
  * into a single "Tasks" cell) rather than one raw number per metric —
@@ -33,7 +30,6 @@ import type { TeamPerformanceRow } from "@/lib/types";
  * zeros so the eye isn't drawn to noise.
  */
 export function TeamPerformance({ refreshKey }: { refreshKey: number }) {
-  const STATUS_HEX = useStatusHex();
   const [rows, setRows] = useState<TeamPerformanceRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -90,25 +86,7 @@ export function TeamPerformance({ refreshKey }: { refreshKey: number }) {
         ? <Chip label={params.value} size="small" color="error" variant="outlined" />
         : <Typography variant="body2" color="text.disabled">—</Typography>,
     },
-    {
-      field: "completionPct", headerName: "Completion", flex: 1, minWidth: 150,
-      renderCell: (params: GridRenderCellParams<TeamPerformanceRow>) => {
-        if (!params.row.total) return <Typography variant="body2" color="text.disabled">—</Typography>;
-        return (
-          <Stack sx={{ width: "100%" }} spacing={0.4} justifyContent="center">
-            <Typography variant="caption">{params.value}%</Typography>
-            <LinearProgress
-              variant="determinate" value={params.value}
-              sx={{
-                height: 6, borderRadius: 3, bgcolor: "divider",
-                "& .MuiLinearProgress-bar": { bgcolor: params.value >= 70 ? STATUS_HEX.green : params.value >= 40 ? STATUS_HEX.amber : STATUS_HEX.red, borderRadius: 3 },
-              }}
-            />
-          </Stack>
-        );
-      },
-    },
-  ], [STATUS_HEX]);
+  ], []);
 
   return (
     <Box>
@@ -139,7 +117,7 @@ export function TeamPerformance({ refreshKey }: { refreshKey: number }) {
         <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: 3, height: 640, width: "100%" }}>
           <DataGrid
             rows={rows} columns={columns} getRowId={(r) => r.id} rowHeight={60} columnHeaderHeight={48}
-            initialState={{ sorting: { sortModel: [{ field: "completionPct", sort: "desc" }] } }}
+            initialState={{ sorting: { sortModel: [{ field: "total", sort: "desc" }] } }}
             disableRowSelectionOnClick
             sx={{
               border: "none", "& .MuiDataGrid-columnHeaders": { bgcolor: "background.default" },

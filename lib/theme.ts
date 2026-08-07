@@ -36,6 +36,24 @@ export const STATUS_HEX_LIGHT: Record<StatusColorKey, string> = {
 /** @deprecated prefer `useStatusHex()` inside components so colors follow theme mode. Kept as the dark map for any non-component callers. */
 export const STATUS_HEX = STATUS_HEX_DARK;
 
+/**
+ * Vivid, chart-appropriate hues for the dashboard's KPI icons, "Projects
+ * by Status" donut, project-card accents, and the Upcoming Deadlines
+ * widget — deliberately separate from STATUS_HEX above. STATUS_HEX is
+ * tuned to work as *text* color on a translucent tint of itself, which
+ * comes out muted/brownish for that purpose; these are meant purely as
+ * solid fills/icons/badges, so they stay saturated and are used as-is in
+ * both theme modes (no light/dark split needed).
+ */
+export const DASHBOARD_COLORS = {
+  blue: "#4F6EF7",
+  green: "#22C55E",
+  amber: "#F59E0B",
+  red: "#EF4444",
+  violet: "#8B5CF6",
+  slate: "#9CA3AF",
+} as const;
+
 export function useStatusHex(): Record<StatusColorKey, string> {
   const theme = useTheme();
   return theme.palette.mode === "light" ? STATUS_HEX_LIGHT : STATUS_HEX_DARK;

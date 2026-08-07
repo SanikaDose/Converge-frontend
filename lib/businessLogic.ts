@@ -280,7 +280,7 @@ export function fieldLabel(field: string): string {
    the write-time snapshot.
 ------------------------------------------------------------------------ */
 export function toTaskLite(tasks: Task[]): TaskLite[] {
-  return tasks.map(t => ({ phaseId: t.phaseId, plannedFinish: t.plannedFinish, status: t.status }));
+  return tasks.map(t => ({ phaseId: t.phaseId, name: t.name, plannedFinish: t.plannedFinish, actualFinish: t.actualFinish, status: t.status }));
 }
 export function toPhasesLite(phases: Phase[]): PhaseLite[] {
   return phases.map(p => ({ id: p.id, critical: p.critical, name: p.name }));

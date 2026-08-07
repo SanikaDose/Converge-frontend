@@ -168,7 +168,9 @@ export interface ProjectDetailData {
 
 export interface TaskLite {
   phaseId: string;
+  name: string;
   plannedFinish: string;
+  actualFinish: string | null;
   status: TaskStatus;
 }
 
@@ -235,4 +237,21 @@ export interface TeamPerformanceRow extends Employee {
   pending: number;
   delayed: number;
   completionPct: number;
+}
+
+/* ---------------------------------------------------------------------
+   DASHBOARD ANALYTICS
+------------------------------------------------------------------------ */
+/**
+ * Portfolio-wide stats captured the first time this server process
+ * computes them (see mockDb.getDashboardBaseline) — a real, stable
+ * reference point the live dashboard numbers can be diffed against for
+ * "vs last month"-style trend captions, rather than fabricated deltas.
+ */
+export interface DashboardBaseline {
+  activeProjects: number;
+  completedProjects: number;
+  avgCompletionPct: number;
+  delayedTasks: number;
+  capturedAt: string;
 }

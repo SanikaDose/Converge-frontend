@@ -11,9 +11,9 @@
  * call sites in the API routes shouldn't need to change.
  */
 import { genId, EMPLOYEES } from "./data";
-import { buildProjectPhases, buildTasks, summarize, phaseSummaries, projectStatusFromPhases, toTaskLite, toPhasesLite, computeAchievement } from "./businessLogic";
+import { buildProjectPhases, buildTasks, summarize, phaseSummaries, projectStatusFromPhases, toTaskLite, toPhasesLite, computeAchievement, withLiveStats } from "./businessLogic";
 import { todayISO, addWorkingDays, DEFAULT_WEEK_OFF } from "./dateUtils";
-import type { Phase, ProjectDetailData, ProjectIndexRow, ProjectMeta, Task, Ticket, WeekDay } from "./types";
+import type { DashboardBaseline, Phase, ProjectDetailData, ProjectIndexRow, ProjectMeta, Task, Ticket, WeekDay } from "./types";
 
 interface Store {
   projects: Map<string, ProjectDetailData>;
@@ -331,4 +331,29 @@ export function updateTicket(id: string, patch: Partial<Ticket>): Ticket | null 
   if (idx === -1) return null;
   store.tickets[idx] = { ...store.tickets[idx], ...patch };
   return store.tickets[idx];
+}
+
+/* ---------------------------------------------------------------------
+   DASHBOARD BASELINE
+
+   Captured lazily, once, the first time anything asks for it — a real
+   snapshot of portfolio-wide stats at "the start of this session" rather
+   than a fabricated number, so the dashboard's "vs last month" trend
+   captions are a genuine diff (current live stats vs this frozen
+   snapshot) instead of made-up figures. Resets along with the rest of
+   the store on server restart, same as everything else in this file.
+------------------------------------------------------------------------ */
+let dashboardBaseline: DashboardBaseline | null = null;
+
+export function getDashboardBaseline(): DashboardBaseline {
+  if (!dashboardBaseline) {
+    const today = todayISO();
+    const rows = listProjectsIndex().map(p => withLiveStats(p, today));
+    const activeProjects = rows.length;
+    const completedProjects = rows.filter(p => p.total > 0 && p.completed === p.total).length;
+    const avgCompletionPct = rows.length ? Math.round(rows.reduce((a, p) => a + (p.pct || 0), 0) / rows.length) : 0;
+    const delayedTasks = rows.reduce((a, p) => a + (p.delayed || 0), 0);
+    dashboardBaseline = { activeProjects, completedProjects, avgCompletionPct, delayedTasks, capturedAt: new Date().toISOString() };
+  }
+  return dashboardBaseline;
 }

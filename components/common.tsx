@@ -10,7 +10,11 @@ import ListSubheader from "@mui/material/ListSubheader";
 import TextField, { type TextFieldProps } from "@mui/material/TextField";
 import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
 import HourglassTopIcon from "@mui/icons-material/HourglassTop";
+import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
+import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
+import RemoveIcon from "@mui/icons-material/Remove";
 import { alpha, useTheme } from "@mui/material/styles";
+import Stack from "./Stack";
 import { TEAMS, EMPLOYEE_BY_ID, initials, avatarColor } from "@/lib/data";
 import { useStatusHex } from "@/lib/theme";
 import type { Achievement, StatusColorKey } from "@/lib/types";
@@ -121,17 +125,35 @@ export function OrgSelect({ label, value, onChange, allowUnassigned = true, erro
   );
 }
 
-/** Small KPI tile — icon chip + value + label. Used atop the dashboard and team performance page. */
-export function StatCard({ icon: Icon, label, value, color = "primary.light" }: {
-  icon: ElementType; label: string; value: ReactNode; color?: string;
+export interface StatTrend {
+  direction: "up" | "down" | "flat";
+  /** e.g. "2 vs last month" — rendered after the trend arrow. */
+  text: string;
+  /** Whether an "up" reading is good or bad news for this metric — colors the caption accordingly. Defaults to neutral gray. */
+  tone?: "positive" | "negative" | "neutral";
+}
+
+/**
+ * Small KPI tile — icon chip + value + label, used atop the dashboard and
+ * team performance page. `trend` adds a small "vs last month" caption
+ * (see Dashboard.tsx's baseline diff — a real snapshot comparison, not a
+ * fabricated number); `tint` washes the whole card in `color` instead of
+ * just the icon chip, for KPIs that deserve to stand out (e.g. delayed
+ * tasks > 0).
+ */
+export function StatCard({ icon: Icon, label, value, color = "primary.light", trend, tint }: {
+  icon: ElementType; label: string; value: ReactNode; color?: string; trend?: StatTrend; tint?: boolean;
 }) {
   const theme = useTheme();
   const [group, shade] = color.split(".");
   const resolved = (theme.palette as unknown as Record<string, Record<string, string>>)[group]?.[shade] || theme.palette.primary.light;
+  const toneColor = trend?.tone === "negative" ? theme.palette.error.main : trend?.tone === "positive" ? theme.palette.success.main : theme.palette.text.secondary;
+  const TrendIcon = trend?.direction === "up" ? ArrowUpwardIcon : trend?.direction === "down" ? ArrowDownwardIcon : RemoveIcon;
   return (
     <Box sx={{
       display: "flex", alignItems: "center", gap: 1.5, p: 1.75,
-      bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: 3,
+      bgcolor: tint ? alpha(resolved, 0.07) : "background.paper", border: "1px solid",
+      borderColor: tint ? alpha(resolved, 0.3) : "divider", borderRadius: 3,
     }}>
       <Box sx={{
         width: 40, height: 40, borderRadius: 2, flexShrink: 0,
@@ -142,7 +164,13 @@ export function StatCard({ icon: Icon, label, value, color = "primary.light" }: 
       </Box>
       <Box sx={{ minWidth: 0 }}>
         <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.1 }}>{value}</Typography>
-        <Typography variant="caption" color="text.secondary" noWrap>{label}</Typography>
+        <Typography variant="caption" color="text.secondary" noWrap sx={{ display: "block" }}>{label}</Typography>
+        {trend && (
+          <Stack direction="row" alignItems="center" gap={0.3} sx={{ mt: 0.25 }}>
+            <TrendIcon sx={{ fontSize: 11, color: toneColor }} />
+            <Typography variant="caption" sx={{ color: toneColor, fontWeight: 600, fontSize: 10.5 }}>{trend.text}</Typography>
+          </Stack>
+        )}
       </Box>
     </Box>
   );

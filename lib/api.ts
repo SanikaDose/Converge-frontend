@@ -6,7 +6,7 @@
  */
 import type { CreateProjectInput, CreateTicketInput, UpdateProjectPatch } from "./mockDb";
 import type { LegacyProjectDetail } from "./businessLogic";
-import type { ProjectDetailData, ProjectIndexRow, TeamPerformanceRow, Ticket } from "./types";
+import type { DashboardBaseline, ProjectDetailData, ProjectIndexRow, TeamPerformanceRow, Ticket } from "./types";
 
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -30,3 +30,5 @@ export const updateTicketApi = (id: string, patch: Partial<Ticket>): Promise<Tic
   fetch(`/api/tickets/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) }).then(res => json(res));
 
 export const fetchTeamPerformance = (): Promise<TeamPerformanceRow[]> => fetch("/api/team-performance").then(res => json(res));
+
+export const fetchDashboardBaseline = (): Promise<DashboardBaseline> => fetch("/api/dashboard-summary").then(res => json(res));

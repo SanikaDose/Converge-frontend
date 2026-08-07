@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState, type ElementType } from "react";
+import React, { useCallback, useEffect, useMemo, useState, type ElementType, type ReactNode } from "react";
+import Link from "next/link";
 import Box from "@mui/material/Box";
 import Stack from "./Stack";
 import Typography from "@mui/material/Typography";
@@ -9,6 +10,8 @@ import TextField from "@mui/material/TextField";
 import InputAdornment from "@mui/material/InputAdornment";
 import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
+import Select, { type SelectChangeEvent } from "@mui/material/Select";
+import MenuItem from "@mui/material/MenuItem";
 import Accordion from "@mui/material/Accordion";
 import AccordionSummary from "@mui/material/AccordionSummary";
 import AccordionDetails from "@mui/material/AccordionDetails";
@@ -30,13 +33,15 @@ import FlagCircleIcon from "@mui/icons-material/FlagCircle";
 
 import { ProjectCard } from "./ProjectCard";
 import { TicketForm } from "./TicketsPanel";
-import { StatCard } from "./common";
-import { fetchProjectsIndex, createTicketApi } from "@/lib/api";
+import { StatCard, type StatTrend } from "./common";
+import { DonutChart, TrendLineChart } from "./charts";
+import { fetchProjectsIndex, createTicketApi, fetchDashboardBaseline } from "@/lib/api";
 import { withLiveStats } from "@/lib/businessLogic";
-import { todayISO } from "@/lib/dateUtils";
+import { todayISO, addDays, diffDays } from "@/lib/dateUtils";
 import { roleCan } from "@/lib/data";
+import { useStatusHex } from "@/lib/theme";
 import type { CreateTicketInput } from "@/lib/mockDb";
-import type { Actor, ProjectIndexRow, ProjectWithLiveStats } from "@/lib/types";
+import type { Actor, DashboardBaseline, ProjectIndexRow, ProjectType, ProjectWithLiveStats } from "@/lib/types";
 
 type BucketKey = "In Progress" | "Completed";
 
@@ -49,6 +54,64 @@ const BUCKETS: { key: BucketKey; label: string; icon: ElementType; color: string
   { key: "Completed", label: "Completed Projects", icon: CheckCircleIcon, color: "success.main" },
 ];
 
+type HealthKey = "On Track" | "At Risk" | "Delayed" | "Completed";
+
+// Distinct from a project's own "N delayed" badge (which counts overdue
+// *tasks*): this is the project's overall health. "Delayed" here means
+// the project's own target end date has already passed; "At Risk" means
+// it has overdue tasks but hasn't blown its overall deadline yet.
+function classifyHealth(p: ProjectWithLiveStats, today: string): HealthKey {
+  if (p.total > 0 && p.completed === p.total) return "Completed";
+  if (p.endDate < today) return "Delayed";
+  if (p.delayed > 0) return "At Risk";
+  return "On Track";
+}
+
+type TrendRange = "month" | "quarter" | "year";
+const TREND_RANGE_CONFIG: Record<TrendRange, { points: number; stepDays: number; fmt: Intl.DateTimeFormatOptions }> = {
+  month: { points: 5, stepDays: 7, fmt: { month: "short", day: "2-digit" } },
+  quarter: { points: 6, stepDays: 14, fmt: { month: "short", day: "2-digit" } },
+  year: { points: 6, stepDays: 60, fmt: { month: "short", year: "2-digit" } },
+};
+
+function formatCheckpoint(iso: string, fmt: Intl.DateTimeFormatOptions): string {
+  return new Date(iso + "T00:00:00Z").toLocaleDateString("en-US", { ...fmt, timeZone: "UTC" });
+}
+
+function dateBadge(iso: string): { month: string; day: string } {
+  const d = new Date(iso + "T00:00:00Z");
+  return { month: d.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" }).toUpperCase(), day: String(d.getUTCDate()).padStart(2, "0") };
+}
+
+function deadlineChip(plannedFinish: string, today: string): { label: string; color: "error" | "warning" | "info" } {
+  const diff = diffDays(plannedFinish, today);
+  if (diff < 0) return { label: `${Math.abs(diff)}d overdue`, color: "error" };
+  if (diff === 0) return { label: "Due today", color: "warning" };
+  if (diff <= 7) return { label: `In ${diff} day${diff > 1 ? "s" : ""}`, color: "warning" };
+  return { label: `In ${diff} days`, color: "info" };
+}
+
+function computeStatTrend(current: number, base: number, unit: string, goodDirection: "up" | "down"): StatTrend {
+  const diff = current - base;
+  const direction: StatTrend["direction"] = diff > 0 ? "up" : diff < 0 ? "down" : "flat";
+  const tone: StatTrend["tone"] = diff === 0 ? "neutral" : (goodDirection === "up") === (diff > 0) ? "positive" : "negative";
+  const text = diff === 0 ? "No change vs last month" : `${Math.abs(diff)}${unit} vs last month`;
+  return { direction, text, tone };
+}
+
+/** Card shell shared by the three analytics widgets — title + optional header action + content. */
+function AnalyticsCard({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
+  return (
+    <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.25, height: "100%" }}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.75 }}>
+        <Typography sx={{ fontWeight: 700, fontSize: 15 }}>{title}</Typography>
+        {action}
+      </Stack>
+      {children}
+    </Box>
+  );
+}
+
 export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
   actor: Actor;
   onOpen: (id: string) => void;
@@ -56,13 +119,18 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
   onNew: () => void;
 }) {
   const { role } = actor;
+  const STATUS_HEX = useStatusHex();
   const [projectsRaw, setProjectsRaw] = useState<ProjectIndexRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [myOnly, setMyOnly] = useState(false);
+  const [typeFilter, setTypeFilter] = useState<"All" | ProjectType>("All");
   const [expanded, setExpanded] = useState<Record<BucketKey, boolean>>({ "In Progress": true, "Completed": true });
   const [showTicketForm, setShowTicketForm] = useState(false);
   const [ticketBusy, setTicketBusy] = useState(false);
+  const [baseline, setBaseline] = useState<DashboardBaseline | null>(null);
+  const [trendRange, setTrendRange] = useState<TrendRange>("month");
+  const [showAllDeadlines, setShowAllDeadlines] = useState(false);
   const today = todayISO();
 
   const load = useCallback(async () => {
@@ -71,6 +139,11 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load, refreshKey]);
+
+  // Baseline is a real snapshot captured once per server session (see
+  // mockDb.getDashboardBaseline) — fetched once here too, not on every
+  // refresh, so the "vs last month" comparison stays stable.
+  useEffect(() => { fetchDashboardBaseline().then(setBaseline).catch(() => setBaseline(null)); }, []);
 
   // Recompute bucket/delayed-count against *today's* date on every render
   // instead of trusting the write-time snapshot — see businessLogic's
@@ -89,7 +162,8 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
   }, [projects, showMyToggle, myOnly, actor.id]);
 
   const filtered = scoped.filter(p =>
-    !query || p.name.toLowerCase().includes(query.toLowerCase()) || p.customer.toLowerCase().includes(query.toLowerCase())
+    (!query || p.name.toLowerCase().includes(query.toLowerCase()) || p.customer.toLowerCase().includes(query.toLowerCase())) &&
+    (typeFilter === "All" || p.type === typeFilter)
   );
 
   const grouped = useMemo(() => {
@@ -108,6 +182,53 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
     return { count: projects.length, totalDelayed, avgPct, completedCount };
   }, [projects]);
 
+  const trends = useMemo(() => baseline ? {
+    active: computeStatTrend(portfolio.count, baseline.activeProjects, "", "up"),
+    completed: computeStatTrend(portfolio.completedCount, baseline.completedProjects, "", "up"),
+    avg: computeStatTrend(portfolio.avgPct, baseline.avgCompletionPct, "%", "up"),
+    delayed: computeStatTrend(portfolio.totalDelayed, baseline.delayedTasks, "", "down"),
+  } : null, [baseline, portfolio]);
+
+  const health = useMemo(() => {
+    const counts: Record<HealthKey, number> = { "On Track": 0, "At Risk": 0, "Delayed": 0, "Completed": 0 };
+    projects.forEach(p => { counts[classifyHealth(p, today)] += 1; });
+    return counts;
+  }, [projects, today]);
+
+  const healthLegend: { key: HealthKey; color: string }[] = [
+    { key: "On Track", color: STATUS_HEX.green },
+    { key: "At Risk", color: STATUS_HEX.amber },
+    { key: "Delayed", color: STATUS_HEX.red },
+    { key: "Completed", color: STATUS_HEX.slate },
+  ];
+
+  // Real historical trend: for each checkpoint date, what % of every
+  // task across the portfolio already has an actualFinish on or before
+  // that date. No fabricated numbers — derived entirely from stored task
+  // completion dates.
+  const trendPoints = useMemo(() => {
+    const cfg = TREND_RANGE_CONFIG[trendRange];
+    const totalTasks = projects.reduce((a, p) => a + (p.taskLite?.length || 0), 0);
+    if (!totalTasks) return [];
+    const out: { label: string; value: number }[] = [];
+    for (let i = cfg.points - 1; i >= 0; i--) {
+      const checkpoint = addDays(today, -cfg.stepDays * i);
+      let done = 0;
+      projects.forEach(p => (p.taskLite || []).forEach(t => { if (t.actualFinish && t.actualFinish <= checkpoint) done += 1; }));
+      out.push({ label: formatCheckpoint(checkpoint, cfg.fmt), value: Math.round((done / totalTasks) * 100) });
+    }
+    return out;
+  }, [projects, today, trendRange]);
+
+  const upcomingDeadlines = useMemo(() => {
+    const items: { taskName: string; projectId: string; projectName: string; plannedFinish: string }[] = [];
+    projects.forEach(p => (p.taskLite || []).forEach(t => {
+      if (t.status !== "Completed") items.push({ taskName: t.name, projectId: p.id, projectName: p.name, plannedFinish: t.plannedFinish });
+    }));
+    items.sort((a, b) => a.plannedFinish.localeCompare(b.plannedFinish));
+    return items;
+  }, [projects]);
+
   const projectOptions = useMemo(() => projects.map(p => ({ id: p.id, name: p.name })), [projects]);
 
   const raiseTicket = async (payload: CreateTicketInput) => {
@@ -124,8 +245,11 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
 
   return (
     <Box>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={2}>
-        <Typography variant="h4">Project Portfolio</Typography>
+      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" flexWrap="wrap" gap={2}>
+        <Box>
+          <Typography variant="h4">Project Portfolio</Typography>
+          <Typography color="text.secondary" sx={{ mt: 0.5 }}>Track all projects, progress, and overall portfolio health.</Typography>
+        </Box>
         <Stack direction="row" spacing={1.25}>
           {roleCan(role, "raiseTicket") && (
             <Button variant="outlined" startIcon={<FlagCircleIcon />} onClick={() => setShowTicketForm(true)} disabled={!projectOptions.length}>
@@ -136,19 +260,105 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
         </Stack>
       </Stack>
 
-      <Grid container spacing={1.5} sx={{ mt: 2, mb: 3 }}>
+      <Grid container spacing={1.5} sx={{ mt: 2.5, mb: 1.5 }}>
         <Grid size={{ xs: 6, sm: 3 }}>
-          <StatCard icon={WorkOutlinedIcon} label="Active Projects" value={portfolio.count} />
+          <StatCard icon={WorkOutlinedIcon} label="Active Projects" value={portfolio.count} trend={trends?.active} />
         </Grid>
         <Grid size={{ xs: 6, sm: 3 }}>
-          <StatCard icon={CheckCircleIcon} label="Completed" value={portfolio.completedCount} color="success.main" />
+          <StatCard icon={CheckCircleIcon} label="Completed" value={portfolio.completedCount} color="success.main" trend={trends?.completed} />
         </Grid>
         <Grid size={{ xs: 6, sm: 3 }}>
-          <StatCard icon={DonutLargeIcon} label="Avg. Completion" value={`${portfolio.avgPct}%`} />
+          <StatCard icon={DonutLargeIcon} label="Avg. Completion" value={`${portfolio.avgPct}%`} color="secondary.main" trend={trends?.avg} />
         </Grid>
         <Grid size={{ xs: 6, sm: 3 }}>
           <StatCard icon={WarningAmberIcon} label="Delayed Tasks" value={portfolio.totalDelayed}
-            color={portfolio.totalDelayed > 0 ? "error.main" : "success.main"} />
+            color={portfolio.totalDelayed > 0 ? "error.main" : "success.main"} trend={trends?.delayed} tint={portfolio.totalDelayed > 0} />
+        </Grid>
+      </Grid>
+
+      <Grid container spacing={1.5} sx={{ mb: 1.5 }}>
+        <Grid size={{ xs: 12, md: 4 }}>
+          <AnalyticsCard title="Projects by Status">
+            <Stack direction="row" alignItems="center" spacing={2.5}>
+              <DonutChart
+                segments={healthLegend.filter(h => health[h.key] > 0).map(h => ({ value: health[h.key], color: h.color }))}
+                centerValue={projects.length}
+                centerLabel="Total"
+              />
+              <Stack spacing={1} sx={{ flex: 1, minWidth: 0 }}>
+                {healthLegend.map(h => {
+                  const count = health[h.key];
+                  const pct = projects.length ? Math.round((count / projects.length) * 100) : 0;
+                  return (
+                    <Stack key={h.key} direction="row" alignItems="center" spacing={1}>
+                      <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: h.color, flexShrink: 0 }} />
+                      <Typography variant="body2" sx={{ flex: 1 }} noWrap>{h.key}</Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>{count} ({pct}%)</Typography>
+                    </Stack>
+                  );
+                })}
+              </Stack>
+            </Stack>
+          </AnalyticsCard>
+        </Grid>
+
+        <Grid size={{ xs: 12, md: 4 }}>
+          <AnalyticsCard
+            title="Average Completion Trend"
+            action={
+              <Select size="small" value={trendRange} onChange={(e: SelectChangeEvent) => setTrendRange(e.target.value as TrendRange)}
+                sx={{ fontSize: 13, "& .MuiSelect-select": { py: 0.5 } }}>
+                <MenuItem value="month" sx={{ fontSize: 13 }}>This Month</MenuItem>
+                <MenuItem value="quarter" sx={{ fontSize: 13 }}>This Quarter</MenuItem>
+                <MenuItem value="year" sx={{ fontSize: 13 }}>This Year</MenuItem>
+              </Select>
+            }
+          >
+            {trendPoints.length ? <TrendLineChart points={trendPoints} /> : (
+              <Typography color="text.secondary" sx={{ py: 4, textAlign: "center" }}>Not enough data yet.</Typography>
+            )}
+          </AnalyticsCard>
+        </Grid>
+
+        <Grid size={{ xs: 12, md: 4 }}>
+          <AnalyticsCard
+            title="Upcoming Deadlines"
+            action={upcomingDeadlines.length > 3 && (
+              <Button size="small" onClick={() => setShowAllDeadlines(v => !v)} sx={{ fontSize: 12.5 }}>
+                {showAllDeadlines ? "Show less" : "View all"}
+              </Button>
+            )}
+          >
+            {upcomingDeadlines.length === 0 ? (
+              <Typography color="text.secondary" sx={{ py: 4, textAlign: "center" }}>Nothing due — you&apos;re all caught up.</Typography>
+            ) : (
+              <Stack spacing={1.25} sx={{ maxHeight: showAllDeadlines ? 420 : "none", overflowY: showAllDeadlines ? "auto" : "visible" }}>
+                {upcomingDeadlines.slice(0, showAllDeadlines ? 8 : 3).map((d, i) => {
+                  const badge = dateBadge(d.plannedFinish);
+                  const chip = deadlineChip(d.plannedFinish, today);
+                  return (
+                    <Box key={i} onClick={() => onOpen(d.projectId)} sx={{
+                      display: "flex", alignItems: "center", gap: 1.5, cursor: "pointer",
+                      p: 1, borderRadius: 2, "&:hover": { bgcolor: "action.hover" },
+                    }}>
+                      <Box sx={{
+                        width: 42, textAlign: "center", flexShrink: 0, borderRadius: 1.5,
+                        bgcolor: "background.default", border: "1px solid", borderColor: "divider", py: 0.5,
+                      }}>
+                        <Typography sx={{ fontSize: 9.5, fontWeight: 700, color: "error.main", lineHeight: 1.3 }}>{badge.month}</Typography>
+                        <Typography sx={{ fontSize: 15, fontWeight: 700, lineHeight: 1.2 }}>{badge.day}</Typography>
+                      </Box>
+                      <Box sx={{ minWidth: 0, flex: 1 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>{d.taskName}</Typography>
+                        <Typography variant="caption" color="text.secondary" noWrap sx={{ display: "block" }}>{d.projectName}</Typography>
+                      </Box>
+                      <Chip label={chip.label} size="small" color={chip.color} variant="outlined" sx={{ flexShrink: 0, fontSize: 10.5 }} />
+                    </Box>
+                  );
+                })}
+              </Stack>
+            )}
+          </AnalyticsCard>
         </Grid>
       </Grid>
 
@@ -158,6 +368,12 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
           onChange={(e) => setQuery(e.target.value)}
           slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> } }}
         />
+        <Select size="small" value={typeFilter} onChange={(e: SelectChangeEvent) => setTypeFilter(e.target.value as "All" | ProjectType)}
+          sx={{ minWidth: 150, flexShrink: 0 }}>
+          <MenuItem value="All">All Projects</MenuItem>
+          <MenuItem value="Product">Product</MenuItem>
+          <MenuItem value="Solution">Solution</MenuItem>
+        </Select>
         {showMyToggle && (
           <FormControlLabel sx={{ whiteSpace: "nowrap" }} control={
             <Checkbox size="small" checked={myOnly} disabled={!actor.id} onChange={(e) => setMyOnly(e.target.checked)} />
@@ -179,10 +395,19 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
             <Accordion key={key} expanded={!!expanded[key]} onChange={() => setExpanded(e => ({ ...e, [key]: !e[key] }))}
               disableGutters sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", "&:before": { display: "none" } }}>
               <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                <Stack direction="row" spacing={1.25} alignItems="center">
+                <Stack direction="row" spacing={1.25} alignItems="center" sx={{ flex: 1, minWidth: 0, pr: 1 }}>
                   <Icon sx={{ fontSize: 19, color }} />
                   <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>{label}</Typography>
                   <Chip label={grouped[key].length} size="small" />
+                  <Box sx={{ flex: 1 }} />
+                  {grouped[key].length > 0 && (
+                    <Typography
+                      component={Link} href="#" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setExpanded(prev => ({ ...prev, [key]: true })); }}
+                      variant="caption" sx={{ color: "primary.main", fontWeight: 600, "&:hover": { textDecoration: "underline" } }}
+                    >
+                      View all
+                    </Typography>
+                  )}
                 </Stack>
               </AccordionSummary>
               <AccordionDetails>

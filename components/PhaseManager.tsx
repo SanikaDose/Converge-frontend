@@ -32,41 +32,56 @@ export function PhaseNavList({ phases, activeId, onSelect }: {
   onSelect: (id: string) => void;
 }) {
   const STATUS_HEX = useStatusHex();
+  const theme = useTheme();
   return (
-    <Stack spacing={1.5} sx={{ width: 264, flexShrink: 0, height: "100%", overflowY: "auto", p: 0.25, pr: 1 }}>
-      {phases.map((p) => {
-        const active = p.id === activeId;
-        return (
-          <Box
-            key={p.id}
-            onClick={() => onSelect(p.id)}
-            sx={{
-              display: "flex", alignItems: "center", gap: 1.75, cursor: "pointer",
-              bgcolor: active ? "background.default" : "background.paper",
-              border: "1px solid",
-              borderColor: active ? (p.color === "slate" ? "divider" : STATUS_HEX[p.color]) : "divider",
-              borderRadius: 2.5, p: 1.5, flexShrink: 0,
-              boxShadow: active ? "0 2px 4px rgba(16,24,40,0.08)" : "0 1px 2px rgba(16,24,40,0.04)",
-              transition: "border-color .15s ease, box-shadow .15s ease",
-            }}
-          >
-            <CompletionRing pct={p.total ? Math.round((p.completed / p.total) * 100) : 0} size={50} color={p.color} />
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Stack direction="row" alignItems="center" gap={0.5}>
-                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
-                  {p.name.split(" · ")[0]}
+    <Box sx={{
+      width: 280, flexShrink: 0, height: "100%", display: "flex", flexDirection: "column",
+      bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: 3,
+      boxShadow: "0 1px 3px rgba(16,24,40,0.06)", overflow: "hidden",
+    }}>
+      <Box sx={{
+        px: 2.25, minHeight: 80, flexShrink: 0, borderBottom: "1px solid", borderColor: "divider",
+        bgcolor: alpha(theme.palette.primary.main, theme.palette.mode === "light" ? 0.05 : 0.09),
+        display: "flex", flexDirection: "column", justifyContent: "center",
+      }}>
+        <Typography sx={{ fontWeight: 700, fontSize: 14.5, lineHeight: 1.2 }}>Phases</Typography>
+        <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.2, mt: 0.1, display: "block" }}>{phases.length} total</Typography>
+      </Box>
+      <Stack spacing={1.25} sx={{ flex: 1, minHeight: 0, overflowY: "auto", p: 1.25 }}>
+        {phases.map((p) => {
+          const active = p.id === activeId;
+          return (
+            <Box
+              key={p.id}
+              onClick={() => onSelect(p.id)}
+              sx={{
+                display: "flex", alignItems: "center", gap: 1.75, cursor: "pointer",
+                bgcolor: active ? alpha(theme.palette.primary.main, theme.palette.mode === "light" ? 0.07 : 0.14) : "background.paper",
+                border: active ? "2px solid" : "1px solid",
+                borderColor: active ? "primary.main" : "divider",
+                borderRadius: 2.5, p: active ? 1.375 : 1.5, flexShrink: 0,
+                boxShadow: active ? `0 4px 10px ${alpha(theme.palette.primary.main, 0.2)}` : "0 1px 2px rgba(16,24,40,0.04)",
+                transition: "border-color .15s ease, box-shadow .15s ease, background-color .15s ease",
+              }}
+            >
+              <CompletionRing pct={p.total ? Math.round((p.completed / p.total) * 100) : 0} size={50} color={p.color} />
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Stack direction="row" alignItems="center" gap={0.5}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
+                    {p.name.split(" · ")[0]}
+                  </Typography>
+                  {p.critical && <Tooltip title="Critical phase — delays here delay the whole project"><Typography variant="caption" sx={{ color: STATUS_HEX.red, lineHeight: 1 }}>●</Typography></Tooltip>}
+                </Stack>
+                <Typography variant="body2" noWrap sx={{ lineHeight: 1.35, mt: 0.2, fontWeight: 600 }}>{p.name.split(" · ").slice(1).join(" · ")}</Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 0.2, display: "block" }}>
+                  {p.completed}/{p.total} done{p.delayed > 0 ? ` · ${p.delayed} late` : ""}
                 </Typography>
-                {p.critical && <Tooltip title="Critical phase — delays here delay the whole project"><Typography variant="caption" sx={{ color: STATUS_HEX.red, lineHeight: 1 }}>●</Typography></Tooltip>}
-              </Stack>
-              <Typography variant="body2" noWrap sx={{ lineHeight: 1.35, mt: 0.2, fontWeight: 600 }}>{p.name.split(" · ").slice(1).join(" · ")}</Typography>
-              <Typography variant="caption" color="text.secondary" sx={{ mt: 0.2, display: "block" }}>
-                {p.completed}/{p.total} done{p.delayed > 0 ? ` · ${p.delayed} late` : ""}
-              </Typography>
+              </Box>
             </Box>
-          </Box>
-        );
-      })}
-    </Stack>
+          );
+        })}
+      </Stack>
+    </Box>
   );
 }
 
@@ -163,13 +178,17 @@ export function PhaseTaskPanel({
 
   return (
     <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: 3, overflow: "hidden", boxShadow: "0 1px 3px rgba(16,24,40,0.06)" }}>
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", p: 2.75, bgcolor: alpha(theme.palette.primary.main, theme.palette.mode === "light" ? 0.06 : 0.1), borderBottom: "1px solid", borderColor: "divider" }}>
+      <Box sx={{
+        display: "flex", justifyContent: "space-between", alignItems: "center", px: 2.75, minHeight: 80,
+        bgcolor: alpha(theme.palette.primary.main, theme.palette.mode === "light" ? 0.08 : 0.12),
+        borderBottom: "2px solid", borderColor: alpha(theme.palette.primary.main, theme.palette.mode === "light" ? 0.25 : 0.35),
+      }}>
         <Box sx={{ minWidth: 0 }}>
-          <Typography variant="caption" sx={{ fontWeight: 700, letterSpacing: 0.5, color: "primary.light" }}>
+          <Typography variant="caption" sx={{ fontWeight: 700, letterSpacing: 0.5, lineHeight: 1.2, color: "primary.light", display: "block" }}>
             PHASE {phaseNumber}
           </Typography>
-          <Typography variant="h6" noWrap sx={{ fontWeight: 700, lineHeight: 1.25 }}>{phaseTitle}</Typography>
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="h6" noWrap sx={{ fontWeight: 700, fontSize: 17, lineHeight: 1.2, mt: 0.1 }}>{phaseTitle}</Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.2, display: "block", mt: 0.1 }}>
             {fmt(phase.phaseStart)} → {fmt(phase.phaseEnd)}{wStart ? ` · Week ${wStart}${wEnd !== wStart ? `–${wEnd}` : ""}` : ""}
           </Typography>
         </Box>

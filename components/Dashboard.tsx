@@ -26,14 +26,16 @@ import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import WorkOutlinedIcon from "@mui/icons-material/WorkOutlined";
 import DonutLargeIcon from "@mui/icons-material/DonutLarge";
+import FlagCircleIcon from "@mui/icons-material/FlagCircle";
 
 import { ProjectCard } from "./ProjectCard";
-import { TicketsPanel } from "./TicketsPanel";
+import { TicketForm } from "./TicketsPanel";
 import { StatCard } from "./common";
-import { fetchProjectsIndex } from "@/lib/api";
+import { fetchProjectsIndex, createTicketApi } from "@/lib/api";
 import { withLiveStats } from "@/lib/businessLogic";
 import { todayISO } from "@/lib/dateUtils";
 import { roleCan } from "@/lib/data";
+import type { CreateTicketInput } from "@/lib/mockDb";
 import type { Actor, ProjectIndexRow, ProjectWithLiveStats } from "@/lib/types";
 
 type BucketKey = "In Progress" | "Completed";
@@ -59,6 +61,8 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
   const [query, setQuery] = useState("");
   const [myOnly, setMyOnly] = useState(false);
   const [expanded, setExpanded] = useState<Record<BucketKey, boolean>>({ "In Progress": true, "Completed": true });
+  const [showTicketForm, setShowTicketForm] = useState(false);
+  const [ticketBusy, setTicketBusy] = useState(false);
   const today = todayISO();
 
   const load = useCallback(async () => {
@@ -104,11 +108,32 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
     return { count: projects.length, totalDelayed, avgPct, completedCount };
   }, [projects]);
 
+  const projectOptions = useMemo(() => projects.map(p => ({ id: p.id, name: p.name })), [projects]);
+
+  const raiseTicket = async (payload: CreateTicketInput) => {
+    if (!roleCan(role, "raiseTicket")) return;
+    setTicketBusy(true);
+    try {
+      await createTicketApi(payload);
+      setShowTicketForm(false);
+    } catch (e) {
+      console.error(e);
+    }
+    setTicketBusy(false);
+  };
+
   return (
     <Box>
       <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={2}>
         <Typography variant="h4">Project Portfolio</Typography>
-        {roleCan(role, "createProject") && <Button variant="contained" startIcon={<AddIcon />} onClick={onNew}>New project</Button>}
+        <Stack direction="row" spacing={1.25}>
+          {roleCan(role, "raiseTicket") && (
+            <Button variant="outlined" startIcon={<FlagCircleIcon />} onClick={() => setShowTicketForm(true)} disabled={!projectOptions.length}>
+              Raise ticket
+            </Button>
+          )}
+          {roleCan(role, "createProject") && <Button variant="contained" startIcon={<AddIcon />} onClick={onNew}>New project</Button>}
+        </Stack>
       </Stack>
 
       <Grid container spacing={1.5} sx={{ mt: 2, mb: 3 }}>
@@ -126,8 +151,6 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
             color={portfolio.totalDelayed > 0 ? "error.main" : "success.main"} />
         </Grid>
       </Grid>
-
-      <TicketsPanel actor={actor} projects={projects.map(p => ({ id: p.id, name: p.name }))} refreshKey={refreshKey} />
 
       <Stack direction="row" spacing={1.5} alignItems="center" sx={{ my: 2.5 }}>
         <TextField
@@ -180,6 +203,10 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
             </Accordion>
           ))}
         </Stack>
+      )}
+
+      {showTicketForm && roleCan(role, "raiseTicket") && (
+        <TicketForm projects={projectOptions} busy={ticketBusy} onClose={() => setShowTicketForm(false)} onSubmit={raiseTicket} />
       )}
     </Box>
   );

@@ -71,11 +71,11 @@ export function createAppTheme(mode: ThemeMode): Theme {
   return createTheme({
     palette: isLight ? {
       mode,
-      primary: { main: "#0f7f91", light: "#2fb3c7", dark: "#0a5b68", contrastText: "#ffffff" },
+      primary: { main: "#3958D6", light: "#6C86E8", dark: "#25409E", contrastText: "#ffffff" },
       secondary: { main: "#3f6fb0" },
-      background: { default: "#f3f5f7", paper: "#ffffff" },
+      background: { default: "#f5f7fb", paper: "#ffffff" },
       text: { primary: "#1a2027", secondary: "#5c6673" },
-      divider: "#e1e5ea",
+      divider: "#e3e7ee",
       success: { main: STATUS_HEX_LIGHT.green },
       warning: { main: STATUS_HEX_LIGHT.amber },
       error: { main: STATUS_HEX_LIGHT.red },

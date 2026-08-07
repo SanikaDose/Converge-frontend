@@ -40,9 +40,9 @@ const BUCKETS: { key: BucketKey; label: string; icon: ElementType; color: string
   { key: "Completed", label: "Completed", icon: CheckCircleIcon, color: "success.main", match: (t) => t.status === "Resolved" || t.status === "Closed" },
 ];
 
-interface ProjectOption { id: string; name: string }
+export interface ProjectOption { id: string; name: string }
 
-function TicketForm({ projects, onClose, onSubmit, busy }: {
+export function TicketForm({ projects, onClose, onSubmit, busy }: {
   projects: ProjectOption[];
   onClose: () => void;
   onSubmit: (payload: CreateTicketInput) => void;

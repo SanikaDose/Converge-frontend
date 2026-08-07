@@ -15,6 +15,7 @@ import IconButton from "@mui/material/IconButton";
 import VerifiedUserIcon from "@mui/icons-material/VerifiedUser";
 import DashboardIcon from "@mui/icons-material/SpaceDashboard";
 import GroupsIcon from "@mui/icons-material/Groups";
+import ConfirmationNumberIcon from "@mui/icons-material/ConfirmationNumber";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import { LogoLockup } from "./Logo";
@@ -26,6 +27,7 @@ import type { AppRole } from "@/lib/types";
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: DashboardIcon },
   { href: "/team-performance", label: "Team Performance", icon: GroupsIcon },
+  { href: "/tickets", label: "Tickets", icon: ConfirmationNumberIcon },
 ];
 
 /**

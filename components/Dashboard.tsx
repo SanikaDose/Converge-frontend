@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState, type ElementType, type ReactNode } from "react";
 import Link from "next/link";
 import Box from "@mui/material/Box";
-import { alpha } from "@mui/material/styles";
+import { alpha, useTheme } from "@mui/material/styles";
 import Stack from "./Stack";
 import Typography from "@mui/material/Typography";
 import Button from "@mui/material/Button";
@@ -110,8 +110,8 @@ function periodBounds(scope: DateScope, todayISOStr: string): [string, string] |
 function deadlineChip(plannedFinish: string, today: string): { label: string; hex: string } {
   const diff = diffDays(plannedFinish, today);
   if (diff < 0) return { label: `${Math.abs(diff)}d overdue`, hex: DASHBOARD_COLORS.red };
-  if (diff === 0) return { label: "Due today", hex: DASHBOARD_COLORS.amber };
-  if (diff <= 7) return { label: `In ${diff} day${diff > 1 ? "s" : ""}`, hex: DASHBOARD_COLORS.amber };
+  if (diff === 0) return { label: "Due today", hex: DASHBOARD_COLORS.orange };
+  if (diff <= 7) return { label: `In ${diff} day${diff > 1 ? "s" : ""}`, hex: DASHBOARD_COLORS.orange };
   return { label: `In ${diff} days`, hex: DASHBOARD_COLORS.blue };
 }
 
@@ -135,6 +135,7 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
   onNew: () => void;
 }) {
   const { role } = actor;
+  const theme = useTheme();
   const [projectsRaw, setProjectsRaw] = useState<ProjectIndexRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -297,13 +298,15 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
       <Grid container spacing={1.5} sx={{ mb: 1.5 }}>
         <Grid size={{ xs: 12, md: 4 }}>
           <AnalyticsCard title="Projects by Status">
-            <Stack direction="row" alignItems="center" spacing={2.5}>
+            <Stack direction="row" alignItems="center" spacing={3}>
               <DonutChart
                 segments={healthLegend.filter(h => health[h.key] > 0).map(h => ({ value: health[h.key], color: h.color }))}
                 centerValue={projects.length}
                 centerLabel="Total"
+                size={128}
+                strokeRatio={0.19}
               />
-              <Stack spacing={1} sx={{ flex: 1, minWidth: 0 }}>
+              <Stack spacing={1.5} sx={{ flex: 1, minWidth: 0 }}>
                 {healthLegend.map(h => {
                   const count = health[h.key];
                   const pct = projects.length ? Math.round((count / projects.length) * 100) : 0;
@@ -332,7 +335,15 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
               </Select>
             }
           >
-            {trendPoints.length ? <TrendLineChart points={trendPoints} /> : (
+            {trendPoints.length ? (
+              <>
+                <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mb: 1 }}>
+                  <Box sx={{ width: 14, height: 2.5, borderRadius: 1, bgcolor: theme.palette.primary.main }} />
+                  <Typography variant="caption" color="text.secondary">Avg. Completion %</Typography>
+                </Stack>
+                <TrendLineChart points={trendPoints} />
+              </>
+            ) : (
               <Typography color="text.secondary" sx={{ py: 4, textAlign: "center" }}>Not enough data yet.</Typography>
             )}
           </AnalyticsCard>
@@ -360,11 +371,15 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
                       p: 1, borderRadius: 2, "&:hover": { bgcolor: "action.hover" },
                     }}>
                       <Box sx={{
-                        width: 42, textAlign: "center", flexShrink: 0, borderRadius: 1.5,
-                        bgcolor: "background.paper", border: "1px solid", borderColor: "divider", py: 0.5,
+                        width: 42, textAlign: "center", flexShrink: 0, borderRadius: 1.5, overflow: "hidden",
+                        border: "1px solid", borderColor: alpha(chip.hex, 0.25),
                       }}>
-                        <Typography sx={{ fontSize: 9.5, fontWeight: 700, color: chip.hex, lineHeight: 1.3 }}>{badge.month}</Typography>
-                        <Typography sx={{ fontSize: 15, fontWeight: 700, lineHeight: 1.2, color: chip.hex }}>{badge.day}</Typography>
+                        <Box sx={{ bgcolor: alpha(chip.hex, 0.16), py: 0.3 }}>
+                          <Typography sx={{ fontSize: 9.5, fontWeight: 700, color: chip.hex, lineHeight: 1.3 }}>{badge.month}</Typography>
+                        </Box>
+                        <Box sx={{ bgcolor: "background.paper", py: 0.35 }}>
+                          <Typography sx={{ fontSize: 15, fontWeight: 700, lineHeight: 1.2, color: chip.hex }}>{badge.day}</Typography>
+                        </Box>
                       </Box>
                       <Box sx={{ minWidth: 0, flex: 1 }}>
                         <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>{d.taskName}</Typography>

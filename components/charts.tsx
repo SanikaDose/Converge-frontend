@@ -9,15 +9,16 @@ import { useTheme } from "@mui/material/styles";
  * generalized to N colored arcs (one per status bucket) instead of a
  * single completed/remaining split.
  */
-export function DonutChart({ segments, size = 150, centerValue, centerLabel }: {
+export function DonutChart({ segments, size = 150, strokeRatio = 0.22, centerValue, centerLabel }: {
   segments: { value: number; color: string }[];
   size?: number;
+  strokeRatio?: number;
   centerValue?: React.ReactNode;
   centerLabel?: React.ReactNode;
 }) {
   const theme = useTheme();
   const total = segments.reduce((a, s) => a + s.value, 0);
-  const stroke = Math.round(size * 0.22);
+  const stroke = Math.round(size * strokeRatio);
   let acc = 0;
   const bg = total > 0
     ? `conic-gradient(${segments.map(seg => {

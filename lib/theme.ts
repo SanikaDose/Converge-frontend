@@ -49,6 +49,7 @@ export const DASHBOARD_COLORS = {
   blue: "#4F6EF7",
   green: "#22C55E",
   amber: "#F59E0B",
+  orange: "#F97316",
   red: "#EF4444",
   violet: "#8B5CF6",
   slate: "#9CA3AF",

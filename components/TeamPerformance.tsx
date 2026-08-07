@@ -12,33 +12,44 @@ import Select, { type SelectChangeEvent } from "@mui/material/Select";
 import MenuItem from "@mui/material/MenuItem";
 import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
+import Menu from "@mui/material/Menu";
+import ListItemIcon from "@mui/material/ListItemIcon";
 import CircularProgress from "@mui/material/CircularProgress";
-import { DataGrid, type GridColDef, type GridRenderCellParams } from "@mui/x-data-grid";
+import { alpha } from "@mui/material/styles";
+import { DataGrid, type GridColDef, type GridColumnGroupingModel, type GridRenderCellParams } from "@mui/x-data-grid";
 import GroupsIcon from "@mui/icons-material/Groups";
 import DonutLargeIcon from "@mui/icons-material/DonutLarge";
 import AssignmentIcon from "@mui/icons-material/Assignment";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import SearchIcon from "@mui/icons-material/Search";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
+import FilterAltIcon from "@mui/icons-material/FilterAlt";
 import { EmployeeAvatar, StatCard } from "./common";
 import { fetchTeamPerformance } from "@/lib/api";
 import { avatarColor } from "@/lib/data";
-import type { TeamPerformanceRow } from "@/lib/types";
+import { DASHBOARD_COLORS } from "@/lib/theme";
+import type { OrgRole, TeamPerformanceRow } from "@/lib/types";
 
 type StatusFilter = "all" | "delayed" | "unassigned";
+
+const ROLE_COLOR: Record<OrgRole, string> = {
+  "Team Lead": DASHBOARD_COLORS.violet,
+  "Developer": DASHBOARD_COLORS.blue,
+};
 
 /**
  * Team Performance — every organization employee, with task counts
  * computed dynamically by the /api/team-performance route (which scans
  * every project's tasks for `assignedTo === employee.id`, see
  * lib/businessLogic.aggregateTeamPerformance). Uses MUI's DataGrid so
- * team/tasks/delayed sorting comes for free via column headers.
+ * team/tasks sorting comes for free via column headers.
  *
- * Columns are deliberately consolidated (Total/Completed/Pending merged
- * into a single "Tasks" cell) rather than one raw number per metric —
- * seven bare-number columns read as a wall of digits at a glance. Rows
- * with no assigned work show muted "—" placeholders instead of literal
- * zeros so the eye isn't drawn to noise.
+ * Task counts get their own grouped "Tasks" header (Total/Done/Pending)
+ * rather than one bare "Tasks" column, and a per-row overdue count rides
+ * inside the Pending cell instead of a dedicated Delayed column — that
+ * total already has a home in the KPI row above, so repeating it as a
+ * full table column was pure duplication.
  */
 export function TeamPerformance({ refreshKey }: { refreshKey: number }) {
   const [rows, setRows] = useState<TeamPerformanceRow[]>([]);
@@ -46,6 +57,7 @@ export function TeamPerformance({ refreshKey }: { refreshKey: number }) {
   const [query, setQuery] = useState("");
   const [teamFilter, setTeamFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [actionMenu, setActionMenu] = useState<{ el: HTMLElement; row: TeamPerformanceRow } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -75,21 +87,34 @@ export function TeamPerformance({ refreshKey }: { refreshKey: number }) {
     });
   }, [rows, query, teamFilter, statusFilter]);
 
+  const columnGroupingModel: GridColumnGroupingModel = [
+    {
+      groupId: "tasks", headerName: "Tasks", headerAlign: "center",
+      children: [{ field: "total" }, { field: "completed" }, { field: "pending" }],
+    },
+  ];
+
   const columns = useMemo<GridColDef<TeamPerformanceRow>[]>(() => [
     {
-      field: "name", headerName: "Employee", flex: 1.3, minWidth: 220,
+      field: "name", headerName: "Employee", flex: 1.2, minWidth: 210,
       renderCell: (params: GridRenderCellParams<TeamPerformanceRow>) => (
         <Stack direction="row" spacing={1.25} alignItems="center" sx={{ height: "100%" }}>
-          <EmployeeAvatar employeeId={params.row.id} size={30} />
-          <Box sx={{ minWidth: 0, lineHeight: 1.3 }}>
-            <Typography variant="body2" noWrap sx={{ lineHeight: 1.35 }}>{params.row.name}</Typography>
-            <Typography variant="caption" color="text.secondary" noWrap sx={{ lineHeight: 1.35, display: "block" }}>{params.row.role}</Typography>
-          </Box>
+          <EmployeeAvatar employeeId={params.row.id} size={32} />
+          <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>{params.row.name}</Typography>
         </Stack>
       ),
     },
     {
-      field: "team", headerName: "Team", flex: 0.85, minWidth: 140,
+      field: "role", headerName: "Role", flex: 0.7, minWidth: 130,
+      renderCell: (params: GridRenderCellParams<TeamPerformanceRow>) => {
+        const color = ROLE_COLOR[params.value as OrgRole] || DASHBOARD_COLORS.slate;
+        return <Chip label={params.value} size="small" sx={{
+          bgcolor: alpha(color, 0.14), color, fontWeight: 700, fontSize: 11.5,
+        }} />;
+      },
+    },
+    {
+      field: "team", headerName: "Team", flex: 0.8, minWidth: 140,
       renderCell: (params: GridRenderCellParams<TeamPerformanceRow>) => (
         <Stack direction="row" spacing={1} alignItems="center" sx={{ height: "100%" }}>
           <Box sx={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, bgcolor: avatarColor(params.value) }} />
@@ -98,25 +123,47 @@ export function TeamPerformance({ refreshKey }: { refreshKey: number }) {
       ),
     },
     {
-      field: "total", headerName: "Tasks", type: "number", flex: 0.9, minWidth: 130,
+      field: "total", headerName: "Total", type: "number", flex: 0.45, minWidth: 80, align: "center", headerAlign: "center",
+      renderCell: (params: GridRenderCellParams<TeamPerformanceRow>) => (
+        <Typography variant="body2" sx={{ fontWeight: 700 }}>{params.value || "—"}</Typography>
+      ),
+    },
+    {
+      field: "completed", headerName: "Done", type: "number", flex: 0.45, minWidth: 80, align: "center", headerAlign: "center",
+      renderCell: (params: GridRenderCellParams<TeamPerformanceRow>) => (
+        <Typography variant="body2" sx={{ color: params.value ? DASHBOARD_COLORS.green : "text.disabled", fontWeight: 600 }}>
+          {params.row.total ? params.value : "—"}
+        </Typography>
+      ),
+    },
+    {
+      field: "pending", headerName: "Pending", type: "number", flex: 0.7, minWidth: 120, align: "center", headerAlign: "center",
       renderCell: (params: GridRenderCellParams<TeamPerformanceRow>) => {
-        const { total, completed, pending } = params.row;
-        if (!total) return <Typography variant="body2" color="text.disabled">No tasks</Typography>;
+        if (!params.row.total) return <Typography variant="body2" color="text.disabled">—</Typography>;
         return (
-          <Box sx={{ lineHeight: 1.3 }}>
-            <Typography variant="body2" sx={{ fontWeight: 600, lineHeight: 1.35 }}>{total} total</Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.35, display: "block" }}>
-              {completed} done · {pending} pending
-            </Typography>
-          </Box>
+          <Stack direction="row" spacing={0.75} alignItems="center" justifyContent="center">
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>{params.value}</Typography>
+            {params.row.delayed > 0 && (
+              <Tooltip title={`${params.row.delayed} overdue`}>
+                <Chip label={params.row.delayed} size="small" sx={{
+                  height: 18, minWidth: 18, fontSize: 10.5, fontWeight: 700,
+                  bgcolor: alpha(DASHBOARD_COLORS.red, 0.14), color: DASHBOARD_COLORS.red,
+                  "& .MuiChip-label": { px: 0.6 },
+                }} />
+              </Tooltip>
+            )}
+          </Stack>
         );
       },
     },
     {
-      field: "delayed", headerName: "Delayed", type: "number", flex: 0.6, minWidth: 100,
-      renderCell: (params: GridRenderCellParams<TeamPerformanceRow>) => params.value > 0
-        ? <Chip label={params.value} size="small" color="error" variant="outlined" />
-        : <Typography variant="body2" color="text.disabled">—</Typography>,
+      field: "actions", headerName: "", sortable: false, filterable: false, disableColumnMenu: true,
+      width: 64, align: "center", headerAlign: "center",
+      renderCell: (params: GridRenderCellParams<TeamPerformanceRow>) => (
+        <IconButton size="small" onClick={(e) => setActionMenu({ el: e.currentTarget, row: params.row })}>
+          <MoreVertIcon fontSize="small" />
+        </IconButton>
+      ),
     },
   ], []);
 
@@ -163,24 +210,52 @@ export function TeamPerformance({ refreshKey }: { refreshKey: number }) {
       {loading ? (
         <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}><CircularProgress /></Box>
       ) : (
-        <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: 1.5, height: 640, width: "100%" }}>
+        <Box sx={{
+          bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: 1.5,
+          boxShadow: "0 1px 2px rgba(16,24,40,0.04), 0 2px 8px rgba(16,24,40,0.06)",
+          height: 640, width: "100%", overflow: "hidden",
+        }}>
           <DataGrid
-            rows={filteredRows} columns={columns} getRowId={(r) => r.id} rowHeight={64} columnHeaderHeight={48}
+            rows={filteredRows} columns={columns} columnGroupingModel={columnGroupingModel}
+            getRowId={(r) => r.id} rowHeight={62} columnHeaderHeight={30} columnGroupHeaderHeight={24}
             initialState={{ sorting: { sortModel: [{ field: "total", sort: "desc" }] } }}
             disableRowSelectionOnClick
+            showColumnVerticalBorder
             slotProps={{ noRowsOverlay: { sx: { color: "text.secondary" } } }}
             localeText={{ noRowsLabel: "No team members match these filters." }}
             sx={{
-              border: "none", "& .MuiDataGrid-columnHeaders": { bgcolor: "background.default" },
-              "& .MuiDataGrid-columnHeaderTitle": { fontWeight: 700, fontSize: 12.5, textTransform: "uppercase", letterSpacing: 0.4, color: "text.secondary" },
+              border: "none",
+              "& .MuiDataGrid-columnHeaders": {
+                background: "linear-gradient(135deg, #0F172A 0%, #1E3A5F 100%)",
+              },
+              "& .MuiDataGrid-columnHeader, & .MuiDataGrid-columnHeader--filledGroup, & .MuiDataGrid-columnHeaderRow": {
+                bgcolor: "transparent",
+                "&:focus, &:focus-within": { outline: "none" },
+              },
+              "& .MuiDataGrid-columnHeaderTitle": {
+                fontWeight: 700, fontSize: 11.5, textTransform: "uppercase", letterSpacing: 0.8, color: "#E2E8F0",
+              },
+              "& .MuiDataGrid-iconButtonContainer .MuiIconButton-root, & .MuiDataGrid-menuIcon .MuiIconButton-root": {
+                color: "#E2E8F0",
+              },
+              "& .MuiDataGrid-columnSeparator": { color: "rgba(226,232,240,0.15)" },
+              "& .MuiDataGrid-withBorderColor": { borderColor: "divider" },
               "& .MuiDataGrid-cell": { lineHeight: "normal !important", alignItems: "center", borderColor: "divider" },
               "& .MuiDataGrid-cell:focus, & .MuiDataGrid-cell:focus-within": { outline: "none" },
+              "& .MuiDataGrid-row": { transition: "background-color .12s ease" },
               "& .MuiDataGrid-row:hover": { bgcolor: "action.hover" },
               "& .MuiDataGrid-footerContainer": { borderColor: "divider" },
             }}
           />
         </Box>
       )}
+
+      <Menu anchorEl={actionMenu?.el} open={!!actionMenu} onClose={() => setActionMenu(null)}>
+        <MenuItem onClick={() => { if (actionMenu) setQuery(actionMenu.row.name); setActionMenu(null); }}>
+          <ListItemIcon><FilterAltIcon fontSize="small" /></ListItemIcon>
+          Show only this member
+        </MenuItem>
+      </Menu>
     </Box>
   );
 }

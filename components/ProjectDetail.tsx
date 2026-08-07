@@ -15,6 +15,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import SettingsIcon from "@mui/icons-material/Settings";
 import GridViewIcon from "@mui/icons-material/GridView";
 import TimelineIcon from "@mui/icons-material/Timeline";
+import ViewKanbanIcon from "@mui/icons-material/ViewKanban";
 import BusinessIcon from "@mui/icons-material/Business";
 import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 
@@ -23,6 +24,7 @@ import { PhaseNavList, AddTaskDialog, PhaseTaskPanel, type NewTaskPayload } from
 import { TaskDetailsDialog, type TaskDetailsPatch } from "./TaskDetailsDialog";
 import { TaskHistoryDialog } from "./TaskHistoryDialog";
 import { TimelineView } from "./TimelineView";
+import { KanbanView } from "./KanbanView";
 import { ProjectForm, type ProjectFormPayload } from "./ProjectForm";
 import { EmployeeAvatar } from "./common";
 
@@ -36,7 +38,7 @@ import { useOrgContext } from "@/context/OrgContext";
 import { fmt, todayISO, diffDays } from "@/lib/dateUtils";
 import type { Actor, HistoryEntry, ProjectDetailData, Task, TaskStatus } from "@/lib/types";
 
-type ViewMode = "phases" | "timeline";
+type ViewMode = "phases" | "timeline" | "kanban";
 
 export function ProjectDetail({ projectId, actor, onBack }: { projectId: string; actor: Actor; onBack: () => void }) {
   const { role } = actor;
@@ -283,6 +285,7 @@ export function ProjectDetail({ projectId, actor, onBack }: { projectId: string;
           <ToggleButtonGroup size="small" exclusive value={viewMode} onChange={(_e, v: ViewMode | null) => v && setViewMode(v)}>
             <ToggleButton value="phases"><GridViewIcon sx={{ fontSize: 16, mr: 0.75 }} />Phases</ToggleButton>
             <ToggleButton value="timeline"><TimelineIcon sx={{ fontSize: 16, mr: 0.75 }} />Timeline</ToggleButton>
+            <ToggleButton value="kanban"><ViewKanbanIcon sx={{ fontSize: 16, mr: 0.75 }} />Kanban</ToggleButton>
           </ToggleButtonGroup>
         </Stack>
       </Box>
@@ -312,13 +315,20 @@ export function ProjectDetail({ projectId, actor, onBack }: { projectId: string;
               )}
             </Box>
           </Stack>
-        ) : (
+        ) : viewMode === "timeline" ? (
           <Box sx={{ height: "100%", overflowY: "auto" }}>
             <TimelineView
               phases={detail.phases} tasks={detail.tasks} projectStartDate={detail.meta.startDate} projectEndDate={detail.meta.endDate} today={today} weekOff={detail.meta.weekOff}
               onOpenPhase={(phaseId) => { setActivePhaseId(phaseId); setViewMode("phases"); }}
             />
           </Box>
+        ) : (
+          <KanbanView
+            tasks={detail.tasks} phases={detail.phases} today={today} weekOff={detail.meta.weekOff}
+            canEdit={canEditTask}
+            onStatusChange={handleStatusChange}
+            onOpenPhase={(phaseId) => { setActivePhaseId(phaseId); setViewMode("phases"); }}
+          />
         )}
       </Box>
 

@@ -24,10 +24,11 @@ import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import NotificationsNoneIcon from "@mui/icons-material/NotificationsNone";
 import { LogoLockup } from "./Logo";
-import { ROLES, employeeLabel, initials, avatarColor } from "@/lib/data";
+import { ROLES, initials, avatarColor } from "@/lib/data";
 import { OrgSelect } from "./common";
 import { fetchTickets } from "@/lib/api";
 import { useAppContext } from "@/context/AppContext";
+import { useOrgContext } from "@/context/OrgContext";
 import type { AppRole, Ticket } from "@/lib/types";
 
 const NAV_ITEMS = [
@@ -93,6 +94,7 @@ function NotificationsMenu() {
  */
 export function AppShell({ children }: { children: ReactNode }) {
   const { role, setRole, selfId, setSelfId, mode, toggleMode } = useAppContext();
+  const { employeeLabel } = useOrgContext();
   const pathname = usePathname();
   const needsName = role === "Developer";
   const displayName = selfId ? employeeLabel(selfId) : role;

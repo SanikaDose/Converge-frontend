@@ -15,8 +15,9 @@ import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
 import RemoveIcon from "@mui/icons-material/Remove";
 import { alpha, useTheme } from "@mui/material/styles";
 import Stack from "./Stack";
-import { TEAMS, EMPLOYEE_BY_ID, initials, avatarColor } from "@/lib/data";
+import { initials, avatarColor } from "@/lib/data";
 import { useStatusHex } from "@/lib/theme";
+import { useOrgContext } from "@/context/OrgContext";
 import type { Achievement, StatusColorKey } from "@/lib/types";
 
 /** Small colored status pill, used for task/project/ticket status everywhere. */
@@ -42,7 +43,8 @@ export function StatusChip({ label, color = "slate", size = "small", variant = "
 
 /** Employee avatar with deterministic color + initials fallback (no image assets). */
 export function EmployeeAvatar({ employeeId, size = 28 }: { employeeId?: string | null; size?: number }) {
-  const emp = employeeId ? EMPLOYEE_BY_ID[employeeId] : undefined;
+  const { employeeById } = useOrgContext();
+  const emp = employeeId ? employeeById[employeeId] : undefined;
   if (!emp) {
     return (
       <Avatar sx={{ width: size, height: size, fontSize: size * 0.4, bgcolor: "rgba(139,148,163,0.25)" }}>?</Avatar>
@@ -104,6 +106,7 @@ export function OrgSelect({ label, value, onChange, allowUnassigned = true, erro
   required?: boolean;
   disabled?: boolean;
 }) {
+  const { teams } = useOrgContext();
   return (
     <TextField
       select fullWidth={fullWidth} size={size} label={label} value={value || ""} error={!!error} disabled={disabled}
@@ -111,7 +114,7 @@ export function OrgSelect({ label, value, onChange, allowUnassigned = true, erro
       onChange={(e) => onChange(e.target.value || null)}
     >
       {allowUnassigned && <MenuItem value="">Unassigned</MenuItem>}
-      {TEAMS.flatMap(team => [
+      {teams.flatMap(team => [
         <ListSubheader key={`h-${team.id}`} sx={{ bgcolor: "transparent", lineHeight: "28px", color: "primary.light" }}>
           {team.name}
         </ListSubheader>,
@@ -131,6 +134,20 @@ export interface StatTrend {
   text: string;
   /** Whether an "up" reading is good or bad news for this metric — colors the caption accordingly. Defaults to neutral gray. */
   tone?: "positive" | "negative" | "neutral";
+}
+
+/**
+ * Diffs a live count against a captured baseline (see backend's
+ * DashboardBaseline / GET /dashboard-summary) into a StatTrend — shared
+ * by the Dashboard and Tickets KPI rows so both read "vs last month" off
+ * the same real snapshot instead of each fabricating their own number.
+ */
+export function computeStatTrend(current: number, base: number, unit: string, goodDirection: "up" | "down"): StatTrend {
+  const diff = current - base;
+  const direction: StatTrend["direction"] = diff > 0 ? "up" : diff < 0 ? "down" : "flat";
+  const tone: StatTrend["tone"] = diff === 0 ? "neutral" : (goodDirection === "up") === (diff > 0) ? "positive" : "negative";
+  const text = diff === 0 ? "No change vs last month" : `${Math.abs(diff)}${unit} vs last month`;
+  return { direction, text, tone };
 }
 
 /**
@@ -154,7 +171,7 @@ export function StatCard({ icon: Icon, label, value, color = "primary.light", tr
     <Box sx={{
       display: "flex", alignItems: "center", gap: 1.5, p: 1.75,
       bgcolor: tint ? alpha(resolved, 0.07) : "background.paper", border: "1px solid",
-      borderColor: tint ? alpha(resolved, 0.3) : "divider", borderRadius: 1.5,
+      borderColor: tint ? alpha(resolved, 0.3) : "divider", borderRadius: 1.25,
     }}>
       <Box sx={{
         width: 40, height: 40, borderRadius: 2, flexShrink: 0,

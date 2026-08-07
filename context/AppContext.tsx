@@ -1,7 +1,8 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { ROLES, employeeLabel, roleCan } from "@/lib/data";
+import { ROLES, roleCan } from "@/lib/data";
+import { useOrgContext } from "./OrgContext";
 import type { Actor, AppRole, PermissionAction, ThemeMode } from "@/lib/types";
 
 interface AppContextValue {
@@ -33,6 +34,7 @@ interface StoredPref {
  * stored blob since it's the same kind of per-visitor UI preference.
  */
 export function AppProvider({ children }: { children: ReactNode }) {
+  const { employeeLabel } = useOrgContext();
   const [role, setRole] = useState<AppRole>("Admin");
   const [selfId, setSelfId] = useState<string | null>(null);
   const [mode, setMode] = useState<ThemeMode>("dark");
@@ -61,7 +63,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const actor = useMemo<Actor>(() => ({
     role, id: selfId, name: selfId ? employeeLabel(selfId) : role,
     can: (action: PermissionAction) => roleCan(role, action),
-  }), [role, selfId]);
+  }), [role, selfId, employeeLabel]);
 
   const value = useMemo<AppContextValue>(() => ({ role, setRole, selfId, setSelfId, actor, mode, toggleMode }), [role, selfId, actor, mode]);
 

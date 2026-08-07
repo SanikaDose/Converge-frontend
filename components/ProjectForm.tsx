@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
@@ -14,9 +14,10 @@ import Typography from "@mui/material/Typography";
 import CircularProgress from "@mui/material/CircularProgress";
 import AddIcon from "@mui/icons-material/Add";
 import { OrgSelect } from "./common";
-import { TEMPLATE, EMPLOYEE_BY_ID, WEEKDAY_SHORT, WEEKDAY_LABELS, MAX_WEEK_OFF_DAYS } from "@/lib/data";
+import { TEMPLATE, WEEKDAY_SHORT, WEEKDAY_LABELS, MAX_WEEK_OFF_DAYS } from "@/lib/data";
 import { suggestedEndDate, guessEmployeeIdFromFreeText } from "@/lib/businessLogic";
 import { todayISO, DEFAULT_WEEK_OFF } from "@/lib/dateUtils";
+import { useOrgContext } from "@/context/OrgContext";
 import type { ProjectMeta, ProjectType, WeekDay } from "@/lib/types";
 
 const TASK_COUNT = TEMPLATE.reduce((a, p) => a + p.tasks.length, 0);
@@ -32,15 +33,6 @@ export interface ProjectFormPayload {
   weekOff: WeekDay[];
 }
 
-// Projects created before the org directory existed stored `owner` as a
-// free-text name (e.g. "Bharat"). Map that to a real employee id where
-// possible so editing an old project doesn't show a blank dropdown.
-function normalizeOwner(owner: string | null | undefined): string | null {
-  if (!owner) return null;
-  if (EMPLOYEE_BY_ID[owner]) return owner;
-  return guessEmployeeIdFromFreeText(owner);
-}
-
 /** Shared dialog for both "New project" and "Project settings" (edit). */
 export function ProjectForm({ title, initial, onClose, onSubmit, busy, submitLabel }: {
   title: string;
@@ -50,14 +42,31 @@ export function ProjectForm({ title, initial, onClose, onSubmit, busy, submitLab
   busy: boolean;
   submitLabel: string;
 }) {
+  const { employeeById, employees } = useOrgContext();
   const [name, setName] = useState(initial?.name || "");
   const [type, setType] = useState<ProjectType>(initial?.type || "Product");
   const [customer, setCustomer] = useState(initial?.customer || "");
-  const [owner, setOwner] = useState(normalizeOwner(initial?.owner));
+  const [owner, setOwner] = useState<string | null>(
+    initial?.owner && employeeById[initial.owner] ? initial.owner : null,
+  );
   const [startDate, setStartDate] = useState(initial?.startDate || todayISO());
   const [weekOff, setWeekOff] = useState<WeekDay[]>(initial?.weekOff?.length ? initial.weekOff : DEFAULT_WEEK_OFF);
   const [endDate, setEndDate] = useState(initial?.endDate || suggestedEndDate(initial?.startDate || todayISO(), weekOff));
   const [endTouched, setEndTouched] = useState(!!initial?.endDate);
+
+  // Projects created before the org directory existed stored `owner` as
+  // a free-text name (e.g. "Bharat") instead of a real employee id. The
+  // org directory now loads asynchronously from the backend, so this
+  // can't resolve at mount time the way it used to — wait for `employees`
+  // to arrive, then map the legacy free text to a real id where possible
+  // (once only, so it doesn't clobber the user's own later selection).
+  const legacyOwnerResolved = useRef(false);
+  useEffect(() => {
+    if (legacyOwnerResolved.current || !initial?.owner || employeeById[initial.owner] || employees.length === 0) return;
+    legacyOwnerResolved.current = true;
+    const guessed = guessEmployeeIdFromFreeText(initial.owner, employees);
+    if (guessed) setOwner(guessed);
+  }, [initial?.owner, employeeById, employees]);
 
   useEffect(() => {
     if (!endTouched) setEndDate(suggestedEndDate(startDate, weekOff));

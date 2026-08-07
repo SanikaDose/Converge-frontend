@@ -31,7 +31,8 @@ import {
   ensureProjectShape, phaseSummaries, summarize, computePlanned,
   approveScheduleChange, rejectScheduleChange, computeAchievement, requestScheduleChange, fieldLabel,
 } from "@/lib/businessLogic";
-import { genId, roleCan, employeeLabel } from "@/lib/data";
+import { genId, roleCan } from "@/lib/data";
+import { useOrgContext } from "@/context/OrgContext";
 import { fmt, todayISO, diffDays } from "@/lib/dateUtils";
 import type { Actor, HistoryEntry, ProjectDetailData, Task, TaskStatus } from "@/lib/types";
 
@@ -39,6 +40,7 @@ type ViewMode = "phases" | "timeline";
 
 export function ProjectDetail({ projectId, actor, onBack }: { projectId: string; actor: Actor; onBack: () => void }) {
   const { role } = actor;
+  const { employeeLabel } = useOrgContext();
   const [detail, setDetail] = useState<ProjectDetailData | null>(null);
   const [loading, setLoading] = useState(true);
   const [activePhaseId, setActivePhaseId] = useState<string | null>(null);

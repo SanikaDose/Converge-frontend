@@ -35,14 +35,14 @@ import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 
 import { ProjectCard } from "./ProjectCard";
 import { TicketForm } from "./TicketsPanel";
-import { StatCard, type StatTrend } from "./common";
+import { StatCard, computeStatTrend } from "./common";
 import { DonutChart, TrendLineChart } from "./charts";
 import { fetchProjectsIndex, createTicketApi, fetchDashboardBaseline } from "@/lib/api";
 import { withLiveStats } from "@/lib/businessLogic";
 import { todayISO, addDays, diffDays } from "@/lib/dateUtils";
 import { roleCan } from "@/lib/data";
 import { DASHBOARD_COLORS } from "@/lib/theme";
-import type { CreateTicketInput } from "@/lib/mockDb";
+import type { CreateTicketInput } from "@/lib/types";
 import type { Actor, DashboardBaseline, ProjectIndexRow, ProjectType, ProjectWithLiveStats } from "@/lib/types";
 
 type BucketKey = "In Progress" | "Completed";
@@ -115,18 +115,10 @@ function deadlineChip(plannedFinish: string, today: string): { label: string; he
   return { label: `In ${diff} days`, hex: DASHBOARD_COLORS.blue };
 }
 
-function computeStatTrend(current: number, base: number, unit: string, goodDirection: "up" | "down"): StatTrend {
-  const diff = current - base;
-  const direction: StatTrend["direction"] = diff > 0 ? "up" : diff < 0 ? "down" : "flat";
-  const tone: StatTrend["tone"] = diff === 0 ? "neutral" : (goodDirection === "up") === (diff > 0) ? "positive" : "negative";
-  const text = diff === 0 ? "No change vs last month" : `${Math.abs(diff)}${unit} vs last month`;
-  return { direction, text, tone };
-}
-
 /** Card shell shared by the three analytics widgets — title + optional header action + content. */
 function AnalyticsCard({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (
-    <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.25, height: "100%" }}>
+    <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: 1.5, p: 2.25, height: "100%" }}>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.75 }}>
         <Typography sx={{ fontWeight: 700, fontSize: 15 }}>{title}</Typography>
         {action}

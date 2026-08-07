@@ -1,15 +1,18 @@
 /**
  * Business logic: project/phase/task generation, business-day-aware
- * scheduling, delay + achievement detection, the approval workflow, and
- * team-performance aggregation. Kept framework-agnostic (no React) so it
- * can be unit-reasoned-about independently of the components that call it.
+ * scheduling, delay + achievement detection, and the approval workflow.
+ * Kept framework-agnostic (no React) so it can be unit-reasoned-about
+ * independently of the components that call it. (Team-performance
+ * aggregation now lives server-side — see converge_backend — since the
+ * frontend no longer holds every project's full task list in memory at
+ * once; TeamPerformance.tsx just calls GET /team-performance.)
  */
-import { TEMPLATE, EMPLOYEES, genId } from "./data";
+import { TEMPLATE, genId } from "./data";
 import { addWorkingDays, businessDaysBetween, todayISO, DEFAULT_WEEK_OFF } from "./dateUtils";
 import type {
-  Achievement, Actor, HistoryEntry, LivePhaseRow, Phase, PhaseLite, PhaseSummary,
+  Achievement, Actor, Employee, HistoryEntry, LivePhaseRow, Phase, PhaseLite, PhaseSummary,
   ProjectBucket, ProjectDetailData, ProjectIndexRow, ProjectWithLiveStats, StatusColorKey,
-  Summary, Task, TaskLite, TaskStatus, TeamPerformanceRow, WeekDay,
+  Summary, Task, TaskLite, TaskStatus, WeekDay,
 } from "./types";
 
 /* ----------------------------- phases & tasks ----------------------------- */
@@ -119,11 +122,11 @@ export function ensureProjectShape(detail: LegacyProjectDetail | null | undefine
 
 // Best-effort match of an old free-text name (e.g. "Bharat") to an
 // organization member id, so pre-existing data doesn't just show blank.
-export function guessEmployeeIdFromFreeText(name: string | null | undefined): string | null {
+export function guessEmployeeIdFromFreeText(name: string | null | undefined, employees: Employee[]): string | null {
   if (!name) return null;
   const norm = name.trim().toLowerCase();
   if (!norm) return null;
-  const hit = EMPLOYEES.find(e => e.name.toLowerCase() === norm || e.name.toLowerCase().startsWith(norm));
+  const hit = employees.find(e => e.name.toLowerCase() === norm || e.name.toLowerCase().startsWith(norm));
   return hit ? hit.id : null;
 }
 
@@ -311,24 +314,4 @@ export function withLiveStats(project: ProjectIndexRow, today: string): ProjectW
   if (!project.taskLite || !project.phasesLite) return { ...project, bucket: project.delayed > 0 ? "Delayed" : "On Track" };
   const { delayed, phases, bucket } = liveProjectStats(project.taskLite, project.phasesLite, today);
   return { ...project, delayed, phases, bucket };
-}
-
-/* ------------------------------ team performance ------------------------------ */
-
-export function aggregateTeamPerformance(allProjectDetails: ProjectDetailData[], today: string): TeamPerformanceRow[] {
-  const byEmployee = new Map(EMPLOYEES.map(e => [e.id, { ...e, total: 0, completed: 0, pending: 0, delayed: 0 }]));
-  allProjectDetails.forEach(detail => {
-    (detail.tasks || []).forEach(task => {
-      if (!task.assignedTo || !byEmployee.has(task.assignedTo)) return;
-      const row = byEmployee.get(task.assignedTo)!;
-      row.total += 1;
-      if (task.status === "Completed") row.completed += 1;
-      else if (isOverdue(task, today)) row.delayed += 1;
-      else row.pending += 1;
-    });
-  });
-  return Array.from(byEmployee.values()).map(row => ({
-    ...row,
-    completionPct: row.total ? Math.round((row.completed / row.total) * 100) : 0,
-  }));
 }

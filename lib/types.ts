@@ -209,6 +209,22 @@ export interface ProjectWithLiveStats extends ProjectIndexRow {
   phases?: LivePhaseRow[];
 }
 
+export interface CreateProjectInput {
+  name: string;
+  type: ProjectType;
+  customer: string;
+  owner: string | null;
+  startDate: string;
+  endDate: string;
+  weekOff: WeekDay[];
+}
+
+export interface UpdateProjectPatch {
+  meta?: Partial<ProjectMeta>;
+  phases?: Phase[];
+  tasks?: Task[];
+}
+
 /* ---------------------------------------------------------------------
    TICKETS
 ------------------------------------------------------------------------ */
@@ -228,6 +244,15 @@ export interface Ticket {
   createdAt: string;
 }
 
+export interface CreateTicketInput {
+  title: string;
+  description: string;
+  projectId: string;
+  phase: string | null;
+  assignedTo: string | null;
+  priority: Priority;
+}
+
 /* ---------------------------------------------------------------------
    TEAM PERFORMANCE
 ------------------------------------------------------------------------ */
@@ -243,15 +268,20 @@ export interface TeamPerformanceRow extends Employee {
    DASHBOARD ANALYTICS
 ------------------------------------------------------------------------ */
 /**
- * Portfolio-wide stats captured the first time this server process
- * computes them (see mockDb.getDashboardBaseline) — a real, stable
- * reference point the live dashboard numbers can be diffed against for
- * "vs last month"-style trend captions, rather than fabricated deltas.
+ * Portfolio-wide stats captured the first time the backend computes them
+ * (see converge_backend's DashboardService.getBaseline) — a real, stable
+ * reference point the live dashboard/tickets numbers can be diffed
+ * against for "vs last month"-style trend captions, rather than
+ * fabricated deltas.
  */
 export interface DashboardBaseline {
   activeProjects: number;
   completedProjects: number;
   avgCompletionPct: number;
   delayedTasks: number;
+  totalTickets: number;
+  openTickets: number;
+  resolvedTickets: number;
+  ticketResolutionPct: number;
   capturedAt: string;
 }

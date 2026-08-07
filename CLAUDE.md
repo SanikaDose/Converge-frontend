@@ -1,19 +1,30 @@
 # Converge Projects
 
 Enterprise project management app for Converge's Software, Vision, and Automation teams —
-Next.js (App Router) + TypeScript + MUI, mock in-memory data layer behind real API routes.
+Next.js (App Router) + TypeScript + MUI frontend (`converge_frontend`, this directory) talking
+to a real NestJS + TypeORM + PostgreSQL backend (`../converge_backend`, a sibling directory).
+There is no mock data layer anymore — see "Backend & data" below.
 
 ## Run it
 
+Two servers, both required:
+
 ```bash
-cd /Users/apple/development/Converge
+# Terminal 1 — backend (Postgres must already be running; see converge_backend/.env)
+cd ../converge_backend
 npm install
-npm run dev
+npm run start:dev          # http://localhost:4000
+
+# Terminal 2 — frontend
+cd converge_frontend
+npm install
+npm run dev                # http://localhost:3000
 ```
 
-Opens on http://localhost:3000. Seed data (two example projects — one early-stage, one well
-underway with realistic delays/achievements — plus four tickets) is created the first time
-`lib/mockDb.ts` loads in a given server process.
+The backend seeds demo data (two example projects — one early-stage, one well underway with
+realistic delays/achievements — plus four tickets, and the org directory) on first boot if its
+`projects` table is empty. See `../converge_backend/README.md` for the full API surface and
+`npm run seed` (force re-seed).
 
 ## Architecture at a glance
 
@@ -25,17 +36,14 @@ app/
                               metadata.icons points at public/ApplicationIcon.png (real favicon).
   page.tsx                   Dashboard route ("/")
   team-performance/page.tsx  Team Performance route
+  tickets/page.tsx           Tickets route — KPI row (same StatCard style as the Dashboard,
+                              ticket-flavored) above TicketsPanel.
   projects/[id]/page.tsx     Project detail route
-  api/
-    projects/route.ts            GET (list, live-computed index rows), POST (create)
-    projects/[id]/route.ts       GET (full detail), PATCH (merge meta/phases/tasks)
-    tickets/route.ts             GET, POST
-    tickets/[id]/route.ts        PATCH
-    team-performance/route.ts    GET — server-computed aggregation
-    employees/route.ts           GET — org directory (also directly importable from lib/data.ts)
 
-components/                  All "use client" — this app has no server components beyond
-                              the route handlers above.
+  No app/api/** anymore — every fetch in lib/api.ts hits the real backend
+  (NEXT_PUBLIC_API_URL, see .env.local) instead of a Next.js route handler.
+
+components/                  All "use client" — this app has no server components.
   AppShell.tsx                Top AppBar only — NO sidebar (removed deliberately). Logo +
                                Dashboard/Team Performance nav links + role switcher.
   Logo.tsx                      LogoMark renders public/ApplicationIcon.png via next/image on a
@@ -78,26 +86,52 @@ components/                  All "use client" — this app has no server compone
                                scrollbar/body-background in app/globals.css — plus the standard
                                Next.js App Router emotion-SSR cache wiring.
 
-lib/                          Framework-agnostic — no React imports, safe to use from API
-                              routes or components alike.
+lib/                          Framework-agnostic — no React imports, safe to use from
+                              components (there are no API routes anymore, see above).
   types.ts                     Shared domain types (Task, Phase, ProjectMeta, Employee, Ticket,
                                Actor, permission/role unions, ThemeMode, etc.) — every other lib/*
-                               and component file imports from here rather than re-declaring shapes.
-  data.ts                      TEMPLATE (12 phases / 62 tasks), TEAMS/EMPLOYEES org directory,
-                               ROLES + PERMISSIONS, roleCan(), genId().
-  dateUtils.ts                 UTC-consistent date arithmetic + working-day (Mon–Fri) calendar.
-  businessLogic.ts             Task/phase generation, delay detection, achievement detection,
-                               the approval workflow (requestScheduleChange /
-                               approveScheduleChange / rejectScheduleChange), team-performance
-                               aggregation, live dashboard-stats recompute.
-  mockDb.ts                    In-memory "database" — see "Mock data" below.
+                               and component file imports from here rather than re-declaring
+                               shapes. Also the DashboardBaseline shape returned by GET
+                               /dashboard-summary (see converge_backend).
+  data.ts                      TEMPLATE (12 phases / 62 tasks), ROLES + PERMISSIONS, roleCan(),
+                               genId(), initials()/avatarColor() (pure name→style helpers). The
+                               org directory (TEAMS/EMPLOYEES) used to live here as static
+                               constants — it's real backend data now, see context/OrgContext.tsx.
+  dateUtils.ts                 UTC-consistent date arithmetic + working-day (Mon–Fri) calendar —
+                               ported into converge_backend/src/common/date-utils.ts too, kept
+                               byte-identical so planned-date math matches on both sides.
+  businessLogic.ts             Task/phase generation, delay detection, achievement detection, the
+                               approval workflow (requestScheduleChange / approveScheduleChange /
+                               rejectScheduleChange). Team-performance aggregation and dashboard-
+                               index computation now live server-side (converge_backend); this
+                               file keeps the *client-side live recompute* versions
+                               (withLiveStats, liveProjectStats) that re-derive delay/bucket state
+                               against "now" from whatever the backend already returned, plus
+                               guessEmployeeIdFromFreeText (legacy free-text owner matching, takes
+                               an `employees` array param — see ProjectForm.tsx).
   theme.ts                     createAppTheme(mode) builds the light/dark MUI theme; useStatusHex()
                                is how components read the mode-appropriate status color map — see
-                               "Light/dark theme" below.
-  api.ts                       fetch() wrappers, one per API route.
+                               "Light/dark theme" below. DASHBOARD_COLORS is a separate, vivid,
+                               mode-independent palette for KPI icons / donut segments / project-
+                               card accents — see that export's own doc comment for why it's not
+                               just reusing STATUS_HEX.
+  api.ts                       fetch() wrappers, one per converge_backend route. NEXT_PUBLIC_API_URL
+                               (.env.local) points at it, defaulting to http://localhost:4000.
 
-context/AppContext.tsx        role / selfId / actor / mode (+ toggleMode) React Context, all
-                              persisted together to localStorage.
+context/
+  AppContext.tsx                role / selfId / actor / mode (+ toggleMode) React Context, all
+                               persisted together to localStorage. `actor.name` calls
+                               OrgContext's employeeLabel(), so AppProvider must be nested
+                               *inside* OrgProvider (see app/layout.tsx) — reversing this order
+                               breaks with "must be used within OrgProvider".
+  OrgContext.tsx                 Fetches the org directory (GET /employees) once and provides
+                               teams/employees/employeeById/employeeLabel to the whole app —
+                               every component that used to `import { TEAMS, EMPLOYEES, ... }
+                               from "@/lib/data"` now calls `useOrgContext()` instead
+                               (AppShell.tsx, ProjectDetail.tsx, ProjectForm.tsx, common.tsx's
+                               EmployeeAvatar/OrgSelect). Real Postgres data, not a static list —
+                               if you add a component that needs an employee name/avatar/dropdown,
+                               pull it from here, don't re-add a static import.
 
 public/ApplicationIcon.png    The real Converge logo (uploaded by the user) — used for both
                               the navbar mark and the browser favicon.
@@ -121,19 +155,39 @@ implemented in `businessLogic.ts` and wired into `TaskCard`/`ProjectDetail`, but
 **unreachable** — reintroducing a role without `editScheduleDirectly` in the `PERMISSIONS` table
 in `lib/data.ts` is all it takes to make it live again.
 
-## Mock data — read this before assuming anything is persisted
+## Backend & data — real Postgres, not mock data
 
-`lib/mockDb.ts` is a **module-level in-memory store**. It is seeded once per server process
-(one example project + one ticket) and all API routes read/write that same in-memory object.
-This means:
+Everything is persisted in a real database now. `../converge_backend` is a separate NestJS +
+TypeORM project (its own `package.json`, run separately — see "Run it" above) backed by
+PostgreSQL; this frontend never touches the database directly, only `lib/api.ts`'s `fetch()`
+calls to it.
 
-- Data survives across page navigations and reloads *within a running `npm run dev` session*.
-- Data is **wiped on every server restart** (Fast Refresh recompiles that don't reset the module
-  are fine; stopping and re-running `npm run dev` is not).
-- There is no real database. Swapping one in means rewriting `mockDb.ts`'s functions
-  (`listProjectsIndex`, `getProject`, `createProject`, `updateProject`, `listTickets`,
-  `createTicket`, `updateTicket`) — the API routes and every component calling `lib/api.ts`
-  should not need to change.
+- **Entities**: `Team`, `Employee`, `Project`, `Phase`, `Task`, `Ticket`, `DashboardBaseline` —
+  see `converge_backend/src/entities/`. Task ids are globally unique across every project (not
+  per-project like the old mock store), since they're now rows in one shared Postgres table.
+- **Business-day math is duplicated on purpose, not by accident**: `converge_backend/src/common/`
+  has its own copy of `date-utils.ts`/`business-logic.ts`, ported line-for-line from this
+  frontend's `lib/dateUtils.ts`/`lib/businessLogic.ts`, so planned dates and delay/achievement
+  detection compute identically whether the backend does it (at write/seed time, or for
+  `GET /projects`'s live-computed index rows) or the frontend does it (client-side
+  `withLiveStats`, recomputing "is this still overdue *right now*" without a refetch). If you
+  change the scheduling rules, change both copies.
+- **Full-sync PATCH, not partial diffs**: `ProjectDetail.tsx` always sends the *complete*
+  `phases`/`tasks` arrays it holds in React state to `PATCH /projects/:id` (add/delete/reorder/
+  edit all go through the same `updateProjectApi(id, { meta, phases, tasks })` call) — the
+  backend replaces each set wholesale (upsert everything present, delete anything no longer
+  present) rather than trying to diff. Don't build a new mutation path that sends partial
+  task/phase data expecting a merge; it'll delete whatever you didn't include.
+- **The org directory (teams/employees) is real DB data**, fetched once via `OrgContext`
+  (`GET /employees`) — see the `context/` entry above. Task assignees, project owners, and
+  ticket assignees are all real employee ids validated against this data, not free text.
+- **Dashboard "vs last month" trend captions are a real diff**, not fabricated: the backend
+  captures a `DashboardBaseline` snapshot (projects + tickets) the first time anything asks for
+  it (`GET /dashboard-summary`), persists it, and every KPI trend on the Dashboard and Tickets
+  pages diffs live counts against that one frozen snapshot (`computeStatTrend` in `common.tsx`).
+- Restarting the backend does **not** wipe data (unlike the old in-memory mock) — Postgres
+  persists across restarts. `SeedService` only seeds demo data once, when the `projects` table
+  is empty; see `converge_backend/README.md` for `npm run seed` (force re-seed after truncating).
 
 ## Business-day calendar (week off)
 
@@ -193,7 +247,10 @@ dark (the original look).
 ## Known limitations
 
 - No real authentication — the role switcher in the top bar is a pure client-side simulation.
-- No real database (see above).
+- No CSRF/auth on the backend either — `converge_backend` has no auth layer, just CORS locked to
+  `CORS_ORIGIN` (defaults to `http://localhost:3000`). Fine for local dev, not for a real deploy.
+- `converge_backend` uses TypeORM's `synchronize: true` instead of migrations — appropriate for
+  this stage, not once the database holds data worth protecting from schema drift.
 - `next lint` currently fails ("Invalid project directory") — Next 16 changed how the built-in
   ESLint integration bootstraps and this repo has no `eslint.config.*` yet. Pre-existing, not
   something the TypeScript migration touched; set up ESLint separately if/when needed.
@@ -236,7 +293,35 @@ changed several APIs from what older MUI docs/examples show:
 
 ## History of notable decisions (most recent first)
 
-1. Added a light/dark theme toggle (see "Light/dark theme" above) — navbar sun/moon button,
+1. Replaced the static `TEAMS`/`EMPLOYEES` org directory in `lib/data.ts` with real backend data:
+   a new `context/OrgContext.tsx` fetches `GET /employees` once and every consumer
+   (`AppShell.tsx`, `ProjectDetail.tsx`, `ProjectForm.tsx`, `common.tsx`'s `EmployeeAvatar` /
+   `OrgSelect`) now calls `useOrgContext()` instead of importing a static constant.
+   `AppContext.tsx`'s `actor.name` needed the same data, which meant `OrgProvider` had to become
+   an *ancestor* of `AppProvider` in `app/layout.tsx` (not the reverse) so `AppContext` could
+   consume it. Also reshaped `converge_backend`'s `GET /employees` response to nest `members`
+   under each team and carry a flat `team` display-name string on each employee — a drop-in
+   match for the frontend's existing `Team`/`Employee` types, so no component needed a shape
+   change beyond the import source. `ProjectForm.tsx`'s legacy free-text-owner normalization
+   (`guessEmployeeIdFromFreeText`) had to move from a synchronous mount-time call to a
+   `useEffect` gated on the async employee list actually arriving, since it can no longer assume
+   the org directory is available on the very first render. Removed `lib/businessLogic.ts`'s
+   `aggregateTeamPerformance`, which had become dead code once team-performance aggregation
+   moved server-side (see next entry) but still imported the now-deleted `EMPLOYEES` constant.
+2. Replaced the entire mock in-memory data layer with a real backend: `../converge_backend`, a
+   new sibling NestJS + TypeORM + PostgreSQL project (see "Backend & data" above for the full
+   picture). `app/api/**` and `lib/mockDb.ts` are gone; `lib/api.ts` now calls the backend
+   directly. Business-day date math and delay/achievement detection were ported line-for-line
+   into `converge_backend/src/common/` so both sides compute identical results. Team-performance
+   aggregation and the portfolio index (`GET /projects`) are now computed server-side rather than
+   client-side from a fully-loaded project list. Added a `DashboardBaseline` table so the
+   Dashboard's (and now Tickets page's) "vs last month" trend captions diff against a real
+   persisted snapshot instead of resetting every server restart like the old in-memory version
+   did. `ProjectDetail.tsx`'s existing "PATCH the whole phases/tasks array" mutation pattern
+   carried over unchanged — the backend just treats it as a full sync (upsert + delete-missing)
+   instead of a partial merge, which happened to already be exactly what the frontend was
+   sending.
+3. Added a light/dark theme toggle (see "Light/dark theme" above) — navbar sun/moon button,
    `AppContext.mode` persisted to localStorage, `createAppTheme(mode)` in `lib/theme.ts`. Required
    splitting status colors into `STATUS_HEX_DARK`/`STATUS_HEX_LIGHT` (the dark-tuned bright hues
    had bad contrast as text on white) and reworking every component that renders a status color to
@@ -244,7 +329,7 @@ changed several APIs from what older MUI docs/examples show:
    reliably repaint `<body>`'s background on a live client-side theme swap — worked around with an
    explicit `bgcolor` on `AppShell`'s root `Box` plus a `data-theme`-keyed CSS variable in
    `app/globals.css`, not something to re-break by reverting to relying on `CssBaseline` alone.
-2. Reworked the 12-phase task template's day-offsets to close a real scheduling gap: Phase 01's
+4. Reworked the 12-phase task template's day-offsets to close a real scheduling gap: Phase 01's
    tasks were bunched onto day 0–1 while Phase 02 didn't start until day 7, leaving days 2–6
    reserved-but-empty on the Gantt chart. Re-sequenced with explicit parallel/sequential modeling
    (kickoff → requirement-gathering ‖ site-survey in parallel → planning → scope-freeze, each
@@ -257,7 +342,7 @@ changed several APIs from what older MUI docs/examples show:
    cadence crowding into unreadable overlapping marks, phases are collapsible, the header row and
    phase names are sticky while scrolling, the view auto-scrolls to "today" on load, and clicking
    any task bar jumps to that task in Phases view.
-3. Enriched the seed data (`lib/mockDb.ts`) for demo/screenshot purposes: a second project
+5. Enriched the seed data (`lib/mockDb.ts`) for demo/screenshot purposes: a second project
    ("Vertex Robotics", Solution type, well underway with real delays and achievements — contrast
    against the original early-stage "TE Connectivity" project) and a `simulateProgress` helper
    that stamps realistic status/owner/achievement data across both without hand-authoring every
@@ -266,44 +351,44 @@ changed several APIs from what older MUI docs/examples show:
    function's signed "a minus b" convention turns negative — on-time multi-day task completions
    were incorrectly earning "Outstanding Performance" badges. Args are swapped now
    (`actualFinish, actualStart`).
-4. Added a per-project week-off calendar (see "Business-day calendar" above) — a day-of-week
+6. Added a per-project week-off calendar (see "Business-day calendar" above) — a day-of-week
    picker on the New Project / Project Settings form, max 2 days, defaulting to Saturday+Sunday.
    Every business-day calculation in `lib/dateUtils.ts`/`lib/businessLogic.ts` now takes the
    project's `weekOff` instead of hardcoding Sat/Sun. Also removed the seed project's
    auto-assigned task owners — every task (seeded or newly created) now starts unassigned.
-5. Migrated the entire app from JavaScript/JSX to TypeScript (`strict` mode, no `.js`/`.jsx`
+7. Migrated the entire app from JavaScript/JSX to TypeScript (`strict` mode, no `.js`/`.jsx`
    remaining under `app/`, `components/`, `lib/`, `context/`) — see "TypeScript" above. Surfaced
    one real latent bug in the process: `OrgSelect` (`components/common.tsx`) never accepted or
    forwarded a `disabled` prop, so `TaskCard`'s owner dropdown wasn't actually being locked for
    Pending-Approval tasks; fixed as part of the migration.
-6. Team Performance page decluttered: KPI summary row added (`StatCard`, extracted from
+8. Team Performance page decluttered: KPI summary row added (`StatCard`, extracted from
    `Dashboard.tsx` into `common.tsx` for reuse), Total/Completed/Pending columns merged into one
    "Tasks" cell, zero-task rows show muted "—"/"No tasks" instead of repeated literal zeros, and
    the name/role cell's line-height bug (MUI DataGrid forces cell `line-height` to match row
    height, which was pushing two-line cell content up into the row above) was fixed.
-7. Project detail header compacted: back button is icon-only (no "Portfolio" label), and the
+9. Project detail header compacted: back button is icon-only (no "Portfolio" label), and the
    separate "Product"/status-chip row above the title was merged onto the title's own line to
    save vertical space.
-8. Added a global dark-themed scrollbar (`app/globals.css`) — the browser-default light/white
+10. Added a global dark-themed scrollbar (`app/globals.css`) — the browser-default light/white
    scrollbar thumb read as a bug against this app's dark ground, especially in the always-visible
    phase nav list and task panel scroll regions.
-9. Replaced the hand-vectorized SVG logo approximation with the real uploaded asset
+11. Replaced the hand-vectorized SVG logo approximation with the real uploaded asset
    (`public/ApplicationIcon.png`), used via `next/image` for both the navbar mark and the
    browser favicon (`app/layout.tsx` metadata).
-10. Removed the "On Track Projects" dashboard accordion — folded into "In Progress".
-11. Simplified `ROLES` from a 5-role simulation (Admin/PM/Team Lead/Team Member/Viewer) down to
+12. Removed the "On Track Projects" dashboard accordion — folded into "In Progress".
+13. Simplified `ROLES` from a 5-role simulation (Admin/PM/Team Lead/Team Member/Viewer) down to
    Admin + Developer, both full access, per user request — see "Roles" above.
-12. Redesigned `TaskCard` to match a supplied reference screenshot: inline always-editable
+14. Redesigned `TaskCard` to match a supplied reference screenshot: inline always-editable
    Owner/Day-from-start/Planned-start/Duration fields (commit on blur) instead of a side Drawer.
    `TaskEditorDrawer.jsx` was deleted and replaced by `TaskDetailsDialog.tsx` (a centered modal,
    consistent with every other editor in the app) for name/priority/dependencies only.
    description/owner/scheduling moved to the inline card fields.
-13. `TicketsPanel` reorganized into three accordions (Raised/In Progress/Completed) matching the
+15. `TicketsPanel` reorganized into three accordions (Raised/In Progress/Completed) matching the
     dashboard's project-accordion pattern.
-14. Converted the whole app from a single-file MUI artifact (built earlier, still published as a
+16. Converted the whole app from a single-file MUI artifact (built earlier, still published as a
     Claude.ai Artifact) into this proper Next.js project with real API routes + mock DB + React
     state, sidebar removed in favor of top nav only.
-15. Fixed a real timezone bug in the original date math: mixing local-time `Date` parsing with
+17. Fixed a real timezone bug in the original date math: mixing local-time `Date` parsing with
     UTC serialization silently shifted every computed date back a day (and the shift compounded
     between planned-start and planned-finish, occasionally putting finish before start). All
     date arithmetic in `lib/dateUtils.ts` is now UTC-consistent except `todayISO()`, which
@@ -316,3 +401,13 @@ Before this Next.js conversion, the same app existed as a single self-contained 
 (React + MUI + Emotion bundled via esbuild, `window.storage`/localStorage in place of a real
 backend) published as a Claude.ai Artifact. That version is unrelated to the code in this
 directory now — this repo is the current, actively developed version.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

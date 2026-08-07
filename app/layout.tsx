@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import ThemeRegistry from "@/components/ThemeRegistry";
 import { AppProvider } from "@/context/AppContext";
+import { OrgProvider } from "@/context/OrgContext";
 import { AppShell } from "@/components/AppShell";
 import "./globals.css";
 
@@ -19,11 +20,13 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>
-        <AppProvider>
-          <ThemeRegistry>
-            <AppShell>{children}</AppShell>
-          </ThemeRegistry>
-        </AppProvider>
+        <OrgProvider>
+          <AppProvider>
+            <ThemeRegistry>
+              <AppShell>{children}</AppShell>
+            </ThemeRegistry>
+          </AppProvider>
+        </OrgProvider>
       </body>
     </html>
   );

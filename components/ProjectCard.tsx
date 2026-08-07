@@ -1,17 +1,13 @@
 "use client";
-import React, { useState } from "react";
+import React from "react";
 import Box from "@mui/material/Box";
 import Stack from "./Stack";
 import Typography from "@mui/material/Typography";
 import Chip from "@mui/material/Chip";
 import IconButton from "@mui/material/IconButton";
-import Menu from "@mui/material/Menu";
-import MenuItem from "@mui/material/MenuItem";
-import ListItemIcon from "@mui/material/ListItemIcon";
 import BusinessIcon from "@mui/icons-material/Business";
 import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
-import OpenInNewIcon from "@mui/icons-material/OpenInNew";
+import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import { CompletionRing } from "./CompletionRing";
 import { fmt } from "@/lib/dateUtils";
 import { DASHBOARD_COLORS } from "@/lib/theme";
@@ -20,7 +16,6 @@ import type { ProjectWithLiveStats } from "@/lib/types";
 /** Unchanged card content from the original build — now an MUI Paper-ish Box, inside the status accordions. */
 export function ProjectCard({ project, onOpen }: { project: ProjectWithLiveStats; onOpen: (id: string) => void }) {
   const delayed = project.delayed > 0;
-  const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   return (
     <Box onClick={() => onOpen(project.id)} sx={{
       position: "relative",
@@ -30,18 +25,11 @@ export function ProjectCard({ project, onOpen }: { project: ProjectWithLiveStats
     }}>
       <IconButton
         size="small"
-        onClick={(e) => { e.stopPropagation(); setMenuAnchor(e.currentTarget); }}
+        onClick={(e) => { e.stopPropagation(); onOpen(project.id); }}
         sx={{ position: "absolute", top: 8, right: 8, color: "text.secondary" }}
       >
-        <MoreVertIcon fontSize="small" />
+        <ArrowForwardIcon fontSize="small" />
       </IconButton>
-      <Menu anchorEl={menuAnchor} open={!!menuAnchor} onClose={(e) => { (e as { stopPropagation?: () => void })?.stopPropagation?.(); setMenuAnchor(null); }}
-        onClick={(e) => e.stopPropagation()}>
-        <MenuItem onClick={() => { setMenuAnchor(null); onOpen(project.id); }}>
-          <ListItemIcon><OpenInNewIcon fontSize="small" /></ListItemIcon>
-          Open project
-        </MenuItem>
-      </Menu>
 
       <Stack direction="row" justifyContent="space-between" gap={1.5}>
         <Box sx={{ minWidth: 0 }}>
@@ -53,7 +41,10 @@ export function ProjectCard({ project, onOpen }: { project: ProjectWithLiveStats
             <BusinessIcon sx={{ fontSize: 13 }} /><Typography variant="caption">{project.customer}</Typography>
           </Stack>
         </Box>
-        <CompletionRing pct={project.pct} />
+        {/* Nudged below the absolutely-positioned arrow button (top:8, ~34px tall) so its top-right edge doesn't sit under it. */}
+        <Box sx={{ mt: 3.5, flexShrink: 0 }}>
+          <CompletionRing pct={project.pct} />
+        </Box>
       </Stack>
 
       <Stack direction="row" spacing={0.4} sx={{ mt: 2 }}>

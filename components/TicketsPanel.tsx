@@ -24,7 +24,7 @@ import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import { OrgSelect, StatusChip, EmployeeAvatar } from "./common";
 import { TEMPLATE, roleCan } from "@/lib/data";
 import { fetchTickets, createTicketApi, updateTicketApi } from "@/lib/api";
-import type { CreateTicketInput } from "@/lib/mockDb";
+import type { CreateTicketInput } from "@/lib/types";
 import type { Actor, Priority, StatusColorKey, Ticket, TicketStatus } from "@/lib/types";
 
 const TICKET_STATUS: TicketStatus[] = ["Open", "In Progress", "Resolved", "Closed"];
@@ -125,10 +125,12 @@ function TicketRow({ ticket, canUpdate, onUpdate }: {
  * (Open + In Progress) and Completed (Resolved + Closed) — matching the
  * dashboard's binary project accordion pattern.
  */
-export function TicketsPanel({ actor, projects, refreshKey }: {
+export function TicketsPanel({ actor, projects, refreshKey, onChanged }: {
   actor: Actor;
   projects: ProjectOption[];
   refreshKey: number;
+  /** Fires after a ticket is successfully created or updated — lets a parent (e.g. the Tickets page's KPI row) refetch its own ticket-derived stats instead of going stale. */
+  onChanged?: () => void;
 }) {
   const { role } = actor;
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -151,6 +153,7 @@ export function TicketsPanel({ actor, projects, refreshKey }: {
       const ticket = await createTicketApi(payload);
       setTickets(prev => [ticket, ...prev]);
       setShowForm(false);
+      onChanged?.();
     } catch (e) {
       console.error(e);
     }
@@ -160,7 +163,7 @@ export function TicketsPanel({ actor, projects, refreshKey }: {
   const updateTicket = async (id: string, updates: Partial<Ticket>) => {
     if (!roleCan(role, "updateTicketStatus")) return;
     setTickets(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
-    try { await updateTicketApi(id, updates); } catch (e) { console.error(e); }
+    try { await updateTicketApi(id, updates); onChanged?.(); } catch (e) { console.error(e); }
   };
 
   const grouped = useMemo(() => {

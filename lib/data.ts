@@ -1,12 +1,16 @@
 /**
- * Core static data: the 12-phase project template, the organization's
- * team/employee directory, and role/permission tables. Nothing in this
- * file is React — it's the same kind of plain-data module the original
- * app used for TEMPLATE, kept as the single source of truth so business
- * logic (business-day math, task generation, team aggregation) and UI
- * components all read from one place.
+ * Core static data: the 12-phase project template and role/permission
+ * tables. Nothing in this file is React — it's the same kind of plain-data
+ * module the original app used for TEMPLATE, kept as the single source of
+ * truth for business logic (business-day math, task generation).
+ *
+ * The organization's team/employee directory used to live here too, as
+ * static TEAMS/EMPLOYEES constants — it's now real data owned by the
+ * backend (Postgres, via GET /employees) and fetched through
+ * context/OrgContext.tsx instead, so it reflects the actual DB rather
+ * than a hardcoded snapshot. Use `useOrgContext()` for teams/employees.
  */
-import type { AppRole, Employee, PermissionAction, Team, TemplatePhase, WeekDay } from "./types";
+import type { AppRole, PermissionAction, TemplatePhase, WeekDay } from "./types";
 
 /* ---------------------------------------------------------------------
    TEMPLATE — derived from the project plan spreadsheet.
@@ -136,59 +140,6 @@ export const WEEKDAY_SHORT: Record<WeekDay, string> = {
   0: "Sun", 1: "Mon", 2: "Tue", 3: "Wed", 4: "Thu", 5: "Fri", 6: "Sat",
 };
 export const MAX_WEEK_OFF_DAYS = 2;
-
-/* ---------------------------------------------------------------------
-   ORGANIZATION DIRECTORY — replaces every free-text owner/assignee
-   field in the app. Every person has a stable id used for storage;
-   `label` includes the (TL) suffix used in the grouped dropdown.
------------------------------------------------------------------------- */
-export const TEAMS: Team[] = [
-  {
-    id: "software",
-    name: "Software Team",
-    members: [
-      { id: "viren-patil", name: "Viren Patil", role: "Team Lead" },
-      { id: "shubham-tanapure", name: "Shubham Tanapure", role: "Developer" },
-      { id: "sanika-dose", name: "Sanika Dose", role: "Developer" },
-      { id: "prachi-jamgaonkar", name: "Prachi Jamgaonkar", role: "Developer" },
-      { id: "mayuri-bondre", name: "Mayuri Bondre", role: "Developer" },
-    ],
-  },
-  {
-    id: "vision",
-    name: "Vision Team",
-    members: [
-      { id: "nikhil-warokar", name: "Nikhil Warokar", role: "Team Lead" },
-      { id: "krishna-kumbhar", name: "Krishna Kumbhar", role: "Developer" },
-      { id: "jay-remalukar", name: "Jay Remalukar", role: "Developer" },
-      { id: "pavitra-joshi", name: "Pavitra Joshi", role: "Developer" },
-      { id: "mayur-jare", name: "Mayur Jare", role: "Developer" },
-      { id: "ashutosh-dodiya", name: "Ashutosh Dodiya", role: "Developer" },
-      { id: "hritik-patil", name: "Hritik Patil", role: "Developer" },
-    ],
-  },
-  {
-    id: "automation",
-    name: "Automation Team",
-    members: [
-      { id: "bharat-vinchwekar", name: "Bharat Vinchwekar", role: "Team Lead" },
-      { id: "sanket-chavhan", name: "Sanket Chavhan", role: "Developer" },
-    ],
-  },
-];
-
-// Flat lookup — every UI piece that needs "the employee for this id"
-// (avatars, task cards, team performance) reads from this map.
-export const EMPLOYEES: Employee[] = TEAMS.flatMap(team =>
-  team.members.map(m => ({ ...m, team: team.name, teamId: team.id }))
-);
-export const EMPLOYEE_BY_ID: Record<string, Employee> = Object.fromEntries(EMPLOYEES.map(e => [e.id, e]));
-
-export function employeeLabel(id: string | null | undefined): string {
-  const e = id ? EMPLOYEE_BY_ID[id] : undefined;
-  if (!e) return "Unassigned";
-  return e.role === "Team Lead" ? `${e.name} (TL)` : e.name;
-}
 
 export function initials(name: string | null | undefined): string {
   return (name || "?").split(" ").filter(Boolean).map(w => w[0]).slice(0, 2).join("").toUpperCase();

@@ -13,6 +13,8 @@ import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
 import Select, { type SelectChangeEvent } from "@mui/material/Select";
 import MenuItem from "@mui/material/MenuItem";
+import ToggleButton from "@mui/material/ToggleButton";
+import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Accordion from "@mui/material/Accordion";
 import AccordionSummary from "@mui/material/AccordionSummary";
 import AccordionDetails from "@mui/material/AccordionDetails";
@@ -147,7 +149,7 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
   const [ticketBusy, setTicketBusy] = useState(false);
   const [baseline, setBaseline] = useState<DashboardBaseline | null>(null);
   const [trendRange, setTrendRange] = useState<TrendRange>("month");
-  const [showAllDeadlines, setShowAllDeadlines] = useState(false);
+  const [deadlineFilter, setDeadlineFilter] = useState<"upcoming" | "overdue">("upcoming");
   const today = todayISO();
 
   const load = useCallback(async () => {
@@ -247,6 +249,15 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
     items.sort((a, b) => a.plannedFinish.localeCompare(b.plannedFinish));
     return items;
   }, [projects]);
+
+  const overdueDeadlines = useMemo(
+    () => upcomingDeadlines.filter(d => diffDays(d.plannedFinish, today) < 0),
+    [upcomingDeadlines, today],
+  );
+  const upcomingOnlyDeadlines = useMemo(
+    () => upcomingDeadlines.filter(d => diffDays(d.plannedFinish, today) >= 0),
+    [upcomingDeadlines, today],
+  );
 
   const projectOptions = useMemo(() => projects.map(p => ({ id: p.id, name: p.name })), [projects]);
 
@@ -351,18 +362,28 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
 
         <Grid size={{ xs: 12, md: 4 }}>
           <AnalyticsCard
-            title="Upcoming Deadlines"
-            action={upcomingDeadlines.length > 3 && (
-              <Button size="small" onClick={() => setShowAllDeadlines(v => !v)} sx={{ fontSize: 12.5 }}>
-                {showAllDeadlines ? "Show less" : "View all"}
-              </Button>
-            )}
+            title="Deadline"
+            action={
+              <ToggleButtonGroup size="small" exclusive value={deadlineFilter}
+                onChange={(_e, v: "upcoming" | "overdue" | null) => v && setDeadlineFilter(v)}
+                sx={{ "& .MuiToggleButton-root": { fontSize: 11.5, px: 1.25, py: 0.25 } }}>
+                <ToggleButton value="upcoming">Upcoming</ToggleButton>
+                <ToggleButton value="overdue">Overdue</ToggleButton>
+              </ToggleButtonGroup>
+            }
           >
-            {upcomingDeadlines.length === 0 ? (
-              <Typography color="text.secondary" sx={{ py: 4, textAlign: "center" }}>Nothing due — you&apos;re all caught up.</Typography>
-            ) : (
-              <Stack spacing={1.25} sx={{ maxHeight: showAllDeadlines ? 420 : "none", overflowY: showAllDeadlines ? "auto" : "visible" }}>
-                {upcomingDeadlines.slice(0, showAllDeadlines ? 8 : 3).map((d, i) => {
+            {(() => {
+              const list = deadlineFilter === "overdue" ? overdueDeadlines : upcomingOnlyDeadlines;
+              if (list.length === 0) {
+                return (
+                  <Typography color="text.secondary" sx={{ py: 4, textAlign: "center" }}>
+                    {deadlineFilter === "overdue" ? "No overdue tasks — you're all caught up." : "Nothing upcoming right now."}
+                  </Typography>
+                );
+              }
+              return (
+              <Stack spacing={1.25}>
+                {list.slice(0, 3).map((d, i) => {
                   const badge = dateBadge(d.plannedFinish);
                   const chip = deadlineChip(d.plannedFinish, today);
                   return (
@@ -392,7 +413,8 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
                   );
                 })}
               </Stack>
-            )}
+              );
+            })()}
           </AnalyticsCard>
         </Grid>
       </Grid>

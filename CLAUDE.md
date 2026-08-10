@@ -35,6 +35,8 @@ app/
                               MUI theme, so AppProvider has to be the outer one.
                               metadata.icons points at public/ApplicationIcon.png (real favicon).
   page.tsx                   Dashboard route ("/")
+  login/page.tsx             Sign-in screen (split brand/form card). The one route that
+                              renders outside AppShell — see components/AuthGate.
   team-performance/page.tsx  Team Performance route
   tickets/page.tsx           Tickets route — KPI row (same StatCard style as the Dashboard,
                               ticket-flavored) above TicketsPanel.
@@ -45,7 +47,14 @@ app/
 
 components/                  All "use client" — this app has no server components.
   AppShell.tsx                Top AppBar only — NO sidebar (removed deliberately). Logo +
-                               Dashboard/Team Performance nav links + role switcher.
+                               nav links + theme toggle + notifications + account menu
+                               (signed-in name/code/team + Sign out). The old "Viewing as"
+                               role switcher and "You are" picker are gone — identity comes
+                               from the session now, see context/AuthContext.tsx.
+  AuthGate.tsx                  Decides the chrome per route: /login renders bare, everything
+                               else renders inside AppShell and only with a session. Redirects
+                               happen in an effect (never during render) and it shows a spinner
+                               rather than flashing the wrong screen mid-redirect.
   Logo.tsx                      LogoMark renders public/ApplicationIcon.png via next/image on a
                                light rounded-square tile; LogoLockup adds the wordmark + the
                                three Vision/Software/Automation accent bars.
@@ -119,11 +128,16 @@ lib/                          Framework-agnostic — no React imports, safe to u
                                (.env.local) points at it, defaulting to http://localhost:4000.
 
 context/
-  AppContext.tsx                role / selfId / actor / mode (+ toggleMode) React Context, all
-                               persisted together to localStorage. `actor.name` calls
-                               OrgContext's employeeLabel(), so AppProvider must be nested
-                               *inside* OrgProvider (see app/layout.tsx) — reversing this order
-                               breaks with "must be used within OrgProvider".
+  AuthContext.tsx               Sign-in state: `user` (the AuthedUser returned by
+                               POST /auth/login), `ready` (false until the stored session has
+                               been read — guards MUST wait on this), signIn(), signOut().
+                               Session persists to localStorage. See "Authentication" below
+                               for what this does and does not secure.
+  AppContext.tsx                role / selfId / actor / mode (+ toggleMode). `role` and
+                               `selfId` are DERIVED from AuthContext's user — there are no
+                               setters any more (changing who you are = sign out and back in).
+                               Only `mode` (light/dark) persists to localStorage. AppProvider
+                               must therefore be nested *inside* AuthProvider.
   OrgContext.tsx                 Fetches the org directory (GET /employees) once and provides
                                teams/employees/employeeById/employeeLabel to the whole app —
                                every component that used to `import { TEAMS, EMPLOYEES, ... }
@@ -137,11 +151,43 @@ public/ApplicationIcon.png    The real Converge logo (uploaded by the user) — 
                               the navbar mark and the browser favicon.
 ```
 
+## Authentication
+
+Sign-in is real (bcrypt-verified server-side), but it is **not yet an access-control
+boundary** — read this whole section before assuming anything is protected.
+
+- **Flow**: `app/login/page.tsx` → `AuthContext.signIn()` → `POST /auth/login`
+  (`converge_backend/src/auth/`) → bcrypt-compares against `employees.password_hash` →
+  returns the employee's non-secret profile (`AuthedUser`). No hash ever leaves the backend.
+- **Credentials**: employees sign in with an `employeeCode` — initials + a global sequence
+  number (`VP001`, `SD003`). The sequence is load-bearing: plain initials collide (Prachi
+  Jamgaonkar and Pavitra Joshi are both "PJ" → `PJ004` / `PJ009`). Codes are matched
+  case-insensitively. Derivation lives in `converge_backend/src/common/credentials.ts`.
+- **Seeded password**: every seeded employee shares `DEFAULT_PASSWORD` ("Converge@123") — a
+  development convenience, not a production secret. `SeedService.ensureCredentials()` runs on
+  every boot (not just first seed) and fills only *missing* code/hash/appRole columns, so it
+  both backfills employees created before sign-in existed and never clobbers an existing
+  credential.
+- **No user enumeration**: a bad code and a bad password return the same generic 401, and the
+  service bcrypt-compares against a dummy hash when no employee matches so response timing
+  doesn't leak which codes are real.
+- **What this does NOT do** (the important part): the session is a plain localStorage record
+  with no token, and **every backend data endpoint is still unauthenticated** — no guards, CORS
+  only. Anyone who can reach the API can read/write without signing in, and anyone with
+  devtools can forge the session record. `AuthGate` is a UI gate, not a security boundary.
+  Closing this means issuing a real session token on login and verifying it in a Nest guard on
+  every non-auth route.
+
 ## Roles (currently simplified)
 
 `ROLES = ["Admin", "Developer"]` in `lib/data.ts` — **both roles currently have every
-permission** (`PERMISSIONS` maps every action to `ALL_ROLES`). This was a deliberate
-simplification requested by the user ("all access for now").
+permission** (`PERMISSIONS` maps every action to `ALL_ROLES`), per an explicit request not to
+hide anything from Developers. Don't "helpfully" re-restrict Developer without being asked.
+
+A user's `appRole` is assigned at seed time from their org title (Team Lead → Admin, everyone
+else → Developer) and comes back with the login response; `AppContext.role` reads it. Since
+both roles hold every permission right now, that mapping changes nothing user-visible yet —
+it's the seam real role-based access will use once requirements exist.
 
 Task owners are **never pre-assigned** — every task (seed data included) is created with
 `assignedTo: null`. This was a deliberate change: the seed project used to auto-assign its first
@@ -165,6 +211,10 @@ calls to it.
 - **Entities**: `Team`, `Employee`, `Project`, `Phase`, `Task`, `Ticket`, `DashboardBaseline` —
   see `converge_backend/src/entities/`. Task ids are globally unique across every project (not
   per-project like the old mock store), since they're now rows in one shared Postgres table.
+  `Employee` also carries the sign-in columns (`employee_code`, `password_hash`, `app_role`) —
+  all nullable purely so `synchronize: true` could add them to existing rows; the seeder
+  backfills them. `password_hash` must never appear in an API response (`employees.service.ts`
+  maps columns explicitly rather than returning entities, which is what keeps it out).
 - **Business-day math is duplicated on purpose, not by accident**: `converge_backend/src/common/`
   has its own copy of `date-utils.ts`/`business-logic.ts`, ported line-for-line from this
   frontend's `lib/dateUtils.ts`/`lib/businessLogic.ts`, so planned dates and delay/achievement
@@ -246,9 +296,14 @@ dark (the original look).
 
 ## Known limitations
 
-- No real authentication — the role switcher in the top bar is a pure client-side simulation.
-- No CSRF/auth on the backend either — `converge_backend` has no auth layer, just CORS locked to
-  `CORS_ORIGIN` (defaults to `http://localhost:3000`). Fine for local dev, not for a real deploy.
+- **Sign-in exists but protects nothing server-side** — passwords are really bcrypt-verified,
+  but no data endpoint requires a session and the session itself is an unsigned localStorage
+  record. See "Authentication" above for exactly what's missing. Fine for local dev, not for a
+  real deploy.
+- Everyone shares one seeded dev password, and there's no signup, password-change, or reset
+  flow — accounts exist only because the seeder created them.
+- No CSRF protection on the backend either — just CORS locked to `CORS_ORIGIN` (defaults to
+  `http://localhost:3000`).
 - `converge_backend` uses TypeORM's `synchronize: true` instead of migrations — appropriate for
   this stage, not once the database holds data worth protecting from schema drift.
 - `next lint` currently fails ("Invalid project directory") — Next 16 changed how the built-in
@@ -293,7 +348,19 @@ changed several APIs from what older MUI docs/examples show:
 
 ## History of notable decisions (most recent first)
 
-1. Replaced the static `TEAMS`/`EMPLOYEES` org directory in `lib/data.ts` with real backend data:
+1. Added sign-in (see "Authentication" above): a `/login` split-card screen modelled on a
+   supplied reference, a `converge_backend` `auth` module doing real bcrypt verification, and
+   `employees.employee_code` / `password_hash` / `app_role` columns provisioned idempotently by
+   the seeder on every boot. Identity stopped being a client-side toy: the navbar's "Viewing
+   as" role switcher and "You are" picker were deleted, `AppContext` now *derives* `role` and
+   `selfId` from the session instead of owning them (its setters are gone, and its localStorage
+   key changed from `converge_projects_role_pref_v1` to `converge_projects_ui_pref_v1` since it
+   only stores theme now), and `AppShell`'s avatar became an account menu with Sign out.
+   `AppContext` no longer depends on `OrgContext` (it uses the session's own `name`), so the
+   old "OrgProvider must wrap AppProvider" constraint is now just "AuthProvider must wrap
+   AppProvider". Deliberately NOT done: guarding the backend's data endpoints — that's the
+   real remaining gap, called out under Known limitations rather than papered over.
+2. Replaced the static `TEAMS`/`EMPLOYEES` org directory in `lib/data.ts` with real backend data:
    a new `context/OrgContext.tsx` fetches `GET /employees` once and every consumer
    (`AppShell.tsx`, `ProjectDetail.tsx`, `ProjectForm.tsx`, `common.tsx`'s `EmployeeAvatar` /
    `OrgSelect`) now calls `useOrgContext()` instead of importing a static constant.
@@ -308,7 +375,7 @@ changed several APIs from what older MUI docs/examples show:
    the org directory is available on the very first render. Removed `lib/businessLogic.ts`'s
    `aggregateTeamPerformance`, which had become dead code once team-performance aggregation
    moved server-side (see next entry) but still imported the now-deleted `EMPLOYEES` constant.
-2. Replaced the entire mock in-memory data layer with a real backend: `../converge_backend`, a
+3. Replaced the entire mock in-memory data layer with a real backend: `../converge_backend`, a
    new sibling NestJS + TypeORM + PostgreSQL project (see "Backend & data" above for the full
    picture). `app/api/**` and `lib/mockDb.ts` are gone; `lib/api.ts` now calls the backend
    directly. Business-day date math and delay/achievement detection were ported line-for-line
@@ -321,7 +388,7 @@ changed several APIs from what older MUI docs/examples show:
    carried over unchanged — the backend just treats it as a full sync (upsert + delete-missing)
    instead of a partial merge, which happened to already be exactly what the frontend was
    sending.
-3. Added a light/dark theme toggle (see "Light/dark theme" above) — navbar sun/moon button,
+4. Added a light/dark theme toggle (see "Light/dark theme" above) — navbar sun/moon button,
    `AppContext.mode` persisted to localStorage, `createAppTheme(mode)` in `lib/theme.ts`. Required
    splitting status colors into `STATUS_HEX_DARK`/`STATUS_HEX_LIGHT` (the dark-tuned bright hues
    had bad contrast as text on white) and reworking every component that renders a status color to
@@ -329,7 +396,7 @@ changed several APIs from what older MUI docs/examples show:
    reliably repaint `<body>`'s background on a live client-side theme swap — worked around with an
    explicit `bgcolor` on `AppShell`'s root `Box` plus a `data-theme`-keyed CSS variable in
    `app/globals.css`, not something to re-break by reverting to relying on `CssBaseline` alone.
-4. Reworked the 12-phase task template's day-offsets to close a real scheduling gap: Phase 01's
+5. Reworked the 12-phase task template's day-offsets to close a real scheduling gap: Phase 01's
    tasks were bunched onto day 0–1 while Phase 02 didn't start until day 7, leaving days 2–6
    reserved-but-empty on the Gantt chart. Re-sequenced with explicit parallel/sequential modeling
    (kickoff → requirement-gathering ‖ site-survey in parallel → planning → scope-freeze, each
@@ -342,7 +409,7 @@ changed several APIs from what older MUI docs/examples show:
    cadence crowding into unreadable overlapping marks, phases are collapsible, the header row and
    phase names are sticky while scrolling, the view auto-scrolls to "today" on load, and clicking
    any task bar jumps to that task in Phases view.
-5. Enriched the seed data (`lib/mockDb.ts`) for demo/screenshot purposes: a second project
+6. Enriched the seed data (`lib/mockDb.ts`) for demo/screenshot purposes: a second project
    ("Vertex Robotics", Solution type, well underway with real delays and achievements — contrast
    against the original early-stage "TE Connectivity" project) and a `simulateProgress` helper
    that stamps realistic status/owner/achievement data across both without hand-authoring every
@@ -351,44 +418,44 @@ changed several APIs from what older MUI docs/examples show:
    function's signed "a minus b" convention turns negative — on-time multi-day task completions
    were incorrectly earning "Outstanding Performance" badges. Args are swapped now
    (`actualFinish, actualStart`).
-6. Added a per-project week-off calendar (see "Business-day calendar" above) — a day-of-week
+7. Added a per-project week-off calendar (see "Business-day calendar" above) — a day-of-week
    picker on the New Project / Project Settings form, max 2 days, defaulting to Saturday+Sunday.
    Every business-day calculation in `lib/dateUtils.ts`/`lib/businessLogic.ts` now takes the
    project's `weekOff` instead of hardcoding Sat/Sun. Also removed the seed project's
    auto-assigned task owners — every task (seeded or newly created) now starts unassigned.
-7. Migrated the entire app from JavaScript/JSX to TypeScript (`strict` mode, no `.js`/`.jsx`
+8. Migrated the entire app from JavaScript/JSX to TypeScript (`strict` mode, no `.js`/`.jsx`
    remaining under `app/`, `components/`, `lib/`, `context/`) — see "TypeScript" above. Surfaced
    one real latent bug in the process: `OrgSelect` (`components/common.tsx`) never accepted or
    forwarded a `disabled` prop, so `TaskCard`'s owner dropdown wasn't actually being locked for
    Pending-Approval tasks; fixed as part of the migration.
-8. Team Performance page decluttered: KPI summary row added (`StatCard`, extracted from
+9. Team Performance page decluttered: KPI summary row added (`StatCard`, extracted from
    `Dashboard.tsx` into `common.tsx` for reuse), Total/Completed/Pending columns merged into one
    "Tasks" cell, zero-task rows show muted "—"/"No tasks" instead of repeated literal zeros, and
    the name/role cell's line-height bug (MUI DataGrid forces cell `line-height` to match row
    height, which was pushing two-line cell content up into the row above) was fixed.
-9. Project detail header compacted: back button is icon-only (no "Portfolio" label), and the
+10. Project detail header compacted: back button is icon-only (no "Portfolio" label), and the
    separate "Product"/status-chip row above the title was merged onto the title's own line to
    save vertical space.
-10. Added a global dark-themed scrollbar (`app/globals.css`) — the browser-default light/white
+11. Added a global dark-themed scrollbar (`app/globals.css`) — the browser-default light/white
    scrollbar thumb read as a bug against this app's dark ground, especially in the always-visible
    phase nav list and task panel scroll regions.
-11. Replaced the hand-vectorized SVG logo approximation with the real uploaded asset
+12. Replaced the hand-vectorized SVG logo approximation with the real uploaded asset
    (`public/ApplicationIcon.png`), used via `next/image` for both the navbar mark and the
    browser favicon (`app/layout.tsx` metadata).
-12. Removed the "On Track Projects" dashboard accordion — folded into "In Progress".
-13. Simplified `ROLES` from a 5-role simulation (Admin/PM/Team Lead/Team Member/Viewer) down to
+13. Removed the "On Track Projects" dashboard accordion — folded into "In Progress".
+14. Simplified `ROLES` from a 5-role simulation (Admin/PM/Team Lead/Team Member/Viewer) down to
    Admin + Developer, both full access, per user request — see "Roles" above.
-14. Redesigned `TaskCard` to match a supplied reference screenshot: inline always-editable
+15. Redesigned `TaskCard` to match a supplied reference screenshot: inline always-editable
    Owner/Day-from-start/Planned-start/Duration fields (commit on blur) instead of a side Drawer.
    `TaskEditorDrawer.jsx` was deleted and replaced by `TaskDetailsDialog.tsx` (a centered modal,
    consistent with every other editor in the app) for name/priority/dependencies only.
    description/owner/scheduling moved to the inline card fields.
-15. `TicketsPanel` reorganized into three accordions (Raised/In Progress/Completed) matching the
+16. `TicketsPanel` reorganized into three accordions (Raised/In Progress/Completed) matching the
     dashboard's project-accordion pattern.
-16. Converted the whole app from a single-file MUI artifact (built earlier, still published as a
+17. Converted the whole app from a single-file MUI artifact (built earlier, still published as a
     Claude.ai Artifact) into this proper Next.js project with real API routes + mock DB + React
     state, sidebar removed in favor of top nav only.
-17. Fixed a real timezone bug in the original date math: mixing local-time `Date` parsing with
+18. Fixed a real timezone bug in the original date math: mixing local-time `Date` parsing with
     UTC serialization silently shifted every computed date back a day (and the shift compounded
     between planned-start and planned-finish, occasionally putting finish before start). All
     date arithmetic in `lib/dateUtils.ts` is now UTC-consistent except `todayISO()`, which

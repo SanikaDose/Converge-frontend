@@ -21,12 +21,16 @@ import { useOrgContext } from "@/context/OrgContext";
 import type { ProjectMeta, ProjectType, WeekDay } from "@/lib/types";
 
 const TASK_COUNT = TEMPLATE.reduce((a, p) => a + p.tasks.length, 0);
-const ALL_WEEKDAYS: WeekDay[] = [0, 1, 2, 3, 4, 5, 6];
+// Displayed Monday → Sunday rather than the Date#getUTCDay() order (Sun=0
+// first) that WEEKDAY_SHORT/WEEKDAY_LABELS are keyed by — this is purely a
+// display-order change, the underlying WeekDay values are unchanged.
+const ALL_WEEKDAYS: WeekDay[] = [1, 2, 3, 4, 5, 6, 0];
 
 export interface ProjectFormPayload {
   name: string;
   type: ProjectType;
   customer: string;
+  location: string;
   owner: string | null;
   startDate: string;
   endDate: string;
@@ -46,6 +50,7 @@ export function ProjectForm({ title, initial, onClose, onSubmit, busy, submitLab
   const [name, setName] = useState(initial?.name || "");
   const [type, setType] = useState<ProjectType>(initial?.type || "Product");
   const [customer, setCustomer] = useState(initial?.customer || "");
+  const [location, setLocation] = useState(initial?.location || "");
   const [owner, setOwner] = useState<string | null>(
     initial?.owner && employeeById[initial.owner] ? initial.owner : null,
   );
@@ -98,6 +103,9 @@ export function ProjectForm({ title, initial, onClose, onSubmit, busy, submitLab
         <TextField label="Customer" fullWidth value={customer} onChange={(e) => setCustomer(e.target.value)}
           placeholder="e.g. TE Connectivity" />
 
+        <TextField label="Location" fullWidth value={location} onChange={(e) => setLocation(e.target.value)}
+          placeholder="e.g. Pune, India" />
+
         <OrgSelect label="Project lead / owner" value={owner} onChange={setOwner} />
 
         <Stack direction="row" spacing={2}>
@@ -142,7 +150,7 @@ export function ProjectForm({ title, initial, onClose, onSubmit, busy, submitLab
       <DialogActions sx={{ p: 2 }}>
         <Button onClick={onClose}>Cancel</Button>
         <Button variant="contained" disabled={!canSubmit || busy} startIcon={busy ? <CircularProgress size={16} /> : <AddIcon />}
-          onClick={() => onSubmit({ name: name.trim(), type, customer: customer.trim(), owner, startDate, endDate, weekOff })}>
+          onClick={() => onSubmit({ name: name.trim(), type, customer: customer.trim(), location: location.trim(), owner, startDate, endDate, weekOff })}>
           {busy ? "Saving…" : submitLabel}
         </Button>
       </DialogActions>

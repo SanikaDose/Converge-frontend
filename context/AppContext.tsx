@@ -1,15 +1,15 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { ROLES, roleCan } from "@/lib/data";
-import { useOrgContext } from "./OrgContext";
+import { roleCan } from "@/lib/data";
+import { useAuth } from "./AuthContext";
 import type { Actor, AppRole, PermissionAction, ThemeMode } from "@/lib/types";
 
 interface AppContextValue {
+  /** Access role of the signed-in user (see AuthContext). */
   role: AppRole;
-  setRole: (role: AppRole) => void;
+  /** Employee id of the signed-in user, or null while signed out. */
   selfId: string | null;
-  setSelfId: (id: string | null) => void;
   actor: Actor;
   mode: ThemeMode;
   toggleMode: () => void;
@@ -17,26 +17,25 @@ interface AppContextValue {
 
 const AppContext = createContext<AppContextValue | null>(null);
 
-const STORAGE_KEY = "converge_projects_role_pref_v1";
+const STORAGE_KEY = "converge_projects_ui_pref_v1";
 
 interface StoredPref {
-  role?: AppRole;
-  selfId?: string | null;
   mode?: ThemeMode;
 }
 
 /**
- * Client-side "viewing as" role simulation — the same caveat as always:
- * there is no real backend auth, this just reshapes the UI per role so
- * the team can validate the role-based design. Role + selfId (which
- * organization member "you are") persist to localStorage so a reload
- * doesn't reset the demo. `mode` (light/dark) rides along in the same
- * stored blob since it's the same kind of per-visitor UI preference.
+ * Identity + per-visitor UI preferences.
+ *
+ * `role`/`selfId` are derived from the signed-in user (AuthContext) — they
+ * are no longer a client-side "view as" switcher, and there's no setter:
+ * to change who you are, sign out and back in. `mode` (light/dark) is the
+ * one genuinely local preference and still persists to localStorage.
+ *
+ * The fallback role while signed out is only ever seen by the login route
+ * (every other route is gated behind AuthGate), so it gates nothing.
  */
 export function AppProvider({ children }: { children: ReactNode }) {
-  const { employeeLabel } = useOrgContext();
-  const [role, setRole] = useState<AppRole>("Admin");
-  const [selfId, setSelfId] = useState<string | null>(null);
+  const { user } = useAuth();
   const [mode, setMode] = useState<ThemeMode>("dark");
   const [loaded, setLoaded] = useState(false);
 
@@ -45,8 +44,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const pref: StoredPref = JSON.parse(raw);
-        if (pref.role && (ROLES as string[]).includes(pref.role)) setRole(pref.role);
-        if (pref.selfId) setSelfId(pref.selfId);
         if (pref.mode === "light" || pref.mode === "dark") setMode(pref.mode);
       }
     } catch { /* no stored preference yet */ }
@@ -55,17 +52,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!loaded) return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ role, selfId, mode }));
-  }, [role, selfId, mode, loaded]);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ mode }));
+  }, [mode, loaded]);
 
   const toggleMode = () => setMode(m => m === "dark" ? "light" : "dark");
 
-  const actor = useMemo<Actor>(() => ({
-    role, id: selfId, name: selfId ? employeeLabel(selfId) : role,
-    can: (action: PermissionAction) => roleCan(role, action),
-  }), [role, selfId, employeeLabel]);
+  const role: AppRole = user?.appRole ?? "Admin";
+  const selfId = user?.id ?? null;
+  const displayName = user?.name ?? role;
 
-  const value = useMemo<AppContextValue>(() => ({ role, setRole, selfId, setSelfId, actor, mode, toggleMode }), [role, selfId, actor, mode]);
+  const actor = useMemo<Actor>(() => ({
+    role, id: selfId, name: displayName,
+    can: (action: PermissionAction) => roleCan(role, action),
+  }), [role, selfId, displayName]);
+
+  const value = useMemo<AppContextValue>(() => ({ role, selfId, actor, mode, toggleMode }), [role, selfId, actor, mode]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

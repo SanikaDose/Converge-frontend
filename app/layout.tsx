@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import ThemeRegistry from "@/components/ThemeRegistry";
 import { AppProvider } from "@/context/AppContext";
+import { AuthProvider } from "@/context/AuthContext";
 import { OrgProvider } from "@/context/OrgContext";
-import { AppShell } from "@/components/AppShell";
+import { AuthGate } from "@/components/AuthGate";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -21,11 +22,13 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en">
       <body>
         <OrgProvider>
-          <AppProvider>
-            <ThemeRegistry>
-              <AppShell>{children}</AppShell>
-            </ThemeRegistry>
-          </AppProvider>
+          <AuthProvider>
+            <AppProvider>
+              <ThemeRegistry>
+                <AuthGate>{children}</AuthGate>
+              </ThemeRegistry>
+            </AppProvider>
+          </AuthProvider>
         </OrgProvider>
       </body>
     </html>

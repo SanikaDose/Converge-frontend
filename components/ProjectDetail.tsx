@@ -17,6 +17,7 @@ import GridViewIcon from "@mui/icons-material/GridView";
 import TimelineIcon from "@mui/icons-material/Timeline";
 import ViewKanbanIcon from "@mui/icons-material/ViewKanban";
 import BusinessIcon from "@mui/icons-material/Business";
+import PlaceIcon from "@mui/icons-material/Place";
 import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 
 import { CompletionRing } from "./CompletionRing";
@@ -259,6 +260,9 @@ export function ProjectDetail({ projectId, actor, onBack }: { projectId: string;
             </Stack>
             <Stack direction="row" spacing={2} sx={{ mt: 0.5, ml: 0.5 }} color="text.secondary" flexWrap="wrap">
               <Stack direction="row" spacing={0.5} alignItems="center"><BusinessIcon sx={{ fontSize: 14 }} /><Typography variant="caption">{detail.meta.customer}</Typography></Stack>
+              {detail.meta.location && (
+                <Stack direction="row" spacing={0.5} alignItems="center"><PlaceIcon sx={{ fontSize: 14 }} /><Typography variant="caption">{detail.meta.location}</Typography></Stack>
+              )}
               {detail.meta.owner && (
                 <Stack direction="row" spacing={0.5} alignItems="center">
                   <EmployeeAvatar employeeId={detail.meta.owner} size={18} />

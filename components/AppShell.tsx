@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import AppBar from "@mui/material/AppBar";
 import Toolbar from "@mui/material/Toolbar";
-import Select, { type SelectChangeEvent } from "@mui/material/Select";
 import MenuItem from "@mui/material/MenuItem";
 import Typography from "@mui/material/Typography";
 import Box from "@mui/material/Box";
@@ -14,22 +13,22 @@ import Button from "@mui/material/Button";
 import IconButton from "@mui/material/IconButton";
 import Badge from "@mui/material/Badge";
 import Menu from "@mui/material/Menu";
+import ListItemIcon from "@mui/material/ListItemIcon";
 import Divider from "@mui/material/Divider";
 import Avatar from "@mui/material/Avatar";
-import VerifiedUserIcon from "@mui/icons-material/VerifiedUser";
 import DashboardIcon from "@mui/icons-material/SpaceDashboard";
 import GroupsIcon from "@mui/icons-material/Groups";
 import ConfirmationNumberIcon from "@mui/icons-material/ConfirmationNumber";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import NotificationsNoneIcon from "@mui/icons-material/NotificationsNone";
+import LogoutIcon from "@mui/icons-material/Logout";
 import { LogoLockup } from "./Logo";
-import { ROLES, initials, avatarColor } from "@/lib/data";
-import { OrgSelect } from "./common";
+import { initials, avatarColor } from "@/lib/data";
 import { fetchTickets } from "@/lib/api";
 import { useAppContext } from "@/context/AppContext";
-import { useOrgContext } from "@/context/OrgContext";
-import type { AppRole, Ticket } from "@/lib/types";
+import { useAuth } from "@/context/AuthContext";
+import type { Ticket } from "@/lib/types";
 
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: DashboardIcon },
@@ -92,12 +91,45 @@ function NotificationsMenu() {
  * top AppBar carries the logo, primary navigation, and the "viewing as"
  * role switch. Nav items highlight based on the current route.
  */
+/** Avatar → account summary + sign out. */
+function AccountMenu() {
+  const { user, signOut } = useAuth();
+  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
+  const displayName = user?.name ?? "Account";
+
+  return (
+    <>
+      <Tooltip title={displayName}>
+        <IconButton size="small" onClick={(e) => setAnchorEl(e.currentTarget)} sx={{ p: 0 }}>
+          <Avatar sx={{ width: 34, height: 34, fontSize: 13, fontWeight: 700, bgcolor: avatarColor(displayName) }}>
+            {initials(displayName)}
+          </Avatar>
+        </IconButton>
+      </Tooltip>
+      <Menu anchorEl={anchorEl} open={!!anchorEl} onClose={() => setAnchorEl(null)}
+        slotProps={{ paper: { sx: { minWidth: 220 } } }}>
+        <Box sx={{ px: 2, py: 1.25 }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{displayName}</Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+            {user ? `${user.employeeCode} · ${user.role}` : ""}
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+            {user?.team}
+          </Typography>
+        </Box>
+        <Divider />
+        <MenuItem onClick={() => { setAnchorEl(null); signOut(); }}>
+          <ListItemIcon><LogoutIcon fontSize="small" /></ListItemIcon>
+          Sign out
+        </MenuItem>
+      </Menu>
+    </>
+  );
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
-  const { role, setRole, selfId, setSelfId, mode, toggleMode } = useAppContext();
-  const { employeeLabel } = useOrgContext();
+  const { mode, toggleMode } = useAppContext();
   const pathname = usePathname();
-  const needsName = role === "Developer";
-  const displayName = selfId ? employeeLabel(selfId) : role;
 
   return (
     <Box sx={{ minHeight: "100%", bgcolor: "background.default", color: "text.primary" }}>
@@ -142,27 +174,9 @@ export function AppShell({ children }: { children: ReactNode }) {
               </Tooltip>
             </Box>
 
-            <VerifiedUserIcon sx={{ fontSize: 16, color: "text.secondary" }} />
-            <Typography variant="caption" sx={{ textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary" }}>
-              Viewing as
-            </Typography>
-            <Select size="small" value={role} onChange={(e: SelectChangeEvent) => setRole(e.target.value as AppRole)}
-              sx={{ minWidth: 168, fontWeight: 600, color: "primary.light" }}>
-              {ROLES.map(r => <MenuItem key={r} value={r}>{r}</MenuItem>)}
-            </Select>
-            {needsName && (
-              <Box sx={{ width: 210 }}>
-                <OrgSelect label="You are" value={selfId} onChange={setSelfId} allowUnassigned size="small" />
-              </Box>
-            )}
-
             <NotificationsMenu />
 
-            <Tooltip title={displayName}>
-              <Avatar sx={{ width: 34, height: 34, fontSize: 13, fontWeight: 700, bgcolor: avatarColor(displayName) }}>
-                {initials(displayName)}
-              </Avatar>
-            </Tooltip>
+            <AccountMenu />
           </Box>
         </Toolbar>
       </AppBar>

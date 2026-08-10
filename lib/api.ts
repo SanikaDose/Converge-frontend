@@ -5,7 +5,7 @@
  * at it (defaults to the local dev backend on :4000).
  */
 import type {
-  CreateProjectInput, CreateTicketInput, DashboardBaseline, Employee, ProjectDetailData,
+  AuthedUser, CreateProjectInput, CreateTicketInput, DashboardBaseline, Employee, ProjectDetailData,
   ProjectIndexRow, Team, TeamPerformanceRow, Ticket, UpdateProjectPatch,
 } from "./types";
 
@@ -20,6 +20,12 @@ async function json<T>(res: Response): Promise<T> {
 }
 
 const url = (path: string) => `${API_BASE}${path}`;
+
+export const loginApi = (employeeCode: string, password: string): Promise<AuthedUser> =>
+  fetch(url("/auth/login"), {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ employeeCode, password }),
+  }).then(res => json(res));
 
 export const fetchProjectsIndex = (): Promise<ProjectIndexRow[]> => fetch(url("/projects")).then(res => json(res));
 export const fetchProject = (id: string): Promise<ProjectDetailData> => fetch(url(`/projects/${id}`)).then(res => json(res));

@@ -48,6 +48,19 @@ export type PermissionAction =
   | "seeStatusBreakdown"
   | "seeTeamPerformance";
 
+/** The signed-in employee, as returned by POST /auth/login. */
+export interface AuthedUser {
+  id: string;
+  name: string;
+  employeeCode: string;
+  /** Org job title, e.g. "Team Lead". */
+  role: OrgRole;
+  /** Application access role — drives `roleCan()`. */
+  appRole: AppRole;
+  teamId: string;
+  team: string;
+}
+
 export interface Actor {
   role: AppRole;
   id: string | null;
@@ -151,6 +164,7 @@ export interface ProjectMeta {
   name: string;
   type: ProjectType;
   customer: string;
+  location: string | null;
   owner: string | null;
   startDate: string;
   endDate: string;
@@ -213,6 +227,7 @@ export interface CreateProjectInput {
   name: string;
   type: ProjectType;
   customer: string;
+  location: string;
   owner: string | null;
   startDate: string;
   endDate: string;

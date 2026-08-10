@@ -158,11 +158,13 @@ export function avatarColor(name: string | null | undefined): string {
    ROLES & PERMISSIONS
 
    IMPORTANT: same caveat as before — this is a client-side "view as"
-   simulation with no real backend/auth. Simplified for now to just
-   Admin and Developer, both granted every permission below (full
-   access for both, temporarily) — the per-action permission table is
-   kept intact so real role differentiation (e.g. reinstating an
-   approval workflow) is a data change here, not a rewrite.
+   simulation with no real backend/auth, and the role switcher UI has
+   been removed from the navbar (the app just runs as whatever `role`
+   AppContext defaults to, currently Admin). Both roles are granted every
+   permission below — full access for both, temporarily — per explicit
+   request not to hide anything for Developer. The per-action table is
+   kept intact so real role differentiation is a data change here, not a
+   rewrite, once real requirements define proper role-based access.
 ------------------------------------------------------------------------ */
 export const ROLES: AppRole[] = ["Admin", "Developer"];
 const ALL_ROLES = ROLES;

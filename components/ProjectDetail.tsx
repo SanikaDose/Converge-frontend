@@ -37,7 +37,7 @@ import {
 import { genId, roleCan } from "@/lib/data";
 import { useOrgContext } from "@/context/OrgContext";
 import { fmt, todayISO, diffDays } from "@/lib/dateUtils";
-import type { Actor, HistoryEntry, ProjectDetailData, Task, TaskStatus } from "@/lib/types";
+import type { Actor, ChecklistItem, HistoryEntry, ProjectDetailData, Task, TaskStatus } from "@/lib/types";
 
 type ViewMode = "phases" | "timeline" | "kanban";
 
@@ -145,6 +145,13 @@ export function ProjectDetail({ projectId, actor, onBack }: { projectId: string;
   const handleCommitOwner = (taskId: string, ownerId: string | null) => commitField(taskId, "assignedTo", ownerId);
   const handleCommitDescription = (taskId: string, description: string) => commitField(taskId, "description", description);
 
+  // Checklist edits deliberately bypass commitField: they'd push an entry
+  // into the task's change history on every single checkbox tick, drowning
+  // the genuinely notable status/scheduling changes it exists to surface.
+  const handleChecklistChange = (taskId: string, checklist: ChecklistItem[]) => {
+    mutateTasks(tasks => tasks.map(t => t.id === taskId ? { ...t, checklist } : t));
+  };
+
   // Scheduling fields (day offset / planned start / duration) go through
   // the approval branch point: direct apply for roles with
   // editScheduleDirectly, otherwise a Pending Approval change request.
@@ -199,7 +206,7 @@ export function ProjectDetail({ projectId, actor, onBack }: { projectId: string;
       id: genId("task"), phaseId: addTaskPhaseId, order: siblingOrders.length ? Math.max(...siblingOrders) + 1 : 0,
       name, description: "", assignedTo, priority: "Medium", dependencies: [],
       dayOffset, duration, plannedStart, plannedFinish, actualStart: null, actualFinish: null,
-      status: "Not Started", pendingChange: null, achievement: null,
+      status: "Not Started", pendingChange: null, achievement: null, checklist: [],
       history: [{ ts: new Date().toISOString(), field: "Task Created", from: null, to: name, editedBy: actor.name || actor.role, reason: "" }],
     };
     mutateTasks(tasks => [...tasks, newTask]);
@@ -315,6 +322,7 @@ export function ProjectDetail({ projectId, actor, onBack }: { projectId: string;
                   onCommitOwner={handleCommitOwner} onCommitOffset={handleCommitOffset}
                   onCommitStartDate={handleCommitStartDate} onCommitDuration={handleCommitDuration}
                   onCommitDescription={handleCommitDescription}
+                  onChecklistChange={handleChecklistChange}
                 />
               )}
             </Box>

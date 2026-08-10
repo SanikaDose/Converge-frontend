@@ -75,7 +75,10 @@ components/                  All "use client" — this app has no server compone
   TaskCard.tsx                    Quick-edit card: Owner / Day from start / Planned start date /
                                Duration (days) are ALWAYS-VISIBLE inline fields, commit on
                                blur — no drawer, no "enter edit mode" step. A pencil icon opens
-                               TaskDetailsDialog for the fields that don't live inline.
+                               TaskDetailsDialog for the fields that don't live inline. Also
+                               hosts the "Critical points" checklist (type + Enter to add,
+                               checkbox to tick, hover-reveal × to remove) — see "Task
+                               checklist" below.
   TaskDetailsDialog.tsx           Centered MUI Dialog (NOT a side Drawer — that was explicitly
                                replaced) for name / priority / dependencies only.
   PhaseManager.tsx                PhaseNavList, EditPhaseDialog, DeletePhaseDialog, AddTaskDialog,
@@ -239,6 +242,24 @@ calls to it.
   persists across restarts. `SeedService` only seeds demo data once, when the `projects` table
   is empty; see `converge_backend/README.md` for `npm run seed` (force re-seed after truncating).
 
+## Task checklist ("critical points")
+
+Each task carries `checklist: ChecklistItem[]` (`{ id, text, done }`) — free-form critical
+points captured per task, edited inline in the expanded `TaskCard`.
+
+- **Persisted like everything else**: `tasks.checklist` is a `jsonb` column defaulting to `[]`,
+  and edits ride the same full-sync `PATCH /projects/:id` path as every other task mutation.
+- **Deliberately NOT written to task history.** `ProjectDetail.handleChecklistChange` bypasses
+  `commitField` on purpose: routing it through history would append an entry on every single
+  checkbox tick and bury the status/scheduling changes the history dialog exists to surface.
+  If checklist auditing is ever wanted, add it as its own log, don't fold it into `history`.
+- **Legacy tasks have no array.** Rows predating the feature come back with the key missing or
+  null, so `ensureProjectShape` normalizes it to `[]` *after* the object spread — before any
+  `.map`/`.length` in the UI can touch it. Both `buildTasks` implementations (frontend
+  `lib/businessLogic.ts` and backend `common/business-logic.ts`) seed it as `[]` too.
+- Editing is gated on `canEdit && !locked`, matching the card's other fields — a Pending
+  Approval task's checklist is read-only, same as its scheduling inputs.
+
 ## Business-day calendar (week off)
 
 Every project has its own `meta.weekOff: WeekDay[]` (0 = Sunday … 6 = Saturday, matching
@@ -348,7 +369,13 @@ changed several APIs from what older MUI docs/examples show:
 
 ## History of notable decisions (most recent first)
 
-1. Added sign-in (see "Authentication" above): a `/login` split-card screen modelled on a
+1. Added a per-task "critical points" checklist (see "Task checklist" above) — new
+   `tasks.checklist` jsonb column, threaded through `PlainTask`/`TaskPatch`/`toPlainTask`/
+   `syncTasks` on the backend and `Task`/`buildTasks`/`ensureProjectShape` on the frontend, with
+   the editor living in the expanded `TaskCard`. Typed as required on `Task` rather than
+   optional, which is what made `tsc` immediately point at the frontend `buildTasks` that would
+   otherwise have shipped tasks with an undefined checklist.
+2. Added sign-in (see "Authentication" above): a `/login` split-card screen modelled on a
    supplied reference, a `converge_backend` `auth` module doing real bcrypt verification, and
    `employees.employee_code` / `password_hash` / `app_role` columns provisioned idempotently by
    the seeder on every boot. Identity stopped being a client-side toy: the navbar's "Viewing
@@ -360,7 +387,7 @@ changed several APIs from what older MUI docs/examples show:
    old "OrgProvider must wrap AppProvider" constraint is now just "AuthProvider must wrap
    AppProvider". Deliberately NOT done: guarding the backend's data endpoints — that's the
    real remaining gap, called out under Known limitations rather than papered over.
-2. Replaced the static `TEAMS`/`EMPLOYEES` org directory in `lib/data.ts` with real backend data:
+3. Replaced the static `TEAMS`/`EMPLOYEES` org directory in `lib/data.ts` with real backend data:
    a new `context/OrgContext.tsx` fetches `GET /employees` once and every consumer
    (`AppShell.tsx`, `ProjectDetail.tsx`, `ProjectForm.tsx`, `common.tsx`'s `EmployeeAvatar` /
    `OrgSelect`) now calls `useOrgContext()` instead of importing a static constant.
@@ -375,7 +402,7 @@ changed several APIs from what older MUI docs/examples show:
    the org directory is available on the very first render. Removed `lib/businessLogic.ts`'s
    `aggregateTeamPerformance`, which had become dead code once team-performance aggregation
    moved server-side (see next entry) but still imported the now-deleted `EMPLOYEES` constant.
-3. Replaced the entire mock in-memory data layer with a real backend: `../converge_backend`, a
+4. Replaced the entire mock in-memory data layer with a real backend: `../converge_backend`, a
    new sibling NestJS + TypeORM + PostgreSQL project (see "Backend & data" above for the full
    picture). `app/api/**` and `lib/mockDb.ts` are gone; `lib/api.ts` now calls the backend
    directly. Business-day date math and delay/achievement detection were ported line-for-line
@@ -388,7 +415,7 @@ changed several APIs from what older MUI docs/examples show:
    carried over unchanged — the backend just treats it as a full sync (upsert + delete-missing)
    instead of a partial merge, which happened to already be exactly what the frontend was
    sending.
-4. Added a light/dark theme toggle (see "Light/dark theme" above) — navbar sun/moon button,
+5. Added a light/dark theme toggle (see "Light/dark theme" above) — navbar sun/moon button,
    `AppContext.mode` persisted to localStorage, `createAppTheme(mode)` in `lib/theme.ts`. Required
    splitting status colors into `STATUS_HEX_DARK`/`STATUS_HEX_LIGHT` (the dark-tuned bright hues
    had bad contrast as text on white) and reworking every component that renders a status color to
@@ -396,7 +423,7 @@ changed several APIs from what older MUI docs/examples show:
    reliably repaint `<body>`'s background on a live client-side theme swap — worked around with an
    explicit `bgcolor` on `AppShell`'s root `Box` plus a `data-theme`-keyed CSS variable in
    `app/globals.css`, not something to re-break by reverting to relying on `CssBaseline` alone.
-5. Reworked the 12-phase task template's day-offsets to close a real scheduling gap: Phase 01's
+6. Reworked the 12-phase task template's day-offsets to close a real scheduling gap: Phase 01's
    tasks were bunched onto day 0–1 while Phase 02 didn't start until day 7, leaving days 2–6
    reserved-but-empty on the Gantt chart. Re-sequenced with explicit parallel/sequential modeling
    (kickoff → requirement-gathering ‖ site-survey in parallel → planning → scope-freeze, each
@@ -409,7 +436,7 @@ changed several APIs from what older MUI docs/examples show:
    cadence crowding into unreadable overlapping marks, phases are collapsible, the header row and
    phase names are sticky while scrolling, the view auto-scrolls to "today" on load, and clicking
    any task bar jumps to that task in Phases view.
-6. Enriched the seed data (`lib/mockDb.ts`) for demo/screenshot purposes: a second project
+7. Enriched the seed data (`lib/mockDb.ts`) for demo/screenshot purposes: a second project
    ("Vertex Robotics", Solution type, well underway with real delays and achievements — contrast
    against the original early-stage "TE Connectivity" project) and a `simulateProgress` helper
    that stamps realistic status/owner/achievement data across both without hand-authoring every
@@ -418,44 +445,44 @@ changed several APIs from what older MUI docs/examples show:
    function's signed "a minus b" convention turns negative — on-time multi-day task completions
    were incorrectly earning "Outstanding Performance" badges. Args are swapped now
    (`actualFinish, actualStart`).
-7. Added a per-project week-off calendar (see "Business-day calendar" above) — a day-of-week
+8. Added a per-project week-off calendar (see "Business-day calendar" above) — a day-of-week
    picker on the New Project / Project Settings form, max 2 days, defaulting to Saturday+Sunday.
    Every business-day calculation in `lib/dateUtils.ts`/`lib/businessLogic.ts` now takes the
    project's `weekOff` instead of hardcoding Sat/Sun. Also removed the seed project's
    auto-assigned task owners — every task (seeded or newly created) now starts unassigned.
-8. Migrated the entire app from JavaScript/JSX to TypeScript (`strict` mode, no `.js`/`.jsx`
+9. Migrated the entire app from JavaScript/JSX to TypeScript (`strict` mode, no `.js`/`.jsx`
    remaining under `app/`, `components/`, `lib/`, `context/`) — see "TypeScript" above. Surfaced
    one real latent bug in the process: `OrgSelect` (`components/common.tsx`) never accepted or
    forwarded a `disabled` prop, so `TaskCard`'s owner dropdown wasn't actually being locked for
    Pending-Approval tasks; fixed as part of the migration.
-9. Team Performance page decluttered: KPI summary row added (`StatCard`, extracted from
+10. Team Performance page decluttered: KPI summary row added (`StatCard`, extracted from
    `Dashboard.tsx` into `common.tsx` for reuse), Total/Completed/Pending columns merged into one
    "Tasks" cell, zero-task rows show muted "—"/"No tasks" instead of repeated literal zeros, and
    the name/role cell's line-height bug (MUI DataGrid forces cell `line-height` to match row
    height, which was pushing two-line cell content up into the row above) was fixed.
-10. Project detail header compacted: back button is icon-only (no "Portfolio" label), and the
+11. Project detail header compacted: back button is icon-only (no "Portfolio" label), and the
    separate "Product"/status-chip row above the title was merged onto the title's own line to
    save vertical space.
-11. Added a global dark-themed scrollbar (`app/globals.css`) — the browser-default light/white
+12. Added a global dark-themed scrollbar (`app/globals.css`) — the browser-default light/white
    scrollbar thumb read as a bug against this app's dark ground, especially in the always-visible
    phase nav list and task panel scroll regions.
-12. Replaced the hand-vectorized SVG logo approximation with the real uploaded asset
+13. Replaced the hand-vectorized SVG logo approximation with the real uploaded asset
    (`public/ApplicationIcon.png`), used via `next/image` for both the navbar mark and the
    browser favicon (`app/layout.tsx` metadata).
-13. Removed the "On Track Projects" dashboard accordion — folded into "In Progress".
-14. Simplified `ROLES` from a 5-role simulation (Admin/PM/Team Lead/Team Member/Viewer) down to
+14. Removed the "On Track Projects" dashboard accordion — folded into "In Progress".
+15. Simplified `ROLES` from a 5-role simulation (Admin/PM/Team Lead/Team Member/Viewer) down to
    Admin + Developer, both full access, per user request — see "Roles" above.
-15. Redesigned `TaskCard` to match a supplied reference screenshot: inline always-editable
+16. Redesigned `TaskCard` to match a supplied reference screenshot: inline always-editable
    Owner/Day-from-start/Planned-start/Duration fields (commit on blur) instead of a side Drawer.
    `TaskEditorDrawer.jsx` was deleted and replaced by `TaskDetailsDialog.tsx` (a centered modal,
    consistent with every other editor in the app) for name/priority/dependencies only.
    description/owner/scheduling moved to the inline card fields.
-16. `TicketsPanel` reorganized into three accordions (Raised/In Progress/Completed) matching the
+17. `TicketsPanel` reorganized into three accordions (Raised/In Progress/Completed) matching the
     dashboard's project-accordion pattern.
-17. Converted the whole app from a single-file MUI artifact (built earlier, still published as a
+18. Converted the whole app from a single-file MUI artifact (built earlier, still published as a
     Claude.ai Artifact) into this proper Next.js project with real API routes + mock DB + React
     state, sidebar removed in favor of top nav only.
-18. Fixed a real timezone bug in the original date math: mixing local-time `Date` parsing with
+19. Fixed a real timezone bug in the original date math: mixing local-time `Date` parsing with
     UTC serialization silently shifted every computed date back a day (and the shift compounded
     between planned-start and planned-finish, occasionally putting finish before start). All
     date arithmetic in `lib/dateUtils.ts` is now UTC-consistent except `todayISO()`, which

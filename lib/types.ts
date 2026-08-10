@@ -108,6 +108,13 @@ export interface Achievement {
   days: number;
 }
 
+/** One "critical point" on a task's checklist. */
+export interface ChecklistItem {
+  id: string;
+  text: string;
+  done: boolean;
+}
+
 export interface Task {
   id: string;
   phaseId: string;
@@ -127,6 +134,8 @@ export interface Task {
   pendingChange: PendingChange | null;
   achievement: Achievement | null;
   history: HistoryEntry[];
+  /** "Critical points" for this task — added later, so ensureProjectShape defaults it to []. */
+  checklist: ChecklistItem[];
   /** Legacy field from pre-phase-model projects, upgraded by ensureProjectShape. */
   phaseIndex?: number;
 }

@@ -61,6 +61,7 @@ export function buildTasks(startDate: string, phases: Phase[], weekOff: WeekDay[
         pendingChange: null,
         achievement: null,
         history: [],
+        checklist: [],
       });
     });
   });
@@ -112,6 +113,10 @@ export function ensureProjectShape(detail: LegacyProjectDetail | null | undefine
       history: [],
       ...t,
       phaseId,
+      // After the spread, not before: tasks predating the checklist feature
+      // come back with the key missing *or* null, and both must normalize to
+      // an array before any `.map`/`.length` in the UI touches it.
+      checklist: Array.isArray(t.checklist) ? t.checklist : [],
     } as Task;
   });
   // Projects created before the week-off picker existed have no

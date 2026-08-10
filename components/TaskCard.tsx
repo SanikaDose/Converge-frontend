@@ -14,6 +14,8 @@ import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
 import DialogActions from "@mui/material/DialogActions";
 import TextField from "@mui/material/TextField";
+import InputAdornment from "@mui/material/InputAdornment";
+import Checkbox from "@mui/material/Checkbox";
 import Accordion from "@mui/material/Accordion";
 import AccordionSummary from "@mui/material/AccordionSummary";
 import AccordionDetails from "@mui/material/AccordionDetails";
@@ -24,13 +26,15 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
-import { STATUS_OPTIONS, STATUS_COLOR, PRIORITY_COLOR } from "@/lib/data";
+import AddIcon from "@mui/icons-material/Add";
+import ChecklistIcon from "@mui/icons-material/Checklist";
+import { STATUS_OPTIONS, STATUS_COLOR, PRIORITY_COLOR, genId } from "@/lib/data";
 import { StatusChip, AchievementBadge, PendingApprovalChip, EmployeeAvatar } from "./common";
 import { OrgSelect } from "./common";
 import { isOverdue, overdueWorkingDays } from "@/lib/businessLogic";
 import { fmt } from "@/lib/dateUtils";
 import { useStatusHex } from "@/lib/theme";
-import type { Task, TaskStatus, WeekDay } from "@/lib/types";
+import type { ChecklistItem, Task, TaskStatus, WeekDay } from "@/lib/types";
 
 const fieldLabelSx = {
   fontSize: 10.5, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary", display: "block", mb: 0.75,
@@ -52,7 +56,7 @@ export function TaskCard({
   task, canEdit, canApprove, canReorder, today, weekOff, expanded, onToggleExpand,
   onStatusChange, onOpenEditor, onOpenHistory, onDelete, onApprove, onReject,
   onCommitOwner, onCommitOffset, onCommitStartDate, onCommitDuration, onCommitDescription,
-  dragHandleProps,
+  onChecklistChange, dragHandleProps,
 }: {
   task: Task;
   canEdit: boolean;
@@ -73,6 +77,7 @@ export function TaskCard({
   onCommitStartDate: (date: string) => void;
   onCommitDuration: (duration: string | number) => void;
   onCommitDescription: (description: string) => void;
+  onChecklistChange: (checklist: ChecklistItem[]) => void;
   dragHandleProps?: HTMLAttributes<HTMLDivElement>;
 }) {
   const STATUS_HEX = useStatusHex();
@@ -84,6 +89,7 @@ export function TaskCard({
   const [startDateLocal, setStartDateLocal] = useState(task.plannedStart);
   const [duration, setDuration] = useState<string | number>(task.duration);
   const [description, setDescription] = useState(task.description || "");
+  const [newPoint, setNewPoint] = useState("");
 
   useEffect(() => { setOwner(task.assignedTo); }, [task.assignedTo]);
   useEffect(() => { setDayOffset(task.dayOffset); }, [task.dayOffset]);
@@ -95,6 +101,22 @@ export function TaskCard({
   const color = STATUS_COLOR[task.status] || "slate";
   const overdueDays = overdueWorkingDays(task, today, weekOff);
   const locked = task.status === "Pending Approval";
+
+  // Tasks created before the checklist existed have no array at all.
+  const checklist = task.checklist ?? [];
+  const checklistDone = checklist.filter(c => c.done).length;
+  const canEditChecklist = canEdit && !locked;
+
+  const addPoint = () => {
+    const text = newPoint.trim();
+    if (!text || !canEditChecklist) return;
+    onChecklistChange([...checklist, { id: genId("chk"), text, done: false }]);
+    setNewPoint("");
+  };
+  const togglePoint = (id: string) =>
+    onChecklistChange(checklist.map(c => c.id === id ? { ...c, done: !c.done } : c));
+  const removePoint = (id: string) =>
+    onChecklistChange(checklist.filter(c => c.id !== id));
 
   return (
     <>
@@ -228,6 +250,86 @@ export function TaskCard({
               </Typography>
             </Box>
           </Stack>
+
+          <Box sx={{ mt: 2.5, pt: 2, borderTop: "1px solid", borderColor: "divider" }}>
+            <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 1.25 }}>
+              <ChecklistIcon sx={{ fontSize: 15, color: "text.secondary" }} />
+              <Typography sx={{ fontSize: 10.5, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary" }}>
+                Critical points
+              </Typography>
+              {checklist.length > 0 && (
+                <Chip
+                  label={`${checklistDone}/${checklist.length}`}
+                  size="small"
+                  sx={{
+                    height: 18, fontSize: 10, fontWeight: 700,
+                    color: checklistDone === checklist.length ? STATUS_HEX.green : "text.secondary",
+                    bgcolor: checklistDone === checklist.length
+                      ? `color-mix(in srgb, ${STATUS_HEX.green} 18%, transparent)`
+                      : "action.hover",
+                  }}
+                />
+              )}
+            </Stack>
+
+            {checklist.length > 0 && (
+              <Stack spacing={0.25} sx={{ mb: 1 }}>
+                {checklist.map(item => (
+                  <Stack key={item.id} direction="row" alignItems="center" gap={0.5}
+                    sx={{ borderRadius: 1, pr: 0.5, "&:hover .chk-del": { opacity: 1 } }}>
+                    <Checkbox
+                      size="small" checked={item.done} disabled={!canEditChecklist}
+                      onChange={() => togglePoint(item.id)}
+                      sx={{ p: 0.5 }}
+                    />
+                    <Typography sx={{
+                      flex: 1, fontSize: 13, minWidth: 0, wordBreak: "break-word",
+                      color: item.done ? "text.disabled" : "text.primary",
+                      textDecoration: item.done ? "line-through" : "none",
+                    }}>
+                      {item.text}
+                    </Typography>
+                    {canEditChecklist && (
+                      <Tooltip title="Remove point">
+                        <IconButton
+                          className="chk-del" size="small" onClick={() => removePoint(item.id)}
+                          sx={{ opacity: 0, transition: "opacity .12s ease", color: "text.secondary" }}
+                        >
+                          <CloseIcon sx={{ fontSize: 14 }} />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                  </Stack>
+                ))}
+              </Stack>
+            )}
+
+            {canEditChecklist ? (
+              <TextField
+                value={newPoint}
+                onChange={(e) => setNewPoint(e.target.value)}
+                // Enter commits the point. The form-less card means there's no
+                // implicit submit to worry about, but preventDefault keeps it
+                // from bubbling into the accordion's own key handling.
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addPoint(); } }}
+                placeholder="Add a critical point, then press Enter"
+                size="small" fullWidth
+                slotProps={{
+                  input: {
+                    startAdornment: <InputAdornment position="start"><AddIcon sx={{ fontSize: 16, color: "text.secondary" }} /></InputAdornment>,
+                    endAdornment: newPoint.trim() ? (
+                      <InputAdornment position="end">
+                        <Button size="small" onClick={addPoint} sx={{ fontSize: 11.5, minWidth: 0 }}>Add</Button>
+                      </InputAdornment>
+                    ) : null,
+                  },
+                }}
+                sx={{ "& .MuiInputBase-input": { fontSize: 13 } }}
+              />
+            ) : checklist.length === 0 && (
+              <Typography variant="caption" color="text.disabled">No critical points added.</Typography>
+            )}
+          </Box>
 
           <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 2.5, pt: 2, borderTop: "1px solid", borderColor: "divider" }}>
             <Tooltip title="View history">

@@ -18,7 +18,7 @@ import { TaskCard } from "./TaskCard";
 import { fmt } from "@/lib/dateUtils";
 import { computePlanned } from "@/lib/businessLogic";
 import { useStatusHex } from "@/lib/theme";
-import type { PhaseSummary, Task, TaskStatus, WeekDay } from "@/lib/types";
+import type { ChecklistItem, PhaseSummary, Task, TaskStatus, WeekDay } from "@/lib/types";
 
 /**
  * Left-hand phase navigation list — one row per phase. Phases are a
@@ -141,6 +141,7 @@ export function PhaseTaskPanel({
   onUpdateTask, onOpenEditor, onOpenHistory, onDeleteTask, onApprove, onReject,
   onAddTask, onReorder,
   onCommitOwner, onCommitOffset, onCommitStartDate, onCommitDuration, onCommitDescription,
+  onChecklistChange,
 }: {
   phase: PhaseSummary;
   tasks: Task[];
@@ -163,6 +164,7 @@ export function PhaseTaskPanel({
   onCommitStartDate: (taskId: string, date: string) => void;
   onCommitDuration: (taskId: string, duration: string | number) => void;
   onCommitDescription: (taskId: string, description: string) => void;
+  onChecklistChange: (taskId: string, checklist: ChecklistItem[]) => void;
 }) {
   const [dragId, setDragId] = useState<string | null>(null);
   // Only one task accordion open at a time — expanding a new one closes
@@ -235,6 +237,7 @@ export function PhaseTaskPanel({
               onCommitStartDate={(date) => onCommitStartDate(t.id, date)}
               onCommitDuration={(duration) => onCommitDuration(t.id, duration)}
               onCommitDescription={(desc) => onCommitDescription(t.id, desc)}
+              onChecklistChange={(checklist) => onChecklistChange(t.id, checklist)}
             />
           </Box>
         ))}

@@ -13,6 +13,7 @@ import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Chip from "@mui/material/Chip";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import SettingsIcon from "@mui/icons-material/Settings";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import GridViewIcon from "@mui/icons-material/GridView";
 import TimelineIcon from "@mui/icons-material/Timeline";
 import ViewKanbanIcon from "@mui/icons-material/ViewKanban";
@@ -27,6 +28,7 @@ import { TaskHistoryDialog } from "./TaskHistoryDialog";
 import { TimelineView } from "./TimelineView";
 import { KanbanView } from "./KanbanView";
 import { ProjectForm, type ProjectFormPayload } from "./ProjectForm";
+import { DeleteProjectDialog } from "./DeleteProjectDialog";
 import { EmployeeAvatar } from "./common";
 
 import { fetchProject, updateProjectApi } from "@/lib/api";
@@ -50,12 +52,14 @@ export function ProjectDetail({ projectId, actor, onBack }: { projectId: string;
   const [viewMode, setViewMode] = useState<ViewMode>("phases");
   const [showSettings, setShowSettings] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [historyTask, setHistoryTask] = useState<Task | null>(null);
   const [addTaskPhaseId, setAddTaskPhaseId] = useState<string | null>(null);
   const today = todayISO();
 
   const canEditProjectSettings = roleCan(role, "editProjectSettings");
+  const canDeleteProject = roleCan(role, "deleteProject");
   const canManagePhases = roleCan(role, "managePhases");
   const canEditTask = roleCan(role, "editTask");
   const canEditScheduleDirectly = roleCan(role, "editScheduleDirectly");
@@ -289,6 +293,13 @@ export function ProjectDetail({ projectId, actor, onBack }: { projectId: string;
             {canEditProjectSettings && (
               <Tooltip title="Project settings"><IconButton size="small" onClick={() => setShowSettings(true)}><SettingsIcon fontSize="small" /></IconButton></Tooltip>
             )}
+            {canDeleteProject && (
+              <Tooltip title="Delete project">
+                <IconButton size="small" onClick={() => setShowDelete(true)} sx={{ color: "error.main" }}>
+                  <DeleteOutlineIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )}
             <CompletionRing pct={s.pct} size={48} />
           </Stack>
         </Stack>
@@ -345,6 +356,12 @@ export function ProjectDetail({ projectId, actor, onBack }: { projectId: string;
         )}
       </Box>
 
+      {showDelete && (
+        <DeleteProjectDialog
+          projectId={projectId} projectName={detail.meta.name}
+          onClose={() => setShowDelete(false)} onDeleted={onBack}
+        />
+      )}
       {showSettings && (
         <ProjectForm title="Project settings" initial={detail.meta} submitLabel="Save changes" busy={savingSettings}
           onClose={() => setShowSettings(false)} onSubmit={saveSettings} />

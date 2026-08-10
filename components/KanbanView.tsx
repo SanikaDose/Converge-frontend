@@ -5,7 +5,9 @@ import Typography from "@mui/material/Typography";
 import Chip from "@mui/material/Chip";
 import Tooltip from "@mui/material/Tooltip";
 import Stack from "./Stack";
+import { alpha } from "@mui/material/styles";
 import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
+import InboxOutlinedIcon from "@mui/icons-material/InboxOutlined";
 import { STATUS_OPTIONS, STATUS_COLOR, PRIORITY_COLOR } from "@/lib/data";
 import { AchievementBadge, EmployeeAvatar } from "./common";
 import { isOverdue, overdueWorkingDays } from "@/lib/businessLogic";
@@ -36,6 +38,7 @@ export function KanbanView({
 }) {
   const STATUS_HEX = useStatusHex();
   const [dragId, setDragId] = useState<string | null>(null);
+  const [dragOverStatus, setDragOverStatus] = useState<TaskStatus | null>(null);
 
   const phaseName = useMemo(() => {
     const map: Record<string, string> = {};
@@ -56,31 +59,47 @@ export function KanbanView({
       {STATUS_OPTIONS.map(status => {
         const color = STATUS_HEX[STATUS_COLOR[status]];
         const colTasks = columns[status];
+        const dropAllowed = canEdit && status !== "Pending Approval";
+        const isDragOver = dragOverStatus === status && dropAllowed;
         return (
           <Box key={status} sx={{
-            width: 280, flexShrink: 0, display: "flex", flexDirection: "column", height: "100%",
-            bgcolor: "background.default", border: "1px solid", borderColor: "divider", borderRadius: 2,
+            flex: "1 1 0", minWidth: 240, display: "flex", flexDirection: "column", height: "100%",
+            bgcolor: "background.default", borderRadius: 2, overflow: "hidden",
+            border: "1px solid", borderColor: isDragOver ? color : "divider",
+            boxShadow: isDragOver ? `0 0 0 2px ${alpha(color, 0.35)}` : "none",
+            transition: "border-color .15s ease, box-shadow .15s ease",
           }}
-            onDragOver={(e) => { if (canEdit && status !== "Pending Approval") e.preventDefault(); }}
+            onDragOver={(e) => { if (dropAllowed) { e.preventDefault(); setDragOverStatus(status); } }}
+            onDragLeave={() => setDragOverStatus(s => (s === status ? null : s))}
             onDrop={(e) => {
               e.preventDefault();
-              if (canEdit && status !== "Pending Approval" && dragId) onStatusChange(dragId, status);
+              if (dropAllowed && dragId) onStatusChange(dragId, status);
               setDragId(null);
+              setDragOverStatus(null);
             }}
           >
             <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{
               px: 1.5, py: 1.25, borderBottom: "1px solid", borderColor: "divider", flexShrink: 0,
+              bgcolor: alpha(color, 0.08), borderTop: "3px solid", borderTopColor: color,
             }}>
               <Stack direction="row" spacing={1} alignItems="center">
-                <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: color }} />
+                <Box sx={{ width: 9, height: 9, borderRadius: "50%", bgcolor: color, flexShrink: 0 }} />
                 <Typography sx={{ fontWeight: 700, fontSize: 13 }}>{status}</Typography>
               </Stack>
-              <Chip label={colTasks.length} size="small" sx={{ height: 20, fontSize: 11, fontWeight: 700 }} />
+              <Chip label={colTasks.length} size="small" sx={{
+                height: 20, fontSize: 11, fontWeight: 700, bgcolor: alpha(color, 0.16), color,
+              }} />
             </Stack>
 
             <Stack spacing={1.25} sx={{ p: 1.25, flex: 1, overflowY: "auto" }}>
               {colTasks.length === 0 && (
-                <Typography variant="caption" color="text.disabled" sx={{ textAlign: "center", py: 2 }}>No tasks</Typography>
+                <Box sx={{
+                  display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                  gap: 0.75, py: 4, border: "1px dashed", borderColor: "divider", borderRadius: 1.5, color: "text.disabled",
+                }}>
+                  <InboxOutlinedIcon sx={{ fontSize: 22 }} />
+                  <Typography variant="caption">No tasks</Typography>
+                </Box>
               )}
               {colTasks.map(t => {
                 const overdue = isOverdue(t, today);
@@ -91,14 +110,15 @@ export function KanbanView({
                     key={t.id}
                     draggable={canEdit && !locked}
                     onDragStart={() => setDragId(t.id)}
-                    onDragEnd={() => setDragId(null)}
+                    onDragEnd={() => { setDragId(null); setDragOverStatus(null); }}
                     onClick={() => onOpenPhase(t.phaseId)}
                     sx={{
                       p: 1.25, borderRadius: 1.5, bgcolor: "background.paper", border: "1px solid", borderColor: "divider",
                       borderLeft: "3px solid", borderLeftColor: overdue ? STATUS_HEX.red : color,
+                      boxShadow: "0 1px 2px rgba(16,24,40,0.06)",
                       cursor: canEdit && !locked ? "grab" : "pointer", opacity: dragId === t.id ? 0.5 : 1,
-                      transition: "border-color .15s ease, transform .15s ease",
-                      "&:hover": { borderColor: "primary.main", transform: "translateY(-1px)" },
+                      transition: "border-color .15s ease, transform .15s ease, box-shadow .15s ease",
+                      "&:hover": { borderColor: "primary.main", transform: "translateY(-1px)", boxShadow: "0 4px 10px rgba(16,24,40,0.10)" },
                     }}
                   >
                     <Typography sx={{ fontWeight: 600, fontSize: 13, lineHeight: 1.35 }}>{t.name}</Typography>

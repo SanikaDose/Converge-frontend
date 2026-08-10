@@ -170,6 +170,7 @@ export const ROLES: AppRole[] = ["Admin", "Developer"];
 const ALL_ROLES = ROLES;
 export const PERMISSIONS: Record<PermissionAction, AppRole[]> = {
   createProject: ALL_ROLES,
+  deleteProject: ALL_ROLES,
   editProjectSettings: ALL_ROLES,
   managePhases: ALL_ROLES,
   editTask: ALL_ROLES,

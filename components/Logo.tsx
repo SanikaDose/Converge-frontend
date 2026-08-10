@@ -43,26 +43,18 @@ const NAVBAR_ASPECT = 1796 / 876;
  * Compact "Converge" wordmark for the navbar (public/converge-navbar.png) —
  * icon + wordmark only, no tagline, so it stays legible at the small size
  * the top bar allows (the full converge-logo.png lockup's tagline turns to
- * illegible noise below ~90px tall). Same white-background asset, wrapped
- * in the same light tile as ConvergeLogo for contrast against the app's
- * dark-mode navbar.
+ * illegible noise below ~90px tall). Rendered as a plain image, same as
+ * ConvergeLogo on the login page — no boxed/tile treatment, which read as
+ * a pasted-in photo rather than a logo.
  */
-export function ConvergeNavbarLogo({ height = 26 }: { height?: number }) {
+export function ConvergeNavbarLogo({ height = 40 }: { height?: number }) {
   const width = Math.round(height * NAVBAR_ASPECT);
-  const padY = Math.round(height * 0.22);
-  const padX = Math.round(height * 0.32);
   return (
-    <div style={{
-      display: "inline-flex", alignItems: "center", justifyContent: "center",
-      padding: `${padY}px ${padX}px`, borderRadius: Math.round((height + padY * 2) * 0.22),
-      background: "#f5f7fa", boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.04)", flexShrink: 0,
-    }}>
-      <Image
-        src="/converge-navbar.png" alt="Converge"
-        width={1796} height={876}
-        style={{ width, height, objectFit: "contain", display: "block" }}
-        priority
-      />
-    </div>
+    <Image
+      src="/converge-navbar.png" alt="Converge"
+      width={1796} height={876}
+      style={{ width, height, objectFit: "contain", display: "block", flexShrink: 0 }}
+      priority
+    />
   );
 }

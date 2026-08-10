@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState, type ElementType, type ReactNode } from "react";
 import Box from "@mui/material/Box";
-import { alpha, useTheme } from "@mui/material/styles";
+import { alpha, darken, useTheme } from "@mui/material/styles";
 import Stack from "./Stack";
 import Typography from "@mui/material/Typography";
 import Button from "@mui/material/Button";
@@ -297,11 +297,27 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
         </Box>
         <Stack direction="row" spacing={1.25}>
           {roleCan(role, "raiseTicket") && (
-            <Button variant="outlined" startIcon={<FlagCircleIcon />} onClick={() => setShowTicketForm(true)} disabled={!projectOptions.length}>
+            <Button
+              variant="outlined" startIcon={<FlagCircleIcon />} onClick={() => setShowTicketForm(true)} disabled={!projectOptions.length}
+              sx={{
+                color: DASHBOARD_COLORS.blue, borderColor: DASHBOARD_COLORS.blue,
+                "&:hover": { borderColor: DASHBOARD_COLORS.blue, bgcolor: alpha(DASHBOARD_COLORS.blue, 0.08) },
+              }}
+            >
               Raise ticket
             </Button>
           )}
-          {roleCan(role, "createProject") && <Button variant="contained" startIcon={<AddIcon />} onClick={onNew}>New project</Button>}
+          {roleCan(role, "createProject") && (
+            <Button
+              variant="contained" startIcon={<AddIcon />} onClick={onNew}
+              sx={{
+                bgcolor: DASHBOARD_COLORS.blue, color: "#fff",
+                "&:hover": { bgcolor: darken(DASHBOARD_COLORS.blue, 0.15) },
+              }}
+            >
+              New project
+            </Button>
+          )}
         </Stack>
       </Stack>
 

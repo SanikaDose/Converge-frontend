@@ -37,6 +37,7 @@ export type AppRole = "Admin" | "Developer";
 
 export type PermissionAction =
   | "createProject"
+  | "deleteProject"
   | "editProjectSettings"
   | "managePhases"
   | "editTask"

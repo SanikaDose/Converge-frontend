@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
 import { ThemeProvider } from "@mui/material/styles";
-import { createAppTheme } from "@/lib/theme";
+import { LIGHT_THEME } from "@/lib/theme";
 import TextField from "@mui/material/TextField";
 import InputAdornment from "@mui/material/InputAdornment";
 import IconButton from "@mui/material/IconButton";
@@ -21,13 +21,6 @@ import { ConvergeLogo } from "@/components/Logo";
 import { useAuth } from "@/context/AuthContext";
 
 const NAVY_GRADIENT = "linear-gradient(150deg, #0F172A 0%, #1E3A5F 100%)";
-
-// The reference is a fixed navy/white brand screen, not something that
-// should flip to a dark-on-dark card just because the last signed-in user
-// happened to leave the app in dark mode — that would wash out the
-// diagonal navy/white split entirely. Pinned to "light" regardless of the
-// app's stored theme preference.
-const LOGIN_THEME = createAppTheme("light");
 
 /**
  * Sign-in screen — split card (brand panel / form panel) modelled on the
@@ -67,7 +60,7 @@ export default function LoginPage() {
       backgroundSize: "22px 22px",
       color: (t) => t.palette.mode === "light" ? "rgba(79,110,247,0.13)" : "rgba(111,214,230,0.07)",
     }}>
-      <ThemeProvider theme={LOGIN_THEME}>
+      <ThemeProvider theme={LIGHT_THEME}>
       <Paper elevation={0} sx={{
         display: "flex", width: "100%", maxWidth: 1180, minHeight: 640, overflow: "hidden",
         borderRadius: 2, border: "1px solid", borderColor: "divider",

@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Box from "@mui/material/Box";
+import Paper from "@mui/material/Paper";
 import Grid from "@mui/material/Grid";
 import Stack from "./Stack";
 import Typography from "@mui/material/Typography";
@@ -108,9 +109,13 @@ export function TeamPerformance({ refreshKey }: { refreshKey: number }) {
       field: "role", headerName: "Role", flex: 0.7, minWidth: 130,
       renderCell: (params: GridRenderCellParams<TeamPerformanceRow>) => {
         const color = ROLE_COLOR[params.value as OrgRole] || DASHBOARD_COLORS.slate;
-        return <Chip label={params.value} size="small" sx={{
-          bgcolor: alpha(color, 0.14), color, fontWeight: 700, fontSize: 11.5,
-        }} />;
+        return (
+          <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
+            <Chip label={params.value} size="small" sx={{
+              bgcolor: alpha(color, 0.14), color, fontWeight: 700, fontSize: 11.5,
+            }} />
+          </Box>
+        );
       },
     },
     {
@@ -123,25 +128,35 @@ export function TeamPerformance({ refreshKey }: { refreshKey: number }) {
       ),
     },
     {
-      field: "total", headerName: "Total", type: "number", flex: 0.45, minWidth: 80, align: "center", headerAlign: "center",
+      field: "total", headerName: "Total", type: "number", flex: 0.45, minWidth: 104, align: "center", headerAlign: "center",
       renderCell: (params: GridRenderCellParams<TeamPerformanceRow>) => (
-        <Typography variant="body2" sx={{ fontWeight: 700 }}>{params.value || "—"}</Typography>
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
+          <Typography variant="body2" sx={{ fontWeight: 700 }}>{params.value || "—"}</Typography>
+        </Box>
       ),
     },
     {
       field: "completed", headerName: "Done", type: "number", flex: 0.45, minWidth: 80, align: "center", headerAlign: "center",
       renderCell: (params: GridRenderCellParams<TeamPerformanceRow>) => (
-        <Typography variant="body2" sx={{ color: params.value ? DASHBOARD_COLORS.green : "text.disabled", fontWeight: 600 }}>
-          {params.row.total ? params.value : "—"}
-        </Typography>
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
+          <Typography variant="body2" sx={{ color: params.value ? DASHBOARD_COLORS.green : "text.disabled", fontWeight: 600 }}>
+            {params.row.total ? params.value : "—"}
+          </Typography>
+        </Box>
       ),
     },
     {
       field: "pending", headerName: "Pending", type: "number", flex: 0.7, minWidth: 120, align: "center", headerAlign: "center",
       renderCell: (params: GridRenderCellParams<TeamPerformanceRow>) => {
-        if (!params.row.total) return <Typography variant="body2" color="text.disabled">—</Typography>;
+        if (!params.row.total) {
+          return (
+            <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
+              <Typography variant="body2" color="text.disabled">—</Typography>
+            </Box>
+          );
+        }
         return (
-          <Stack direction="row" spacing={0.75} alignItems="center" justifyContent="center">
+          <Stack direction="row" spacing={0.75} alignItems="center" justifyContent="center" sx={{ height: "100%" }}>
             <Typography variant="body2" sx={{ fontWeight: 600 }}>{params.value}</Typography>
             {params.row.delayed > 0 && (
               <Tooltip title={`${params.row.delayed} overdue`}>
@@ -160,9 +175,11 @@ export function TeamPerformance({ refreshKey }: { refreshKey: number }) {
       field: "actions", headerName: "", sortable: false, filterable: false, disableColumnMenu: true,
       width: 64, align: "center", headerAlign: "center",
       renderCell: (params: GridRenderCellParams<TeamPerformanceRow>) => (
-        <IconButton size="small" onClick={(e) => setActionMenu({ el: e.currentTarget, row: params.row })}>
-          <MoreVertIcon fontSize="small" />
-        </IconButton>
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
+          <IconButton size="small" onClick={(e) => setActionMenu({ el: e.currentTarget, row: params.row })}>
+            <MoreVertIcon fontSize="small" />
+          </IconButton>
+        </Box>
       ),
     },
   ], []);
@@ -210,14 +227,14 @@ export function TeamPerformance({ refreshKey }: { refreshKey: number }) {
       {loading ? (
         <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}><CircularProgress /></Box>
       ) : (
-        <Box sx={{
-          bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: 1.5,
-          boxShadow: "0 1px 2px rgba(16,24,40,0.04), 0 2px 8px rgba(16,24,40,0.06)",
+        <Paper elevation={4} sx={{
+          border: "1px solid", borderColor: "divider", borderRadius: 2,
+          boxShadow: "0 8px 24px rgba(16,24,40,0.16), 0 2px 8px rgba(16,24,40,0.10)",
           height: 640, width: "100%", overflow: "hidden",
         }}>
           <DataGrid
             rows={filteredRows} columns={columns} columnGroupingModel={columnGroupingModel}
-            getRowId={(r) => r.id} rowHeight={62} columnHeaderHeight={30} columnGroupHeaderHeight={24}
+            getRowId={(r) => r.id} rowHeight={62} columnHeaderHeight={40} columnGroupHeaderHeight={30}
             initialState={{ sorting: { sortModel: [{ field: "total", sort: "desc" }] } }}
             disableRowSelectionOnClick
             showColumnVerticalBorder
@@ -225,29 +242,50 @@ export function TeamPerformance({ refreshKey }: { refreshKey: number }) {
             localeText={{ noRowsLabel: "No team members match these filters." }}
             sx={{
               border: "none",
+              // Muted deep navy (not the vibrant brand blue used for
+              // buttons/icons elsewhere) — a full-width header fill in that
+              // brighter blue read as overwhelming, per feedback.
               "& .MuiDataGrid-columnHeaders": {
-                background: "linear-gradient(135deg, #0F172A 0%, #1E3A5F 100%)",
+                bgcolor: "#1E3A5F",
               },
               "& .MuiDataGrid-columnHeader, & .MuiDataGrid-columnHeader--filledGroup, & .MuiDataGrid-columnHeaderRow": {
                 bgcolor: "transparent",
                 "&:focus, &:focus-within": { outline: "none" },
               },
+              // DataGrid draws its own divider under a grouped header's
+              // label, but it's scoped to the title container's own inset
+              // width (not the full "Tasks" cell, and not at all over the
+              // empty-group Employee/Role/Team cells) — on a light theme
+              // that reads as a subtle accent; on our navy fill it read as
+              // a stray half-width line. Neutralize it below.
+              "& .MuiDataGrid-columnHeaderTitleContainer": {
+                borderBottom: "none",
+              },
               "& .MuiDataGrid-columnHeaderTitle": {
-                fontWeight: 700, fontSize: 11.5, textTransform: "uppercase", letterSpacing: 0.8, color: "#E2E8F0",
+                fontWeight: 700, fontSize: 11.5, textTransform: "uppercase", letterSpacing: 0.8, color: "#ffffff",
               },
-              "& .MuiDataGrid-iconButtonContainer .MuiIconButton-root, & .MuiDataGrid-menuIcon .MuiIconButton-root": {
-                color: "#E2E8F0",
+              "& .MuiDataGrid-iconButtonContainer .MuiIconButton-root, & .MuiDataGrid-menuIcon .MuiIconButton-root, & .MuiDataGrid-sortButton": {
+                color: "#ffffff", bgcolor: "transparent",
+                "&:hover": { bgcolor: "rgba(255,255,255,0.14)" },
               },
-              "& .MuiDataGrid-columnSeparator": { color: "rgba(226,232,240,0.15)" },
+              "& .MuiDataGrid-columnSeparator": { color: "rgba(255,255,255,0.2)" },
               "& .MuiDataGrid-withBorderColor": { borderColor: "divider" },
+              // Must come after the rule above (same specificity, later
+              // wins) or that rule's borderColor: "divider" — meant for the
+              // body grid lines — resets these back to the pale grey used
+              // on a white background, invisible against navy.
+              "& .MuiDataGrid-columnHeader--filledGroup, & .MuiDataGrid-columnHeader--emptyGroup": {
+                borderBottom: "1px solid rgba(255,255,255,0.22)",
+              },
               "& .MuiDataGrid-cell": { lineHeight: "normal !important", alignItems: "center", borderColor: "divider" },
               "& .MuiDataGrid-cell:focus, & .MuiDataGrid-cell:focus-within": { outline: "none" },
               "& .MuiDataGrid-row": { transition: "background-color .12s ease" },
-              "& .MuiDataGrid-row:hover": { bgcolor: "action.hover" },
+              "& .MuiDataGrid-row:nth-of-type(even)": { bgcolor: "action.hover" },
+              "& .MuiDataGrid-row:hover": { bgcolor: "action.selected" },
               "& .MuiDataGrid-footerContainer": { borderColor: "divider" },
             }}
           />
-        </Box>
+        </Paper>
       )}
 
       <Menu anchorEl={actionMenu?.el} open={!!actionMenu} onClose={() => setActionMenu(null)}>

@@ -33,6 +33,8 @@ export const createProjectApi = (payload: CreateProjectInput): Promise<ProjectDe
   fetch(url("/projects"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }).then(res => json(res));
 export const updateProjectApi = (id: string, patch: UpdateProjectPatch): Promise<ProjectDetailData> =>
   fetch(url(`/projects/${id}`), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) }).then(res => json(res));
+export const deleteProjectApi = (id: string): Promise<{ id: string }> =>
+  fetch(url(`/projects/${id}`), { method: "DELETE" }).then(res => json(res));
 
 export const fetchTickets = (): Promise<Ticket[]> => fetch(url("/tickets")).then(res => json(res));
 export const createTicketApi = (payload: CreateTicketInput): Promise<Ticket> =>

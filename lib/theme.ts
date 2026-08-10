@@ -46,7 +46,11 @@ export const STATUS_HEX = STATUS_HEX_DARK;
  * both theme modes (no light/dark split needed).
  */
 export const DASHBOARD_COLORS = {
-  blue: "#4F6EF7",
+  // Matches LIGHT_THEME's primary.main — the same blue the login card's
+  // focused fields use — so the "Active Projects" KPI icon, the New
+  // project/Raise ticket buttons, and the active navbar tab all read as
+  // one consistent brand blue instead of drifting per-component.
+  blue: "#3958D6",
   // Forest green rather than a brighter emerald/lime — the deliberately
   // deeper shade requested for every "healthy/on-track/completed" status
   // use (donut, KPI cards, project-card "On track" chip all read this).
@@ -119,5 +123,12 @@ export function createAppTheme(mode: ThemeMode): Theme {
     components,
   });
 }
+
+// Fixed light theme for surfaces that carry a fixed-color brand asset and
+// therefore shouldn't follow the app-wide dark/light toggle — the login
+// card and the navbar's white-backed Converge logo both need this so their
+// asset's baked-in white background always sits on a matching surface
+// instead of showing as a stray white rectangle in dark mode.
+export const LIGHT_THEME = createAppTheme("light");
 
 export default createAppTheme("dark");

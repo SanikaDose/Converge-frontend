@@ -4,6 +4,8 @@ import React, { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import AppBar from "@mui/material/AppBar";
+import { ThemeProvider } from "@mui/material/styles";
+import { LIGHT_THEME, DASHBOARD_COLORS } from "@/lib/theme";
 import Toolbar from "@mui/material/Toolbar";
 import MenuItem from "@mui/material/MenuItem";
 import Typography from "@mui/material/Typography";
@@ -133,9 +135,14 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <Box sx={{ minHeight: "100%", bgcolor: "background.default", color: "text.primary" }}>
+      {/* Pinned to the light theme, same reasoning as the login card: the
+          navbar logo (public/converge-navbar.png) has a baked-in white
+          background, so the bar it sits on has to always be light too, or
+          that background shows as a stray white rectangle in dark mode. */}
+      <ThemeProvider theme={LIGHT_THEME}>
       <AppBar position="fixed" sx={{ zIndex: (t) => t.zIndex.drawer + 1, bgcolor: "background.paper", borderBottom: "1px solid", borderColor: "divider" }} elevation={0}>
         <Toolbar sx={{ gap: 3 }}>
-          <ConvergeNavbarLogo height={46} />
+          <ConvergeNavbarLogo height={60} />
 
           <Box sx={{ display: "flex", gap: 0.5 }}>
             {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
@@ -145,7 +152,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   key={href} component={Link} href={href}
                   startIcon={<Icon sx={{ fontSize: 18 }} />}
                   sx={{
-                    color: active ? "primary.light" : "text.secondary",
+                    color: active ? DASHBOARD_COLORS.blue : "text.secondary",
                     bgcolor: active ? "background.paper" : "transparent",
                     borderRadius: 2, px: 1.75,
                   }}
@@ -180,6 +187,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Box>
         </Toolbar>
       </AppBar>
+      </ThemeProvider>
 
       <Box component="main" sx={{ p: { xs: 2, md: 3.5 }, pt: { xs: 10, md: 11 } }}>
         {children}

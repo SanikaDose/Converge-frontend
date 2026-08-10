@@ -173,6 +173,24 @@ export function PhaseTaskPanel({
   const sorted = tasks.slice().sort((a, b) => a.order - b.order);
   const wStart = phase.weekStart, wEnd = phase.weekEnd;
 
+  /**
+   * The planned-start window a task may move within: the span its phase
+   * already occupies (phaseStart..phaseEnd), which phaseSummaries derives as
+   * min/max over ALL the phase's tasks — the edited one included.
+   *
+   * Including it is deliberate. Deriving the window from siblings only would
+   * put the phase's earliest task before its own lower bound, flagging a date
+   * the user never touched as invalid. Consequence of this model: a task
+   * sitting exactly on the phase edge can move inward but not outward, so the
+   * phase envelope can't be stretched from this field.
+   *
+   * Null for a single-task phase, where phaseStart..phaseEnd collapses onto
+   * that task's own dates and would otherwise freeze the field entirely.
+   */
+  const phaseBounds = (tasks.length > 1 && phase.phaseStart && phase.phaseEnd)
+    ? { min: phase.phaseStart, max: phase.phaseEnd }
+    : null;
+
   const STATUS_HEX = useStatusHex();
   const theme = useTheme();
   const phaseNumber = phase.name.split(" · ")[0];
@@ -238,6 +256,7 @@ export function PhaseTaskPanel({
               onCommitDuration={(duration) => onCommitDuration(t.id, duration)}
               onCommitDescription={(desc) => onCommitDescription(t.id, desc)}
               onChecklistChange={(checklist) => onChecklistChange(t.id, checklist)}
+              phaseBounds={phaseBounds}
             />
           </Box>
         ))}

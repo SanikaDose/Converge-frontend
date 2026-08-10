@@ -16,6 +16,7 @@ import DialogActions from "@mui/material/DialogActions";
 import TextField from "@mui/material/TextField";
 import InputAdornment from "@mui/material/InputAdornment";
 import Checkbox from "@mui/material/Checkbox";
+import Paper from "@mui/material/Paper";
 import Accordion from "@mui/material/Accordion";
 import AccordionSummary from "@mui/material/AccordionSummary";
 import AccordionDetails from "@mui/material/AccordionDetails";
@@ -42,6 +43,27 @@ const fieldLabelSx = {
 const fieldInputSx = { fontSize: 13 };
 
 /**
+ * Shared shading for the expanded card's sub-sections. `background.default`
+ * sits *behind* the card's `background.paper`, so on both themes it reads as
+ * a recessed panel rather than another floating surface.
+ */
+const sectionPaperSx = {
+  bgcolor: "background.default",
+  borderColor: "divider",
+  borderRadius: 1.5,
+  p: 1.75,
+} as const;
+
+/** "10 Aug 2026, 14:32" — checklist stamps need the time, unlike fmt()'s date-only output. */
+function fmtStamp(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString(undefined, {
+    day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
+  });
+}
+
+/**
  * One task's row, as a Material UI Accordion — collapsed shows just
  * enough to scan the list (status/overdue dot, name, priority/achievement/
  * pending-approval badges, planned start, assignee avatar, status chip);
@@ -56,7 +78,7 @@ export function TaskCard({
   task, canEdit, canApprove, canReorder, today, weekOff, expanded, onToggleExpand,
   onStatusChange, onOpenEditor, onOpenHistory, onDelete, onApprove, onReject,
   onCommitOwner, onCommitOffset, onCommitStartDate, onCommitDuration, onCommitDescription,
-  onChecklistChange, dragHandleProps,
+  onChecklistChange, phaseBounds, dragHandleProps,
 }: {
   task: Task;
   canEdit: boolean;
@@ -78,6 +100,8 @@ export function TaskCard({
   onCommitDuration: (duration: string | number) => void;
   onCommitDescription: (description: string) => void;
   onChecklistChange: (checklist: ChecklistItem[]) => void;
+  /** Allowed planned-start window from the phase's other tasks; null when this is the only task. */
+  phaseBounds: { min: string; max: string } | null;
   dragHandleProps?: HTMLAttributes<HTMLDivElement>;
 }) {
   const STATUS_HEX = useStatusHex();
@@ -90,6 +114,8 @@ export function TaskCard({
   const [duration, setDuration] = useState<string | number>(task.duration);
   const [description, setDescription] = useState(task.description || "");
   const [newPoint, setNewPoint] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
 
   useEffect(() => { setOwner(task.assignedTo); }, [task.assignedTo]);
   useEffect(() => { setDayOffset(task.dayOffset); }, [task.dayOffset]);
@@ -107,16 +133,45 @@ export function TaskCard({
   const checklistDone = checklist.filter(c => c.done).length;
   const canEditChecklist = canEdit && !locked;
 
+  // A task must stay inside the window its phase already occupies. That
+  // window is derived from the phase's *other* tasks — deriving it from all
+  // of them (this one included) would pin a lone task to its own current
+  // date, making the field permanently unchangeable.
+  const outsidePhase = !!phaseBounds && (startDateLocal < phaseBounds.min || startDateLocal > phaseBounds.max);
+  const commitStartDateIfValid = () => {
+    if (outsidePhase) { setStartDateLocal(task.plannedStart); return; }
+    onCommitStartDate(startDateLocal);
+  };
+
   const addPoint = () => {
     const text = newPoint.trim();
     if (!text || !canEditChecklist) return;
-    onChecklistChange([...checklist, { id: genId("chk"), text, done: false }]);
+    const now = new Date().toISOString();
+    onChecklistChange([...checklist, { id: genId("chk"), text, done: false, createdAt: now, updatedAt: now }]);
     setNewPoint("");
   };
   const togglePoint = (id: string) =>
-    onChecklistChange(checklist.map(c => c.id === id ? { ...c, done: !c.done } : c));
-  const removePoint = (id: string) =>
+    onChecklistChange(checklist.map(c => c.id === id
+      ? { ...c, done: !c.done, updatedAt: new Date().toISOString() }
+      : c));
+  const savePointText = (id: string) => {
+    const text = editText.trim();
+    // Empty isn't a delete — completed points are undeletable, and silently
+    // dropping one here would route around that.
+    if (!text) return;
+    onChecklistChange(checklist.map(c => c.id === id
+      ? { ...c, text, updatedAt: new Date().toISOString() }
+      : c));
+    setEditingId(null);
+    setEditText("");
+  };
+  // Ticked-off points are a record that the work was done, so they stay put.
+  // Untick first if a point genuinely needs removing.
+  const removePoint = (id: string) => {
+    const item = checklist.find(c => c.id === id);
+    if (!item || item.done) return;
     onChecklistChange(checklist.filter(c => c.id !== id));
+  };
 
   return (
     <>
@@ -205,6 +260,9 @@ export function TaskCard({
             {task.actualFinish && <span style={{ color: STATUS_HEX.green }}>Finished {fmt(task.actualFinish)}</span>}
           </Stack>
 
+          {/* Scheduling block — shaded so it reads as its own section against
+              the card, which previously ran together as one flat surface. */}
+          <Paper variant="outlined" sx={{ ...sectionPaperSx, mb: 1.5 }}>
           <Stack direction="row" spacing={2.5} rowGap={2} alignItems="flex-end" flexWrap="wrap">
             <Box sx={{ width: 190 }}>
               <Typography sx={fieldLabelSx}>Owner</Typography>
@@ -227,12 +285,23 @@ export function TaskCard({
               or
             </Typography>
 
-            <Box sx={{ width: 150 }}>
+            <Box sx={{ width: 178 }}>
               <Typography sx={fieldLabelSx}>Planned start date</Typography>
-              <TextField type="date" size="small" fullWidth value={startDateLocal} disabled={!canEdit || locked}
-                slotProps={{ htmlInput: { sx: fieldInputSx } }}
+              <TextField
+                type="date" size="small" fullWidth value={startDateLocal} disabled={!canEdit || locked}
+                error={outsidePhase}
+                helperText={phaseBounds
+                  ? (outsidePhase
+                      ? `Outside phase (${fmt(phaseBounds.min)} – ${fmt(phaseBounds.max)})`
+                      : `Phase: ${fmt(phaseBounds.min)} – ${fmt(phaseBounds.max)}`)
+                  : undefined}
+                // min/max grey out everything outside the phase in the native
+                // picker; the error state covers dates typed straight in, which
+                // browsers accept regardless of min/max.
+                slotProps={{ htmlInput: { sx: fieldInputSx, min: phaseBounds?.min, max: phaseBounds?.max } }}
+                sx={{ "& .MuiFormHelperText-root": { fontSize: 10, mx: 0, mt: 0.4, lineHeight: 1.3 } }}
                 onChange={(e) => setStartDateLocal(e.target.value)}
-                onBlur={() => canEdit && !locked && onCommitStartDate(startDateLocal)} />
+                onBlur={() => canEdit && !locked && commitStartDateIfValid()} />
             </Box>
 
             <Box sx={{ width: 96 }}>
@@ -250,8 +319,9 @@ export function TaskCard({
               </Typography>
             </Box>
           </Stack>
+          </Paper>
 
-          <Box sx={{ mt: 2.5, pt: 2, borderTop: "1px solid", borderColor: "divider" }}>
+          <Paper variant="outlined" sx={sectionPaperSx}>
             <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 1.25 }}>
               <ChecklistIcon sx={{ fontSize: 15, color: "text.secondary" }} />
               <Typography sx={{ fontSize: 10.5, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary" }}>
@@ -273,34 +343,96 @@ export function TaskCard({
             </Stack>
 
             {checklist.length > 0 && (
-              <Stack spacing={0.25} sx={{ mb: 1 }}>
-                {checklist.map(item => (
-                  <Stack key={item.id} direction="row" alignItems="center" gap={0.5}
-                    sx={{ borderRadius: 1, pr: 0.5, "&:hover .chk-del": { opacity: 1 } }}>
-                    <Checkbox
-                      size="small" checked={item.done} disabled={!canEditChecklist}
-                      onChange={() => togglePoint(item.id)}
-                      sx={{ p: 0.5 }}
-                    />
-                    <Typography sx={{
-                      flex: 1, fontSize: 13, minWidth: 0, wordBreak: "break-word",
-                      color: item.done ? "text.disabled" : "text.primary",
-                      textDecoration: item.done ? "line-through" : "none",
-                    }}>
-                      {item.text}
-                    </Typography>
-                    {canEditChecklist && (
-                      <Tooltip title="Remove point">
-                        <IconButton
-                          className="chk-del" size="small" onClick={() => removePoint(item.id)}
-                          sx={{ opacity: 0, transition: "opacity .12s ease", color: "text.secondary" }}
-                        >
-                          <CloseIcon sx={{ fontSize: 14 }} />
-                        </IconButton>
-                      </Tooltip>
-                    )}
-                  </Stack>
-                ))}
+              <Stack spacing={0.5} sx={{ mb: 1.25 }}>
+                {checklist.map(item => {
+                  const isEditing = editingId === item.id;
+                  return (
+                    <Stack key={item.id} direction="row" alignItems="flex-start" gap={0.5}
+                      sx={{
+                        borderRadius: 1, px: 0.5, py: 0.25,
+                        bgcolor: isEditing ? "action.hover" : "transparent",
+                        "&:hover .chk-actions": { opacity: 1 },
+                      }}>
+                      <Checkbox
+                        size="small" checked={item.done} disabled={!canEditChecklist || isEditing}
+                        onChange={() => togglePoint(item.id)}
+                        sx={{ p: 0.5 }}
+                      />
+
+                      {isEditing ? (
+                        <TextField
+                          value={editText}
+                          onChange={(e) => setEditText(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") { e.preventDefault(); savePointText(item.id); }
+                            if (e.key === "Escape") { e.preventDefault(); setEditingId(null); setEditText(""); }
+                          }}
+                          autoFocus size="small" fullWidth
+                          sx={{ "& .MuiInputBase-input": { fontSize: 13, py: 0.5 } }}
+                        />
+                      ) : (
+                        <Box sx={{ flex: 1, minWidth: 0, py: 0.4 }}>
+                          <Typography sx={{
+                            fontSize: 13, wordBreak: "break-word", lineHeight: 1.4,
+                            color: item.done ? "text.disabled" : "text.primary",
+                            textDecoration: item.done ? "line-through" : "none",
+                          }}>
+                            {item.text}
+                          </Typography>
+                          {item.updatedAt && (
+                            <Typography sx={{ fontSize: 10.5, color: "text.disabled", display: "block", mt: 0.15 }}>
+                              {item.done ? "Completed" : "Updated"} {fmtStamp(item.updatedAt)}
+                            </Typography>
+                          )}
+                        </Box>
+                      )}
+
+                      {canEditChecklist && (
+                        <Stack direction="row" gap={0.25} className={isEditing ? undefined : "chk-actions"}
+                          sx={{ opacity: isEditing ? 1 : 0, transition: "opacity .12s ease", flexShrink: 0, pt: 0.25 }}>
+                          {isEditing ? (
+                            <>
+                              <Tooltip title="Save">
+                                <span>
+                                  <IconButton size="small" disabled={!editText.trim()} onClick={() => savePointText(item.id)}
+                                    sx={{ color: STATUS_HEX.green }}>
+                                    <CheckIcon sx={{ fontSize: 15 }} />
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
+                              <Tooltip title="Cancel">
+                                <IconButton size="small" onClick={() => { setEditingId(null); setEditText(""); }}
+                                  sx={{ color: "text.secondary" }}>
+                                  <CloseIcon sx={{ fontSize: 15 }} />
+                                </IconButton>
+                              </Tooltip>
+                            </>
+                          ) : (
+                            <>
+                              <Tooltip title="Edit point">
+                                <IconButton size="small" onClick={() => { setEditingId(item.id); setEditText(item.text); }}
+                                  sx={{ color: "text.secondary" }}>
+                                  <EditIcon sx={{ fontSize: 14 }} />
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title={item.done
+                                ? "Completed points are kept as a record — untick it first to delete"
+                                : "Delete point"}>
+                                {/* span: a disabled button can't fire the events Tooltip listens for. */}
+                                <span>
+                                  <IconButton size="small" disabled={item.done} onClick={() => removePoint(item.id)}
+                                    sx={{ color: "text.secondary" }}>
+                                    <DeleteOutlineIcon sx={{ fontSize: 14 }} />
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
+                            </>
+                          )}
+                        </Stack>
+                      )}
+                    </Stack>
+                  );
+                })}
               </Stack>
             )}
 
@@ -329,7 +461,7 @@ export function TaskCard({
             ) : checklist.length === 0 && (
               <Typography variant="caption" color="text.disabled">No critical points added.</Typography>
             )}
-          </Box>
+          </Paper>
 
           <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 2.5, pt: 2, borderTop: "1px solid", borderColor: "divider" }}>
             <Tooltip title="View history">

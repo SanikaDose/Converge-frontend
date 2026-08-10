@@ -108,11 +108,19 @@ export interface Achievement {
   days: number;
 }
 
-/** One "critical point" on a task's checklist. */
+/**
+ * One "critical point" on a task's checklist. `createdAt`/`updatedAt` are
+ * optional only because items added before timestamping existed don't carry
+ * them — everything created now always sets both.
+ */
 export interface ChecklistItem {
   id: string;
   text: string;
   done: boolean;
+  /** ISO timestamp. */
+  createdAt?: string;
+  /** ISO timestamp — bumped on text edits and on ticking/unticking. */
+  updatedAt?: string;
 }
 
 export interface Task {

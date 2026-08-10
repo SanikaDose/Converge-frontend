@@ -1,56 +1,68 @@
 "use client";
 import React from "react";
 import Image from "next/image";
-import { useTheme } from "@mui/material/styles";
+
+const ASPECT = 1774 / 887;
 
 /**
- * "Converge" logo mark — the real uploaded asset (public/ApplicationIcon.png,
- * a transparent 4000×4000 PNG), not a hand-drawn approximation. Rendered on
- * a light rounded-square tile for contrast against the app's dark navbar/
- * sidebar backgrounds, matching how the reference artwork presents the mark
- * as an app icon.
+ * Full "Converge" lockup — the real uploaded asset (public/converge-logo.png:
+ * icon + "Converge" wordmark + "Plan. Collaborate. Deliver." tagline baked
+ * into one image on a white background). `tile` wraps it in a light rounded
+ * box so that white background reads as an intentional badge against the
+ * app's dark-mode navbar instead of a bare white rectangle; omit it where
+ * the surrounding surface is already white (e.g. the login card, which is
+ * pinned to the light theme regardless of the app's mode).
  */
-export function LogoMark({ size = 28, tile = true }: { size?: number; tile?: boolean }) {
+export function ConvergeLogo({ height = 32, tile = false }: { height?: number; tile?: boolean }) {
+  const width = Math.round(height * ASPECT);
   const img = (
     <Image
-      src="/ApplicationIcon.png"
-      alt="Converge"
-      width={size}
-      height={size}
-      style={{ width: tile ? "62%" : size, height: tile ? "62%" : size, objectFit: "contain" }}
+      src="/converge-logo.png" alt="Converge — Plan. Collaborate. Deliver."
+      width={1774} height={887}
+      style={{ width, height, objectFit: "contain", display: "block" }}
       priority
     />
   );
   if (!tile) return img;
+  const padY = Math.round(height * 0.18);
+  const padX = Math.round(height * 0.3);
   return (
     <div style={{
-      width: size, height: size, borderRadius: size * 0.26, background: "#f5f7fa",
-      display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-      boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.04)",
+      display: "inline-flex", alignItems: "center", justifyContent: "center",
+      padding: `${padY}px ${padX}px`, borderRadius: Math.round((height + padY * 2) * 0.22),
+      background: "#f5f7fa", boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.04)", flexShrink: 0,
     }}>
       {img}
     </div>
   );
 }
 
-export function LogoLockup({ markSize = 30, wordmarkSize = 17 }: { markSize?: number; wordmarkSize?: number }) {
-  const theme = useTheme();
+const NAVBAR_ASPECT = 1796 / 876;
+
+/**
+ * Compact "Converge" wordmark for the navbar (public/converge-navbar.png) —
+ * icon + wordmark only, no tagline, so it stays legible at the small size
+ * the top bar allows (the full converge-logo.png lockup's tagline turns to
+ * illegible noise below ~90px tall). Same white-background asset, wrapped
+ * in the same light tile as ConvergeLogo for contrast against the app's
+ * dark-mode navbar.
+ */
+export function ConvergeNavbarLogo({ height = 26 }: { height?: number }) {
+  const width = Math.round(height * NAVBAR_ASPECT);
+  const padY = Math.round(height * 0.22);
+  const padX = Math.round(height * 0.32);
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-      <LogoMark size={markSize} />
-      <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.05 }}>
-        <span style={{
-          fontSize: wordmarkSize, fontWeight: 700,
-          background: "linear-gradient(90deg, #6fd6e6, #3f6fb0)",
-          WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent",
-          letterSpacing: 0.2,
-        }}>
-          Converge
-        </span>
-        <span style={{ fontSize: wordmarkSize * 0.5, color: theme.palette.text.secondary, letterSpacing: 2, textTransform: "uppercase" }}>
-          Projects
-        </span>
-      </div>
+    <div style={{
+      display: "inline-flex", alignItems: "center", justifyContent: "center",
+      padding: `${padY}px ${padX}px`, borderRadius: Math.round((height + padY * 2) * 0.22),
+      background: "#f5f7fa", boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.04)", flexShrink: 0,
+    }}>
+      <Image
+        src="/converge-navbar.png" alt="Converge"
+        width={1796} height={876}
+        style={{ width, height, objectFit: "contain", display: "block" }}
+        priority
+      />
     </div>
   );
 }

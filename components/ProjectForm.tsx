@@ -136,9 +136,7 @@ export function ProjectForm({ title, initial, onClose, onSubmit, busy, submitLab
               );
             })}
           </Stack>
-          <Typography variant="caption" color="text.secondary">
-            Non-working days for this project's schedule — task dates skip these instead of the default Saturday/Sunday.
-          </Typography>
+
         </Stack>
 
         <Typography variant="caption" color="text.secondary">

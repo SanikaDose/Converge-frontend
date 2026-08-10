@@ -23,7 +23,7 @@ import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import NotificationsNoneIcon from "@mui/icons-material/NotificationsNone";
 import LogoutIcon from "@mui/icons-material/Logout";
-import { LogoLockup } from "./Logo";
+import { ConvergeNavbarLogo } from "./Logo";
 import { initials, avatarColor } from "@/lib/data";
 import { fetchTickets } from "@/lib/api";
 import { useAppContext } from "@/context/AppContext";
@@ -135,7 +135,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <Box sx={{ minHeight: "100%", bgcolor: "background.default", color: "text.primary" }}>
       <AppBar position="fixed" sx={{ zIndex: (t) => t.zIndex.drawer + 1, bgcolor: "background.paper", borderBottom: "1px solid", borderColor: "divider" }} elevation={0}>
         <Toolbar sx={{ gap: 3 }}>
-          <LogoLockup />
+          <ConvergeNavbarLogo height={46} />
 
           <Box sx={{ display: "flex", gap: 0.5 }}>
             {NAV_ITEMS.map(({ href, label, icon: Icon }) => {

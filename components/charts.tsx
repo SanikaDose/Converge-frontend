@@ -38,8 +38,10 @@ export function DonutChart({ segments, size = 150, strokeRatio = 0.22, centerVal
         display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
         border: `1px solid ${theme.palette.divider}`,
       }}>
-        {centerValue !== undefined && <Typography sx={{ fontWeight: 800, fontSize: Math.round(size * 0.17), lineHeight: 1.1 }}>{centerValue}</Typography>}
-        {centerLabel !== undefined && <Typography variant="caption" color="text.secondary">{centerLabel}</Typography>}
+        {centerValue !== undefined && <Typography sx={{ fontWeight: 800, fontSize: Math.round(size * 0.19), lineHeight: 1.1 }}>{centerValue}</Typography>}
+        {centerLabel !== undefined && (
+          <Typography sx={{ fontSize: Math.max(11, Math.round(size * 0.075)), color: "text.secondary", mt: 0.25 }}>{centerLabel}</Typography>
+        )}
       </Box>
     </Box>
   );

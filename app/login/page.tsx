@@ -4,21 +4,30 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
-import Typography from "@mui/material/Typography";
+import { ThemeProvider } from "@mui/material/styles";
+import { createAppTheme } from "@/lib/theme";
 import TextField from "@mui/material/TextField";
 import InputAdornment from "@mui/material/InputAdornment";
 import IconButton from "@mui/material/IconButton";
 import Button from "@mui/material/Button";
 import Alert from "@mui/material/Alert";
 import CircularProgress from "@mui/material/CircularProgress";
+import Image from "next/image";
 import BadgeOutlinedIcon from "@mui/icons-material/BadgeOutlined";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import VisibilityOffOutlinedIcon from "@mui/icons-material/VisibilityOffOutlined";
-import { LogoMark } from "@/components/Logo";
+import { ConvergeLogo } from "@/components/Logo";
 import { useAuth } from "@/context/AuthContext";
 
 const NAVY_GRADIENT = "linear-gradient(150deg, #0F172A 0%, #1E3A5F 100%)";
+
+// The reference is a fixed navy/white brand screen, not something that
+// should flip to a dark-on-dark card just because the last signed-in user
+// happened to leave the app in dark mode — that would wash out the
+// diagonal navy/white split entirely. Pinned to "light" regardless of the
+// app's stored theme preference.
+const LOGIN_THEME = createAppTheme("light");
 
 /**
  * Sign-in screen — split card (brand panel / form panel) modelled on the
@@ -58,8 +67,9 @@ export default function LoginPage() {
       backgroundSize: "22px 22px",
       color: (t) => t.palette.mode === "light" ? "rgba(79,110,247,0.13)" : "rgba(111,214,230,0.07)",
     }}>
+      <ThemeProvider theme={LOGIN_THEME}>
       <Paper elevation={0} sx={{
-        display: "flex", width: "100%", maxWidth: 920, minHeight: 440, overflow: "hidden",
+        display: "flex", width: "100%", maxWidth: 1180, minHeight: 640, overflow: "hidden",
         borderRadius: 2, border: "1px solid", borderColor: "divider",
         boxShadow: "0 12px 40px rgba(16,24,40,0.12), 0 2px 8px rgba(16,24,40,0.06)",
       }}>
@@ -67,41 +77,34 @@ export default function LoginPage() {
         <Box sx={{
           display: { xs: "none", md: "flex" }, flexDirection: "column",
           alignItems: "center", justifyContent: "center", gap: 2.5,
-          width: "46%", flexShrink: 0, p: 5, background: NAVY_GRADIENT,
-          // Diagonal right edge, as in the reference.
-          clipPath: "polygon(0 0, 100% 0, 88% 100%, 0 100%)",
+          width: "56%", flexShrink: 0, p: 5, background: NAVY_GRADIENT,
+          // Diagonal right edge (forward-slash cut, wider at top), as in
+          // the reference — steep enough to read clearly as a "/" rather
+          // than a near-vertical seam.
+          clipPath: "polygon(0 0, 100% 0, 78% 100%, 0 100%)",
         }}>
-          <LogoMark size={74} />
-          <Box sx={{ textAlign: "center", mr: "6%" }}>
-            <Typography sx={{ color: "#fff", fontWeight: 700, fontSize: 27, letterSpacing: 0.3, lineHeight: 1.15 }}>
-              Converge
-            </Typography>
-            <Typography sx={{ color: "rgba(226,232,240,0.72)", fontSize: 11.5, letterSpacing: 3, textTransform: "uppercase", mt: 0.75 }}>
-              Technologies
-            </Typography>
-          </Box>
+          <Image
+            src="/Elansol-logo.png" alt="Elansol Technologies" width={1887} height={668}
+            style={{ width: "62%", height: "auto", marginRight: "8%" }}
+            priority
+          />
         </Box>
 
         {/* Form panel */}
         <Box component="form" onSubmit={submit} sx={{
           flex: 1, display: "flex", flexDirection: "column", justifyContent: "center",
-          px: { xs: 3, sm: 6 }, py: 5, bgcolor: "background.paper",
+          px: { xs: 4, sm: 8 }, py: 6, bgcolor: "background.paper",
         }}>
-          <Box sx={{ textAlign: "center", mb: 3.5 }}>
-            <Typography variant="h5" sx={{ fontWeight: 700, letterSpacing: 0.2 }}>
-              Converge Projects
-            </Typography>
-            <Typography sx={{ mt: 0.5, fontSize: 10.5, letterSpacing: 2.5, textTransform: "uppercase", color: "text.secondary" }}>
-              Project Management Software
-            </Typography>
+          <Box sx={{ display: "flex", justifyContent: "center", mb: 5 }}>
+            <ConvergeLogo height={140} />
           </Box>
 
           {error && <Alert severity="error" sx={{ mb: 2.5 }}>{error}</Alert>}
 
           <TextField
-            label="Employee ID" fullWidth required autoFocus autoComplete="username"
+            label="Employee ID" fullWidth required autoFocus autoComplete="username" size="medium"
             value={employeeCode} onChange={(e) => setEmployeeCode(e.target.value)}
-            placeholder="e.g. SD003" disabled={busy} sx={{ mb: 2.5 }}
+            placeholder="e.g. SD003" disabled={busy} sx={{ mb: 3, "& .MuiInputBase-input": { py: 1.85 } }}
             slotProps={{
               inputLabel: { shrink: true },
               input: {
@@ -115,10 +118,10 @@ export default function LoginPage() {
           />
 
           <TextField
-            label="Password" fullWidth required autoComplete="current-password"
+            label="Password" fullWidth required autoComplete="current-password" size="medium"
             type={showPassword ? "text" : "password"}
             value={password} onChange={(e) => setPassword(e.target.value)}
-            disabled={busy} sx={{ mb: 3.5 }}
+            disabled={busy} sx={{ mb: 4, "& .MuiInputBase-input": { py: 1.85 } }}
             slotProps={{
               inputLabel: { shrink: true },
               input: {
@@ -147,7 +150,7 @@ export default function LoginPage() {
             disabled={busy || !employeeCode.trim() || !password}
             startIcon={busy ? <CircularProgress size={16} color="inherit" /> : null}
             sx={{
-              py: 1.35, letterSpacing: 1.2, textTransform: "uppercase", fontSize: 13.5,
+              py: 1.7, letterSpacing: 1.2, textTransform: "uppercase", fontSize: 14.5,
               background: NAVY_GRADIENT, color: "#fff",
               "&:hover": { background: "linear-gradient(150deg, #16213c 0%, #244674 100%)" },
               // Without this the gradient stays put while MUI greys only the
@@ -163,6 +166,7 @@ export default function LoginPage() {
           </Button>
         </Box>
       </Paper>
+      </ThemeProvider>
     </Box>
   );
 }

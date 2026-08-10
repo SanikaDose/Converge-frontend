@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState, type ElementType, type ReactNode } from "react";
-import Link from "next/link";
 import Box from "@mui/material/Box";
 import { alpha, useTheme } from "@mui/material/styles";
 import Stack from "./Stack";
@@ -30,6 +29,8 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import HourglassBottomIcon from "@mui/icons-material/HourglassBottom";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import ErrorOutlineIcon from "@mui/icons-material/ErrorOutlineOutlined";
+import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import WorkOutlinedIcon from "@mui/icons-material/WorkOutlined";
 import DonutLargeIcon from "@mui/icons-material/DonutLarge";
 import FlagCircleIcon from "@mui/icons-material/FlagCircle";
@@ -107,7 +108,18 @@ function periodBounds(scope: DateScope, todayISOStr: string): [string, string] |
     const end = lastDayOf(y, qEnd);
     return [`${y}-${String(qStart).padStart(2, "0")}-01`, `${y}-${String(qEnd).padStart(2, "0")}-${String(end).padStart(2, "0")}`];
   }
-  return [`${y}-01-01`, `${y}-12-31`];
+  // Indian financial year: Apr 1 – Mar 31, not the calendar year.
+  const fyStartYear = m >= 4 ? y : y - 1;
+  return [`${fyStartYear}-04-01`, `${fyStartYear + 1}-03-31`];
+}
+
+// "FY26-27" for any date between 2026-04-01 and 2027-03-31 — derived from
+// today's date, not hardcoded, so the label rolls forward on its own each
+// April instead of needing a yearly code change.
+function currentFiscalYearLabel(todayISOStr: string): string {
+  const [y, m] = todayISOStr.split("-").map(Number);
+  const fyStartYear = m >= 4 ? y : y - 1;
+  return `FY${String(fyStartYear).slice(-2)}-${String(fyStartYear + 1).slice(-2)}`;
 }
 
 function deadlineChip(plannedFinish: string, today: string): { label: string; hex: string } {
@@ -147,7 +159,7 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
   const [query, setQuery] = useState("");
   const [myOnly, setMyOnly] = useState(false);
   const [typeFilter, setTypeFilter] = useState<"All" | ProjectType>("All");
-  const [dateScope, setDateScope] = useState<DateScope>("month");
+  const [dateScope, setDateScope] = useState<DateScope>("all");
   const [expanded, setExpanded] = useState<Record<BucketKey, boolean>>({ "In Progress": true, "Completed": true });
   const [showTicketForm, setShowTicketForm] = useState(false);
   const [ticketBusy, setTicketBusy] = useState(false);
@@ -189,7 +201,7 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
     (!query || p.name.toLowerCase().includes(query.toLowerCase()) || p.customer.toLowerCase().includes(query.toLowerCase())) &&
     (typeFilter === "All" || p.type === typeFilter) &&
     (!period || (p.startDate <= period[1] && p.endDate >= period[0]))
-  );
+  ).sort((a, b) => b.startDate.localeCompare(a.startDate));
 
   const grouped = useMemo(() => {
     const g: Record<BucketKey, ProjectWithLiveStats[]> = { "In Progress": [], "Completed": [] };
@@ -294,16 +306,23 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
       </Stack>
 
       <Grid container spacing={1.5} sx={{ mt: 2.5, mb: 1.5 }}>
-        <Grid size={{ xs: 6, sm: 3 }}>
+        <Grid size={{ xs: 6, sm: 4, md: 2 }}>
           <StatCard icon={WorkOutlinedIcon} label="Active Projects" value={portfolio.count} color={DASHBOARD_COLORS.blue} trend={trends?.active} />
         </Grid>
-        <Grid size={{ xs: 6, sm: 3 }}>
+        <Grid size={{ xs: 6, sm: 4, md: 2 }}>
+          <StatCard icon={TrendingUpIcon} label="On Track" value={health["On Track"]} color={DASHBOARD_COLORS.green} />
+        </Grid>
+        <Grid size={{ xs: 6, sm: 4, md: 2 }}>
           <StatCard icon={CheckCircleIcon} label="Completed" value={portfolio.completedCount} color={DASHBOARD_COLORS.green} trend={trends?.completed} />
         </Grid>
-        <Grid size={{ xs: 6, sm: 3 }}>
+        <Grid size={{ xs: 6, sm: 4, md: 2 }}>
+          <StatCard icon={ErrorOutlineIcon} label="Delayed Projects" value={health["Delayed"]}
+            color={health["Delayed"] > 0 ? DASHBOARD_COLORS.red : DASHBOARD_COLORS.green} tint={health["Delayed"] > 0} />
+        </Grid>
+        <Grid size={{ xs: 6, sm: 4, md: 2 }}>
           <StatCard icon={DonutLargeIcon} label="Avg. Completion" value={`${portfolio.avgPct}%`} color={DASHBOARD_COLORS.violet} trend={trends?.avg} />
         </Grid>
-        <Grid size={{ xs: 6, sm: 3 }}>
+        <Grid size={{ xs: 6, sm: 4, md: 2 }}>
           <StatCard icon={WarningAmberIcon} label="Delayed Tasks" value={portfolio.totalDelayed}
             color={portfolio.totalDelayed > 0 ? DASHBOARD_COLORS.red : DASHBOARD_COLORS.green} trend={trends?.delayed} tint={portfolio.totalDelayed > 0} />
         </Grid>
@@ -316,23 +335,23 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
                 of whatever height this card ends up matching in the grid row,
                 instead of top-aligning and leaving bare space below it. */}
             <Box sx={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center" }}>
-              <Stack direction="row" alignItems="center" spacing={3} sx={{ width: "100%" }}>
+              <Stack direction="row" alignItems="center" spacing={5} sx={{ width: "100%" }}>
                 <DonutChart
                   segments={healthLegend.filter(h => health[h.key] > 0).map(h => ({ value: health[h.key], color: h.color }))}
                   centerValue={projects.length}
                   centerLabel="Total"
-                  size={128}
-                  strokeRatio={0.19}
+                  size={190}
+                  strokeRatio={0.18}
                 />
-                <Stack spacing={1.5} sx={{ flex: 1, minWidth: 0 }}>
+                <Stack spacing={2.5} sx={{ flex: 1, minWidth: 0 }}>
                   {healthLegend.map(h => {
                     const count = health[h.key];
                     const pct = projects.length ? Math.round((count / projects.length) * 100) : 0;
                     return (
-                      <Stack key={h.key} direction="row" alignItems="center" spacing={1}>
-                        <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: h.color, flexShrink: 0 }} />
-                        <Typography variant="body2" sx={{ flex: 1 }} noWrap>{h.key}</Typography>
-                        <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>{count} ({pct}%)</Typography>
+                      <Stack key={h.key} direction="row" alignItems="center" spacing={1.25}>
+                        <Box sx={{ width: 11, height: 11, borderRadius: "50%", bgcolor: h.color, flexShrink: 0 }} />
+                        <Typography variant="body1" sx={{ flex: 1, fontWeight: 500 }} noWrap>{h.key}</Typography>
+                        <Typography variant="body1" color="text.secondary" sx={{ fontWeight: 700 }}>{count} ({pct}%)</Typography>
                       </Stack>
                     );
                   })}
@@ -445,7 +464,7 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
           <MenuItem value="all">All Time</MenuItem>
           <MenuItem value="month">This Month</MenuItem>
           <MenuItem value="quarter">This Quarter</MenuItem>
-          <MenuItem value="year">This Year</MenuItem>
+          <MenuItem value="year">{currentFiscalYearLabel(today)}</MenuItem>
         </Select>
         {showMyToggle && (
           <FormControlLabel sx={{ whiteSpace: "nowrap" }} control={
@@ -473,14 +492,6 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
                   <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>{label}</Typography>
                   <Chip label={grouped[key].length} size="small" />
                   <Box sx={{ flex: 1 }} />
-                  {grouped[key].length > 0 && (
-                    <Typography
-                      component={Link} href="#" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setExpanded(prev => ({ ...prev, [key]: true })); }}
-                      variant="caption" sx={{ color: "primary.main", fontWeight: 600, "&:hover": { textDecoration: "underline" } }}
-                    >
-                      View all
-                    </Typography>
-                  )}
                 </Stack>
               </AccordionSummary>
               <AccordionDetails>

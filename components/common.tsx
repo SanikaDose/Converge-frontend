@@ -169,7 +169,7 @@ export function StatCard({ icon: Icon, label, value, color = "primary.light", tr
   const TrendIcon = trend?.direction === "up" ? ArrowUpwardIcon : trend?.direction === "down" ? ArrowDownwardIcon : RemoveIcon;
   return (
     <Box sx={{
-      display: "flex", alignItems: "center", gap: 1.5, p: 1.75,
+      display: "flex", alignItems: "center", gap: 1.5, p: 1.75, height: "100%", boxSizing: "border-box",
       bgcolor: tint ? alpha(resolved, 0.07) : "background.paper", border: "1px solid",
       borderColor: tint ? alpha(resolved, 0.3) : "divider", borderRadius: 1.25,
     }}>

@@ -21,6 +21,7 @@ import Avatar from "@mui/material/Avatar";
 import DashboardIcon from "@mui/icons-material/SpaceDashboard";
 import GroupsIcon from "@mui/icons-material/Groups";
 import ConfirmationNumberIcon from "@mui/icons-material/ConfirmationNumber";
+import ViewKanbanIcon from "@mui/icons-material/ViewKanban";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import NotificationsNoneIcon from "@mui/icons-material/NotificationsNone";
@@ -36,6 +37,7 @@ const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: DashboardIcon },
   { href: "/team-performance", label: "Team", icon: GroupsIcon },
   { href: "/tickets", label: "Tickets", icon: ConfirmationNumberIcon },
+  { href: "/kanban", label: "Kanban", icon: ViewKanbanIcon },
 ];
 
 /** Bell icon fed by real open/in-progress tickets — no fake unread count. */

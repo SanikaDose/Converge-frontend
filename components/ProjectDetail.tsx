@@ -152,13 +152,16 @@ export function ProjectDetail({ projectId, actor, onBack }: { projectId: string;
     mutateTasks(tasks => tasks.map(t => t.id === taskId ? { ...t, checklist } : t));
   };
 
-  // Scheduling fields (day offset / planned start / duration) go through
-  // the approval branch point: direct apply for roles with
-  // editScheduleDirectly, otherwise a Pending Approval change request.
-  // Both current roles (Admin/Developer) have direct rights for now, so
-  // the reason prompt below is a placeholder for when that's no longer
-  // universally true — it isn't reachable in the current permission set.
-  const commitSchedule = (taskId: string, scheduleChanges: Partial<Task>) => {
+  /**
+   * Scheduling fields (day offset / planned start / duration) go through
+   * the approval branch point: direct apply for roles with
+   * editScheduleDirectly, otherwise a Pending Approval change request.
+   *
+   * `reason` is always supplied now — TaskCard collects it up front via
+   * ScheduleReasonDialog before calling any of these, so both branches
+   * record *why* the date moved rather than only that it did.
+   */
+  const commitSchedule = (taskId: string, scheduleChanges: Partial<Task>, reason: string) => {
     mutateTasks(tasks => tasks.map(t => {
       if (t.id !== taskId) return t;
       const taskRecord = t as unknown as Record<string, unknown>;
@@ -167,36 +170,34 @@ export function ProjectDetail({ projectId, actor, onBack }: { projectId: string;
       if (canEditScheduleDirectly) {
         const history: HistoryEntry[] = [...(t.history || [])];
         Object.entries(scheduleChanges).forEach(([field, to]) => {
-          if (taskRecord[field] !== to) history.push({ ts: new Date().toISOString(), field: fieldLabel(field), from: taskRecord[field], to, editedBy: actor.name || actor.role, reason: "" });
+          if (taskRecord[field] !== to) history.push({ ts: new Date().toISOString(), field: fieldLabel(field), from: taskRecord[field], to, editedBy: actor.name || actor.role, reason });
         });
         return { ...t, ...scheduleChanges, history };
       }
-      const reason = typeof window !== "undefined" ? window.prompt("Reason for this scheduling change (required for approval):", "") : "";
-      if (!reason) return t;
       return requestScheduleChange(t, scheduleChanges, actor, reason);
     }));
   };
-  const handleCommitOffset = (taskId: string, rawOffset: string | number) => {
+  const handleCommitOffset = (taskId: string, rawOffset: string | number, reason: string) => {
     const task = detail?.tasks.find(t => t.id === taskId);
     if (!task || !detail) return;
     const offset = Math.max(0, Number(rawOffset) || 0);
     if (offset === task.dayOffset) return;
     const { plannedStart, plannedFinish } = computePlanned(detail.meta.startDate, offset, task.duration, detail.meta.weekOff);
-    commitSchedule(taskId, { dayOffset: offset, plannedStart, plannedFinish });
+    commitSchedule(taskId, { dayOffset: offset, plannedStart, plannedFinish }, reason);
   };
-  const handleCommitStartDate = (taskId: string, nextDate: string) => {
+  const handleCommitStartDate = (taskId: string, nextDate: string, reason: string) => {
     const task = detail?.tasks.find(t => t.id === taskId);
     if (!task || !detail || !nextDate || nextDate === task.plannedStart) return;
     const offset = Math.max(0, diffDays(nextDate, detail.meta.startDate));
     const { plannedStart, plannedFinish } = computePlanned(detail.meta.startDate, offset, task.duration, detail.meta.weekOff);
-    commitSchedule(taskId, { dayOffset: offset, plannedStart, plannedFinish });
+    commitSchedule(taskId, { dayOffset: offset, plannedStart, plannedFinish }, reason);
   };
-  const handleCommitDuration = (taskId: string, rawDuration: string | number) => {
+  const handleCommitDuration = (taskId: string, rawDuration: string | number, reason: string) => {
     const task = detail?.tasks.find(t => t.id === taskId);
     const duration = Math.max(1, Number(rawDuration) || 1);
     if (!task || !detail || duration === task.duration) return;
     const { plannedFinish } = computePlanned(detail.meta.startDate, task.dayOffset, duration, detail.meta.weekOff);
-    commitSchedule(taskId, { duration, plannedFinish });
+    commitSchedule(taskId, { duration, plannedFinish }, reason);
   };
   const handleAddTask = ({ name, assignedTo, dayOffset, duration }: NewTaskPayload) => {
     if (!addTaskPhaseId || !detail) return;

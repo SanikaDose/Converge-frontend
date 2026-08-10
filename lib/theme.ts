@@ -47,7 +47,10 @@ export const STATUS_HEX = STATUS_HEX_DARK;
  */
 export const DASHBOARD_COLORS = {
   blue: "#4F6EF7",
-  green: "#22C55E",
+  // Forest green rather than a brighter emerald/lime — the deliberately
+  // deeper shade requested for every "healthy/on-track/completed" status
+  // use (donut, KPI cards, project-card "On track" chip all read this).
+  green: "#228B22",
   amber: "#F59E0B",
   orange: "#F97316",
   red: "#EF4444",

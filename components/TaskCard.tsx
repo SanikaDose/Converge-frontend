@@ -17,6 +17,9 @@ import TextField from "@mui/material/TextField";
 import InputAdornment from "@mui/material/InputAdornment";
 import Checkbox from "@mui/material/Checkbox";
 import Paper from "@mui/material/Paper";
+import Divider from "@mui/material/Divider";
+import Snackbar from "@mui/material/Snackbar";
+import Alert from "@mui/material/Alert";
 import Accordion from "@mui/material/Accordion";
 import AccordionSummary from "@mui/material/AccordionSummary";
 import AccordionDetails from "@mui/material/AccordionDetails";
@@ -27,7 +30,7 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
-import AddIcon from "@mui/icons-material/Add";
+import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutlineOutlined";
 import ChecklistIcon from "@mui/icons-material/Checklist";
 import { STATUS_OPTIONS, STATUS_COLOR, PRIORITY_COLOR, genId } from "@/lib/data";
 import { StatusChip, AchievementBadge, PendingApprovalChip, EmployeeAvatar } from "./common";
@@ -35,6 +38,7 @@ import { OrgSelect } from "./common";
 import { isOverdue, overdueWorkingDays } from "@/lib/businessLogic";
 import { fmt } from "@/lib/dateUtils";
 import { useStatusHex } from "@/lib/theme";
+import { ScheduleReasonDialog, type PendingScheduleEdit } from "./ScheduleReasonDialog";
 import type { ChecklistItem, Task, TaskStatus, WeekDay } from "@/lib/types";
 
 const fieldLabelSx = {
@@ -95,9 +99,10 @@ export function TaskCard({
   onApprove: () => void;
   onReject: (comment: string) => void;
   onCommitOwner: (ownerId: string | null) => void;
-  onCommitOffset: (offset: string | number) => void;
-  onCommitStartDate: (date: string) => void;
-  onCommitDuration: (duration: string | number) => void;
+  // Scheduling commits carry the reason captured by ScheduleReasonDialog.
+  onCommitOffset: (offset: string | number, reason: string) => void;
+  onCommitStartDate: (date: string, reason: string) => void;
+  onCommitDuration: (duration: string | number, reason: string) => void;
   onCommitDescription: (description: string) => void;
   onChecklistChange: (checklist: ChecklistItem[]) => void;
   /** Allowed planned-start window from the phase's other tasks; null when this is the only task. */
@@ -116,6 +121,8 @@ export function TaskCard({
   const [newPoint, setNewPoint] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
+  const [pendingEdit, setPendingEdit] = useState<PendingScheduleEdit | null>(null);
+  const [blockedMsg, setBlockedMsg] = useState<string | null>(null);
 
   useEffect(() => { setOwner(task.assignedTo); }, [task.assignedTo]);
   useEffect(() => { setDayOffset(task.dayOffset); }, [task.dayOffset]);
@@ -133,14 +140,57 @@ export function TaskCard({
   const checklistDone = checklist.filter(c => c.done).length;
   const canEditChecklist = canEdit && !locked;
 
-  // A task must stay inside the window its phase already occupies. That
-  // window is derived from the phase's *other* tasks — deriving it from all
-  // of them (this one included) would pin a lone task to its own current
-  // date, making the field permanently unchangeable.
   const outsidePhase = !!phaseBounds && (startDateLocal < phaseBounds.min || startDateLocal > phaseBounds.max);
+
+  // Every schedule edit routes through the reason dialog rather than
+  // committing on blur, so task history records *why* a date moved, not just
+  // that it did. `cancel` restores the field's shown value — otherwise
+  // backing out would leave the input displaying a change that never saved.
   const commitStartDateIfValid = () => {
     if (outsidePhase) { setStartDateLocal(task.plannedStart); return; }
-    onCommitStartDate(startDateLocal);
+    if (startDateLocal === task.plannedStart) return;
+    setPendingEdit({
+      fieldLabel: "Planned start date",
+      from: fmt(task.plannedStart),
+      to: fmt(startDateLocal),
+      apply: (reason) => { setPendingEdit(null); onCommitStartDate(startDateLocal, reason); },
+      cancel: () => { setPendingEdit(null); setStartDateLocal(task.plannedStart); },
+    });
+  };
+
+  const commitOffsetIfChanged = () => {
+    const next = Math.max(0, Number(dayOffset) || 0);
+    if (next === task.dayOffset) return;
+    setPendingEdit({
+      fieldLabel: "Day from start",
+      from: `Day ${task.dayOffset}`,
+      to: `Day ${next}`,
+      apply: (reason) => { setPendingEdit(null); onCommitOffset(next, reason); },
+      cancel: () => { setPendingEdit(null); setDayOffset(task.dayOffset); },
+    });
+  };
+
+  const commitDurationIfChanged = () => {
+    const next = Math.max(1, Number(duration) || 1);
+    if (next === task.duration) return;
+    setPendingEdit({
+      fieldLabel: "Duration",
+      from: `${task.duration} day${task.duration === 1 ? "" : "s"}`,
+      to: `${next} day${next === 1 ? "" : "s"}`,
+      apply: (reason) => { setPendingEdit(null); onCommitDuration(next, reason); },
+      cancel: () => { setPendingEdit(null); setDuration(task.duration); },
+    });
+  };
+
+  // A task can't be called done while its own critical points are open —
+  // that's the whole point of tracking them.
+  const openPoints = checklist.filter(c => !c.done).length;
+  const requestStatusChange = (next: TaskStatus) => {
+    if (next === "Completed" && openPoints > 0) {
+      setBlockedMsg(`${openPoints} critical point${openPoints === 1 ? "" : "s"} still open — complete ${openPoints === 1 ? "it" : "them"} first.`);
+      return;
+    }
+    onStatusChange(next);
   };
 
   const addPoint = () => {
@@ -221,7 +271,7 @@ export function TaskCard({
                 <Select
                   size="small"
                   value={task.status}
-                  onChange={(e: SelectChangeEvent) => onStatusChange(e.target.value as TaskStatus)}
+                  onChange={(e: SelectChangeEvent) => requestStatusChange(e.target.value as TaskStatus)}
                   disabled={locked}
                   MenuProps={{ onClick: (e) => e.stopPropagation() }}
                   sx={{
@@ -261,70 +311,83 @@ export function TaskCard({
           </Stack>
 
           {/* Scheduling block — shaded so it reads as its own section against
-              the card, which previously ran together as one flat surface. */}
+              the card, which previously ran together as one flat surface.
+              flex (not fixed widths) so the row fills the card instead of
+              hugging the left edge with dead space on the right; the two
+              widest fields (Owner, the date range) get the growth. */}
           <Paper variant="outlined" sx={{ ...sectionPaperSx, mb: 1.5 }}>
           <Stack direction="row" spacing={2.5} rowGap={2} alignItems="flex-end" flexWrap="wrap">
-            <Box sx={{ width: 190 }}>
+            <Box sx={{ flex: "1 1 200px", minWidth: 160 }}>
               <Typography sx={fieldLabelSx}>Owner</Typography>
               <OrgSelect label="" value={owner} onChange={(v) => { setOwner(v); canEdit && !locked && onCommitOwner(v); }}
                 size="small" fullWidth disabled={!canEdit || locked} />
             </Box>
 
-            <Box sx={{ width: 96 }}>
+            <Box sx={{ flex: "0 1 110px", minWidth: 96 }}>
               <Typography sx={fieldLabelSx}>Day from start</Typography>
               <TextField type="number" size="small" fullWidth value={dayOffset} disabled={!canEdit || locked}
                 slotProps={{ htmlInput: { min: 0, sx: fieldInputSx } }}
                 onChange={(e) => setDayOffset(e.target.value)}
-                onBlur={() => canEdit && !locked && onCommitOffset(dayOffset)} />
+                onBlur={() => canEdit && !locked && commitOffsetIfChanged()} />
             </Box>
 
             <Typography variant="caption" sx={{
               color: "text.secondary", fontWeight: 600, mb: 1, px: 0.85, py: 0.15, borderRadius: 5,
-              bgcolor: "action.hover", textTransform: "uppercase", fontSize: 10, letterSpacing: 0.4,
+              bgcolor: "action.hover", textTransform: "uppercase", fontSize: 10, letterSpacing: 0.4, flexShrink: 0,
             }}>
               or
             </Typography>
 
-            <Box sx={{ width: 178 }}>
-              <Typography sx={fieldLabelSx}>Planned start date</Typography>
-              <TextField
-                type="date" size="small" fullWidth value={startDateLocal} disabled={!canEdit || locked}
-                error={outsidePhase}
-                helperText={phaseBounds
-                  ? (outsidePhase
-                      ? `Outside phase (${fmt(phaseBounds.min)} – ${fmt(phaseBounds.max)})`
-                      : `Phase: ${fmt(phaseBounds.min)} – ${fmt(phaseBounds.max)}`)
-                  : undefined}
-                // min/max grey out everything outside the phase in the native
-                // picker; the error state covers dates typed straight in, which
-                // browsers accept regardless of min/max.
-                slotProps={{ htmlInput: { sx: fieldInputSx, min: phaseBounds?.min, max: phaseBounds?.max } }}
-                sx={{ "& .MuiFormHelperText-root": { fontSize: 10, mx: 0, mt: 0.4, lineHeight: 1.3 } }}
-                onChange={(e) => setStartDateLocal(e.target.value)}
-                onBlur={() => canEdit && !locked && commitStartDateIfValid()} />
+            {/* Start and finish read as one date range under a shared label,
+                with the phase window called out once beneath both. */}
+            <Box sx={{ flex: "1 1 320px", minWidth: 280 }}>
+              <Typography sx={fieldLabelSx}>Planned start / finish</Typography>
+              <Stack direction="row" gap={1} alignItems="flex-start">
+                <TextField
+                  type="date" size="small" fullWidth value={startDateLocal} disabled={!canEdit || locked}
+                  error={outsidePhase}
+                  // min/max grey out everything outside the phase in the native
+                  // picker; the error state covers dates typed straight in, which
+                  // browsers accept regardless of min/max.
+                  slotProps={{ htmlInput: { sx: fieldInputSx, min: phaseBounds?.min, max: phaseBounds?.max } }}
+                  sx={{ flex: 1 }}
+                  onChange={(e) => setStartDateLocal(e.target.value)}
+                  onBlur={() => canEdit && !locked && commitStartDateIfValid()} />
+                <TextField
+                  size="small" fullWidth value={fmt(task.plannedFinish)} disabled
+                  slotProps={{ htmlInput: { sx: fieldInputSx } }}
+                  sx={{ flex: 1, "& .MuiInputBase-input.Mui-disabled": { WebkitTextFillColor: "unset", color: "text.primary", fontWeight: 600 } }} />
+              </Stack>
+              {phaseBounds && (
+                <Typography sx={{
+                  fontSize: 10.5, mt: 0.5, lineHeight: 1.3,
+                  color: outsidePhase ? "error.main" : "text.secondary",
+                  fontWeight: outsidePhase ? 600 : 400,
+                }}>
+                  {outsidePhase ? "Outside phase " : "Phase: "}
+                  {fmt(phaseBounds.min)} – {fmt(phaseBounds.max)}
+                </Typography>
+              )}
             </Box>
 
-            <Box sx={{ width: 96 }}>
+            <Divider orientation="vertical" flexItem sx={{ mx: 0.5, my: 0.5 }} />
+
+            <Box sx={{ flex: "0 1 120px", minWidth: 108 }}>
               <Typography sx={fieldLabelSx}>Duration (days)</Typography>
               <TextField type="number" size="small" fullWidth value={duration} disabled={!canEdit || locked}
                 slotProps={{ htmlInput: { min: 1, sx: fieldInputSx } }}
                 onChange={(e) => setDuration(e.target.value)}
-                onBlur={() => canEdit && !locked && onCommitDuration(duration)} />
-            </Box>
-
-            <Box sx={{ minWidth: 120 }}>
-              <Typography sx={fieldLabelSx}>Planned finish</Typography>
-              <Typography sx={{ fontSize: 13, fontWeight: 600, height: 40, display: "flex", alignItems: "center" }}>
-                {fmt(task.plannedFinish)}
-              </Typography>
+                onBlur={() => canEdit && !locked && commitDurationIfChanged()} />
             </Box>
           </Stack>
           </Paper>
 
-          <Paper variant="outlined" sx={sectionPaperSx}>
-            <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 1.25 }}>
-              <ChecklistIcon sx={{ fontSize: 15, color: "text.secondary" }} />
-              <Typography sx={{ fontSize: 10.5, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary" }}>
+          {/* Header band → divided rows → add field, each edge-to-edge inside
+              the panel rather than inset, so the section reads as one list. */}
+          <Paper variant="outlined" sx={{ bgcolor: "background.default", borderColor: "divider", borderRadius: 1.5, overflow: "hidden" }}>
+            <Stack direction="row" alignItems="center" gap={1.25} sx={{ px: 2, py: 1.5 }}>
+              <ChecklistIcon sx={{ fontSize: 19, color: "text.secondary" }} />
+              <Typography sx={{ fontSize: 13, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>
                 Critical points
               </Typography>
               {checklist.length > 0 && (
@@ -332,134 +395,136 @@ export function TaskCard({
                   label={`${checklistDone}/${checklist.length}`}
                   size="small"
                   sx={{
-                    height: 18, fontSize: 10, fontWeight: 700,
+                    height: 21, fontSize: 11, fontWeight: 700,
                     color: checklistDone === checklist.length ? STATUS_HEX.green : "text.secondary",
                     bgcolor: checklistDone === checklist.length
                       ? `color-mix(in srgb, ${STATUS_HEX.green} 18%, transparent)`
-                      : "action.hover",
+                      : "action.selected",
                   }}
                 />
               )}
             </Stack>
 
-            {checklist.length > 0 && (
-              <Stack spacing={0.5} sx={{ mb: 1.25 }}>
-                {checklist.map(item => {
-                  const isEditing = editingId === item.id;
-                  return (
-                    <Stack key={item.id} direction="row" alignItems="flex-start" gap={0.5}
-                      sx={{
-                        borderRadius: 1, px: 0.5, py: 0.25,
-                        bgcolor: isEditing ? "action.hover" : "transparent",
-                        "&:hover .chk-actions": { opacity: 1 },
+            {checklist.map(item => {
+              const isEditing = editingId === item.id;
+              return (
+                <Stack key={item.id} direction="row" alignItems="center" gap={1}
+                  sx={{
+                    px: 2, py: 1, borderTop: "1px solid", borderColor: "divider",
+                    bgcolor: isEditing ? "action.hover" : "transparent",
+                  }}>
+                  <Checkbox
+                    size="small" checked={item.done} disabled={!canEditChecklist || isEditing}
+                    onChange={() => togglePoint(item.id)}
+                    sx={{ p: 0.5, ml: -0.5 }}
+                  />
+
+                  {isEditing ? (
+                    <TextField
+                      value={editText}
+                      onChange={(e) => setEditText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") { e.preventDefault(); savePointText(item.id); }
+                        if (e.key === "Escape") { e.preventDefault(); setEditingId(null); setEditText(""); }
+                      }}
+                      autoFocus size="small" fullWidth
+                      sx={{ bgcolor: "background.paper", "& .MuiInputBase-input": { fontSize: 14, py: 0.6 } }}
+                    />
+                  ) : (
+                    <>
+                      <Typography sx={{
+                        flex: 1, minWidth: 0, fontSize: 14, wordBreak: "break-word", lineHeight: 1.4,
+                        color: item.done ? "text.disabled" : "text.primary",
+                        textDecoration: item.done ? "line-through" : "none",
                       }}>
-                      <Checkbox
-                        size="small" checked={item.done} disabled={!canEditChecklist || isEditing}
-                        onChange={() => togglePoint(item.id)}
-                        sx={{ p: 0.5 }}
-                      />
-
-                      {isEditing ? (
-                        <TextField
-                          value={editText}
-                          onChange={(e) => setEditText(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") { e.preventDefault(); savePointText(item.id); }
-                            if (e.key === "Escape") { e.preventDefault(); setEditingId(null); setEditText(""); }
-                          }}
-                          autoFocus size="small" fullWidth
-                          sx={{ "& .MuiInputBase-input": { fontSize: 13, py: 0.5 } }}
-                        />
-                      ) : (
-                        <Box sx={{ flex: 1, minWidth: 0, py: 0.4 }}>
-                          <Typography sx={{
-                            fontSize: 13, wordBreak: "break-word", lineHeight: 1.4,
-                            color: item.done ? "text.disabled" : "text.primary",
-                            textDecoration: item.done ? "line-through" : "none",
-                          }}>
-                            {item.text}
-                          </Typography>
-                          {item.updatedAt && (
-                            <Typography sx={{ fontSize: 10.5, color: "text.disabled", display: "block", mt: 0.15 }}>
-                              {item.done ? "Completed" : "Updated"} {fmtStamp(item.updatedAt)}
-                            </Typography>
-                          )}
-                        </Box>
+                        {item.text}
+                      </Typography>
+                      {item.updatedAt && (
+                        <Typography sx={{ fontSize: 12.5, color: "text.disabled", flexShrink: 0, whiteSpace: "nowrap" }}>
+                          {item.done ? "Completed" : "Updated"} {fmtStamp(item.updatedAt)}
+                        </Typography>
                       )}
+                    </>
+                  )}
 
-                      {canEditChecklist && (
-                        <Stack direction="row" gap={0.25} className={isEditing ? undefined : "chk-actions"}
-                          sx={{ opacity: isEditing ? 1 : 0, transition: "opacity .12s ease", flexShrink: 0, pt: 0.25 }}>
-                          {isEditing ? (
-                            <>
-                              <Tooltip title="Save">
-                                <span>
-                                  <IconButton size="small" disabled={!editText.trim()} onClick={() => savePointText(item.id)}
-                                    sx={{ color: STATUS_HEX.green }}>
-                                    <CheckIcon sx={{ fontSize: 15 }} />
-                                  </IconButton>
-                                </span>
-                              </Tooltip>
-                              <Tooltip title="Cancel">
-                                <IconButton size="small" onClick={() => { setEditingId(null); setEditText(""); }}
-                                  sx={{ color: "text.secondary" }}>
-                                  <CloseIcon sx={{ fontSize: 15 }} />
-                                </IconButton>
-                              </Tooltip>
-                            </>
-                          ) : (
-                            <>
-                              <Tooltip title="Edit point">
-                                <IconButton size="small" onClick={() => { setEditingId(item.id); setEditText(item.text); }}
-                                  sx={{ color: "text.secondary" }}>
-                                  <EditIcon sx={{ fontSize: 14 }} />
-                                </IconButton>
-                              </Tooltip>
-                              <Tooltip title={item.done
-                                ? "Completed points are kept as a record — untick it first to delete"
-                                : "Delete point"}>
-                                {/* span: a disabled button can't fire the events Tooltip listens for. */}
-                                <span>
-                                  <IconButton size="small" disabled={item.done} onClick={() => removePoint(item.id)}
-                                    sx={{ color: "text.secondary" }}>
-                                    <DeleteOutlineIcon sx={{ fontSize: 14 }} />
-                                  </IconButton>
-                                </span>
-                              </Tooltip>
-                            </>
-                          )}
-                        </Stack>
+                  {canEditChecklist && (
+                    <Stack direction="row" gap={0.25} sx={{ flexShrink: 0 }}>
+                      {isEditing ? (
+                        <>
+                          <Tooltip title="Save">
+                            <span>
+                              <IconButton size="small" disabled={!editText.trim()} onClick={() => savePointText(item.id)}
+                                sx={{ color: STATUS_HEX.green }}>
+                                <CheckIcon sx={{ fontSize: 16 }} />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                          <Tooltip title="Cancel">
+                            <IconButton size="small" onClick={() => { setEditingId(null); setEditText(""); }}
+                              sx={{ color: "text.secondary" }}>
+                              <CloseIcon sx={{ fontSize: 16 }} />
+                            </IconButton>
+                          </Tooltip>
+                        </>
+                      ) : (
+                        <>
+                          <Tooltip title="Edit point">
+                            <IconButton size="small" onClick={() => { setEditingId(item.id); setEditText(item.text); }}
+                              sx={{ color: "text.secondary" }}>
+                              <EditIcon sx={{ fontSize: 15 }} />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title={item.done
+                            ? "Completed points are kept as a record — untick it first to delete"
+                            : "Delete point"}>
+                            {/* span: a disabled button can't fire the events Tooltip listens for. */}
+                            <span>
+                              <IconButton size="small" disabled={item.done} onClick={() => removePoint(item.id)}
+                                sx={{ color: "text.secondary" }}>
+                                <DeleteOutlineIcon sx={{ fontSize: 15 }} />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                        </>
                       )}
                     </Stack>
-                  );
-                })}
-              </Stack>
-            )}
+                  )}
+                </Stack>
+              );
+            })}
 
             {canEditChecklist ? (
-              <TextField
-                value={newPoint}
-                onChange={(e) => setNewPoint(e.target.value)}
-                // Enter commits the point. The form-less card means there's no
-                // implicit submit to worry about, but preventDefault keeps it
-                // from bubbling into the accordion's own key handling.
-                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addPoint(); } }}
-                placeholder="Add a critical point, then press Enter"
-                size="small" fullWidth
-                slotProps={{
-                  input: {
-                    startAdornment: <InputAdornment position="start"><AddIcon sx={{ fontSize: 16, color: "text.secondary" }} /></InputAdornment>,
-                    endAdornment: newPoint.trim() ? (
-                      <InputAdornment position="end">
-                        <Button size="small" onClick={addPoint} sx={{ fontSize: 11.5, minWidth: 0 }}>Add</Button>
-                      </InputAdornment>
-                    ) : null,
-                  },
-                }}
-                sx={{ "& .MuiInputBase-input": { fontSize: 13 } }}
-              />
+              <Box sx={{ px: 1.5, py: 1.5, borderTop: "1px solid", borderColor: "divider" }}>
+                <TextField
+                  value={newPoint}
+                  onChange={(e) => setNewPoint(e.target.value)}
+                  // Enter commits the point. The form-less card means there's no
+                  // implicit submit to worry about, but preventDefault keeps it
+                  // from bubbling into the accordion's own key handling.
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addPoint(); } }}
+                  placeholder="Add a critical point, then press Enter"
+                  size="small" fullWidth
+                  slotProps={{
+                    input: {
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <AddCircleOutlineIcon sx={{ fontSize: 20, color: "primary.main" }} />
+                        </InputAdornment>
+                      ),
+                      endAdornment: newPoint.trim() ? (
+                        <InputAdornment position="end">
+                          <Button size="small" onClick={addPoint} sx={{ fontSize: 12, minWidth: 0 }}>Add</Button>
+                        </InputAdornment>
+                      ) : null,
+                    },
+                  }}
+                  sx={{ bgcolor: "background.paper", "& .MuiInputBase-input": { fontSize: 14 } }}
+                />
+              </Box>
             ) : checklist.length === 0 && (
-              <Typography variant="caption" color="text.disabled">No critical points added.</Typography>
+              <Typography variant="caption" color="text.disabled" sx={{ display: "block", px: 2, pb: 1.75 }}>
+                No critical points added.
+              </Typography>
             )}
           </Paper>
 
@@ -502,6 +567,17 @@ export function TaskCard({
           )}
         </AccordionDetails>
       </Accordion>
+
+      {pendingEdit && <ScheduleReasonDialog edit={pendingEdit} />}
+
+      <Snackbar
+        open={!!blockedMsg} autoHideDuration={5000} onClose={() => setBlockedMsg(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert severity="warning" variant="filled" onClose={() => setBlockedMsg(null)} sx={{ fontWeight: 600 }}>
+          {blockedMsg}
+        </Alert>
+      </Snackbar>
 
       <Dialog open={confirmDelete} onClose={() => setConfirmDelete(false)}>
         <DialogTitle>Delete &quot;{task.name}&quot;?</DialogTitle>

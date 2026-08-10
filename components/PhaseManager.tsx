@@ -160,9 +160,9 @@ export function PhaseTaskPanel({
   onAddTask: () => void;
   onReorder: (dragId: string, dropId: string) => void;
   onCommitOwner: (taskId: string, ownerId: string | null) => void;
-  onCommitOffset: (taskId: string, offset: string | number) => void;
-  onCommitStartDate: (taskId: string, date: string) => void;
-  onCommitDuration: (taskId: string, duration: string | number) => void;
+  onCommitOffset: (taskId: string, offset: string | number, reason: string) => void;
+  onCommitStartDate: (taskId: string, date: string, reason: string) => void;
+  onCommitDuration: (taskId: string, duration: string | number, reason: string) => void;
   onCommitDescription: (taskId: string, description: string) => void;
   onChecklistChange: (taskId: string, checklist: ChecklistItem[]) => void;
 }) {
@@ -251,9 +251,9 @@ export function PhaseTaskPanel({
               onApprove={() => onApprove(t.id)}
               onReject={(comment) => onReject(t.id, comment)}
               onCommitOwner={(ownerId) => onCommitOwner(t.id, ownerId)}
-              onCommitOffset={(offset) => onCommitOffset(t.id, offset)}
-              onCommitStartDate={(date) => onCommitStartDate(t.id, date)}
-              onCommitDuration={(duration) => onCommitDuration(t.id, duration)}
+              onCommitOffset={(offset, reason) => onCommitOffset(t.id, offset, reason)}
+              onCommitStartDate={(date, reason) => onCommitStartDate(t.id, date, reason)}
+              onCommitDuration={(duration, reason) => onCommitDuration(t.id, duration, reason)}
               onCommitDescription={(desc) => onCommitDescription(t.id, desc)}
               onChecklistChange={(checklist) => onChecklistChange(t.id, checklist)}
               phaseBounds={phaseBounds}

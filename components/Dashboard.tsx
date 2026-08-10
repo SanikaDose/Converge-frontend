@@ -58,16 +58,17 @@ const BUCKETS: { key: BucketKey; label: string; icon: ElementType; color: string
   { key: "Completed", label: "Completed Projects", icon: CheckCircleIcon, color: "success.main" },
 ];
 
-type HealthKey = "On Track" | "At Risk" | "Delayed" | "Completed";
+type HealthKey = "On Track" | "Delayed" | "Completed";
 
-// Distinct from a project's own "N delayed" badge (which counts overdue
-// *tasks*): this is the project's overall health. "Delayed" here means
-// the project's own target end date has already passed; "At Risk" means
-// it has overdue tasks but hasn't blown its overall deadline yet.
+// Matches ProjectCard's own badge exactly (project.delayed > 0 → red "N
+// delayed" chip, otherwise green "On track") — this used to be a stricter,
+// separate definition (only counting the project's own end date as blown),
+// which silently demoted a project with real overdue tasks to a middling
+// "At Risk" bucket the donut showed instead of "Delayed". A project's
+// target end date having passed still counts too, for the same reason.
 function classifyHealth(p: ProjectWithLiveStats, today: string): HealthKey {
   if (p.total > 0 && p.completed === p.total) return "Completed";
-  if (p.endDate < today) return "Delayed";
-  if (p.delayed > 0) return "At Risk";
+  if (p.delayed > 0 || p.endDate < today) return "Delayed";
   return "On Track";
 }
 
@@ -120,8 +121,11 @@ function deadlineChip(plannedFinish: string, today: string): { label: string; he
 /** Card shell shared by the three analytics widgets — title + optional header action + content. */
 function AnalyticsCard({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (
-    <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: 1.5, p: 2.25, height: "100%" }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.75 }}>
+    <Box sx={{
+      bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: 1.5, p: 2.25,
+      height: "100%", display: "flex", flexDirection: "column",
+    }}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.75, flexShrink: 0 }}>
         <Typography sx={{ fontWeight: 700, fontSize: 15 }}>{title}</Typography>
         {action}
       </Stack>
@@ -211,14 +215,13 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
   } : null, [baseline, portfolio]);
 
   const health = useMemo(() => {
-    const counts: Record<HealthKey, number> = { "On Track": 0, "At Risk": 0, "Delayed": 0, "Completed": 0 };
+    const counts: Record<HealthKey, number> = { "On Track": 0, "Delayed": 0, "Completed": 0 };
     projects.forEach(p => { counts[classifyHealth(p, today)] += 1; });
     return counts;
   }, [projects, today]);
 
   const healthLegend: { key: HealthKey; color: string }[] = [
     { key: "On Track", color: DASHBOARD_COLORS.green },
-    { key: "At Risk", color: DASHBOARD_COLORS.amber },
     { key: "Delayed", color: DASHBOARD_COLORS.red },
     { key: "Completed", color: DASHBOARD_COLORS.slate },
   ];
@@ -309,28 +312,33 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
       <Grid container spacing={1.5} sx={{ mb: 1.5 }}>
         <Grid size={{ xs: 12, md: 4 }}>
           <AnalyticsCard title="Projects by Status">
-            <Stack direction="row" alignItems="center" spacing={3}>
-              <DonutChart
-                segments={healthLegend.filter(h => health[h.key] > 0).map(h => ({ value: health[h.key], color: h.color }))}
-                centerValue={projects.length}
-                centerLabel="Total"
-                size={128}
-                strokeRatio={0.19}
-              />
-              <Stack spacing={1.5} sx={{ flex: 1, minWidth: 0 }}>
-                {healthLegend.map(h => {
-                  const count = health[h.key];
-                  const pct = projects.length ? Math.round((count / projects.length) * 100) : 0;
-                  return (
-                    <Stack key={h.key} direction="row" alignItems="center" spacing={1}>
-                      <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: h.color, flexShrink: 0 }} />
-                      <Typography variant="body2" sx={{ flex: 1 }} noWrap>{h.key}</Typography>
-                      <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>{count} ({pct}%)</Typography>
-                    </Stack>
-                  );
-                })}
+            {/* flex:1 + centered so the donut+legend row sits in the middle
+                of whatever height this card ends up matching in the grid row,
+                instead of top-aligning and leaving bare space below it. */}
+            <Box sx={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center" }}>
+              <Stack direction="row" alignItems="center" spacing={3} sx={{ width: "100%" }}>
+                <DonutChart
+                  segments={healthLegend.filter(h => health[h.key] > 0).map(h => ({ value: health[h.key], color: h.color }))}
+                  centerValue={projects.length}
+                  centerLabel="Total"
+                  size={128}
+                  strokeRatio={0.19}
+                />
+                <Stack spacing={1.5} sx={{ flex: 1, minWidth: 0 }}>
+                  {healthLegend.map(h => {
+                    const count = health[h.key];
+                    const pct = projects.length ? Math.round((count / projects.length) * 100) : 0;
+                    return (
+                      <Stack key={h.key} direction="row" alignItems="center" spacing={1}>
+                        <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: h.color, flexShrink: 0 }} />
+                        <Typography variant="body2" sx={{ flex: 1 }} noWrap>{h.key}</Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>{count} ({pct}%)</Typography>
+                      </Stack>
+                    );
+                  })}
+                </Stack>
               </Stack>
-            </Stack>
+            </Box>
           </AnalyticsCard>
         </Grid>
 

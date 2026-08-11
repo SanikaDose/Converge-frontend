@@ -275,6 +275,13 @@ export interface Ticket {
   priority: Priority;
   status: TicketStatus;
   createdAt: string;
+  /**
+   * The date the ticket reached Resolved/Closed, stamped server-side and
+   * cleared on reopen — null while it's still open.
+   */
+  resolvedAt: string | null;
+  /** "What was done about this" entries — same shape as a task's critical-points checklist. */
+  actionPoints: ChecklistItem[];
 }
 
 export interface CreateTicketInput {

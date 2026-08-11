@@ -5,9 +5,14 @@ import Box from "@mui/material/Box";
 import Stack from "./Stack";
 import Typography from "@mui/material/Typography";
 import Button from "@mui/material/Button";
+import IconButton from "@mui/material/IconButton";
 import Select, { type SelectChangeEvent } from "@mui/material/Select";
 import MenuItem from "@mui/material/MenuItem";
 import TextField from "@mui/material/TextField";
+import InputAdornment from "@mui/material/InputAdornment";
+import Checkbox from "@mui/material/Checkbox";
+import Paper from "@mui/material/Paper";
+import Tooltip from "@mui/material/Tooltip";
 import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
@@ -21,11 +26,26 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import AddIcon from "@mui/icons-material/Add";
 import FlagCircleIcon from "@mui/icons-material/FlagCircle";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import EditIcon from "@mui/icons-material/Edit";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
+import CheckIcon from "@mui/icons-material/Check";
+import CloseIcon from "@mui/icons-material/Close";
+import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutlineOutlined";
+import ChecklistIcon from "@mui/icons-material/Checklist";
 import { OrgSelect, StatusChip, EmployeeAvatar } from "./common";
-import { TEMPLATE, roleCan } from "@/lib/data";
+import { TEMPLATE, roleCan, genId } from "@/lib/data";
+import { fmt } from "@/lib/dateUtils";
 import { fetchTickets, createTicketApi, updateTicketApi } from "@/lib/api";
+import { useStatusHex } from "@/lib/theme";
 import type { CreateTicketInput } from "@/lib/types";
-import type { Actor, Priority, StatusColorKey, Ticket, TicketStatus } from "@/lib/types";
+import type { Actor, ChecklistItem, Priority, StatusColorKey, Ticket, TicketStatus } from "@/lib/types";
+
+/** "10 Aug 2026, 14:32" — action-point stamps need the time, matching TaskCard's fmtStamp. */
+function fmtStamp(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString(undefined, { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
 
 const TICKET_STATUS: TicketStatus[] = ["Open", "In Progress", "Resolved", "Closed"];
 const TICKET_STATUS_COLOR: Record<TicketStatus, StatusColorKey> = { Open: "red", "In Progress": "amber", Resolved: "green", Closed: "slate" };
@@ -89,31 +109,228 @@ export function TicketForm({ projects, onClose, onSubmit, busy }: {
   );
 }
 
+/**
+ * One ticket, as a Material UI Accordion — collapsed shows just enough to
+ * scan the list (seq, title, priority, assignee, status); expanding it
+ * reveals a description textarea and an "Action taken" checklist, styled
+ * and behaved exactly like TaskCard's description field + "Critical
+ * points" section so both features read as one consistent pattern.
+ */
 function TicketRow({ ticket, canUpdate, onUpdate }: {
   ticket: Ticket;
   canUpdate: boolean;
   onUpdate: (id: string, updates: Partial<Ticket>) => void;
 }) {
+  const STATUS_HEX = useStatusHex();
   const color = TICKET_STATUS_COLOR[ticket.status];
+  const [expanded, setExpanded] = useState(false);
+  const [description, setDescription] = useState(ticket.description || "");
+  const [newPoint, setNewPoint] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
+
+  useEffect(() => { setDescription(ticket.description || ""); }, [ticket.description]);
+
+  const actionPoints = ticket.actionPoints ?? [];
+  const doneCount = actionPoints.filter(c => c.done).length;
+
+  const addPoint = () => {
+    const text = newPoint.trim();
+    if (!text || !canUpdate) return;
+    const now = new Date().toISOString();
+    onUpdate(ticket.id, { actionPoints: [...actionPoints, { id: genId("act"), text, done: false, createdAt: now, updatedAt: now }] });
+    setNewPoint("");
+  };
+  const togglePoint = (id: string) =>
+    onUpdate(ticket.id, { actionPoints: actionPoints.map(c => c.id === id ? { ...c, done: !c.done, updatedAt: new Date().toISOString() } : c) });
+  const savePointText = (id: string) => {
+    const text = editText.trim();
+    if (!text) return;
+    onUpdate(ticket.id, { actionPoints: actionPoints.map(c => c.id === id ? { ...c, text, updatedAt: new Date().toISOString() } : c) });
+    setEditingId(null);
+    setEditText("");
+  };
+  // Same rule as a task's critical points — a ticked point is the record
+  // that the work happened, so it stays put. Untick first to delete.
+  const removePoint = (id: string) => {
+    const item = actionPoints.find(c => c.id === id);
+    if (!item || item.done) return;
+    onUpdate(ticket.id, { actionPoints: actionPoints.filter(c => c.id !== id) });
+  };
+
   return (
-    <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 1.5, bgcolor: "background.default", border: "1px solid", borderColor: "divider", borderRadius: 2, p: 1.5, flexWrap: "wrap" }}>
-      <Box sx={{ minWidth: 0 }}>
-        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-          <Typography variant="caption" color="text.secondary">#{ticket.seq}</Typography>
-          <Typography variant="body2">{ticket.title}</Typography>
-          {ticket.priority === "High" && <Chip label="High" size="small" color="error" variant="outlined" sx={{ height: 18 }} />}
-          <EmployeeAvatar employeeId={ticket.assignedTo} size={20} />
+    <Accordion
+      expanded={expanded} onChange={() => setExpanded(v => !v)} disableGutters
+      sx={{
+        bgcolor: "background.default", border: "1px solid", borderColor: "divider",
+        borderRadius: "10px !important", overflow: "hidden", "&:before": { display: "none" },
+      }}
+    >
+      <AccordionSummary
+        expandIcon={<ExpandMoreIcon fontSize="small" />}
+        sx={{ px: 1.75, minHeight: 58, "& .MuiAccordionSummary-content": { display: "flex", alignItems: "center", gap: 1.5, minWidth: 0, my: 1, flexWrap: "wrap" } }}
+      >
+        <Box sx={{ minWidth: 0, flex: 1 }}>
+          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+            <Typography variant="caption" color="text.secondary">#{ticket.seq}</Typography>
+            <Typography variant="body2">{ticket.title}</Typography>
+            {ticket.priority === "High" && <Chip label="High" size="small" color="error" variant="outlined" sx={{ height: 18 }} />}
+            <EmployeeAvatar employeeId={ticket.assignedTo} size={20} />
+          </Stack>
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.4 }}>
+            {ticket.projectName}{ticket.phase ? ` · ${ticket.phase}` : ""} · Raised {fmt(ticket.createdAt)}
+            {ticket.resolvedAt ? ` · ${ticket.status === "Closed" ? "Closed" : "Resolved"} ${fmt(ticket.resolvedAt)}` : ""}
+          </Typography>
+        </Box>
+        <Box onClick={(e) => e.stopPropagation()} sx={{ flexShrink: 0 }}>
+          {canUpdate ? (
+            <Select size="small" value={ticket.status} onChange={(e: SelectChangeEvent) => onUpdate(ticket.id, { status: e.target.value as TicketStatus })}
+              MenuProps={{ onClick: (e) => e.stopPropagation() }} sx={{ minWidth: 140 }}>
+              {TICKET_STATUS.map(s => <MenuItem key={s} value={s}>{s}</MenuItem>)}
+            </Select>
+          ) : <StatusChip label={ticket.status} color={color} />}
+        </Box>
+      </AccordionSummary>
+
+      <AccordionDetails sx={{ px: 1.75, pt: 0, pb: 2 }}>
+        <TextField
+          value={description} onChange={(e) => setDescription(e.target.value)}
+          onBlur={() => canUpdate && description !== (ticket.description || "") && onUpdate(ticket.id, { description })}
+          placeholder={canUpdate ? "Add a description for this issue…" : "No description added."}
+          disabled={!canUpdate} multiline minRows={1} maxRows={4} fullWidth
+          sx={{ mb: 2, bgcolor: "background.paper", "& .MuiInputBase-input": { fontSize: 13 } }}
+        />
+
+        {/* Same shape as TaskCard's "Plan → / Started / Finished" strip: the
+            dates that bracket the work, colored only once there's an outcome. */}
+        <Stack direction="row" gap={1.5} flexWrap="wrap" sx={{ mb: 2, fontSize: 11.5, color: "text.secondary" }}>
+          <span>Raised {fmt(ticket.createdAt)}</span>
+          {ticket.resolvedAt && (
+            <span style={{ color: ticket.status === "Closed" ? STATUS_HEX.slate : STATUS_HEX.green }}>
+              {ticket.status === "Closed" ? "Closed" : "Resolved"} {fmt(ticket.resolvedAt)}
+            </span>
+          )}
         </Stack>
-        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.4 }}>
-          {ticket.projectName}{ticket.phase ? ` · ${ticket.phase}` : ""} · Raised {ticket.createdAt}
-        </Typography>
-      </Box>
-      {canUpdate ? (
-        <Select size="small" value={ticket.status} onChange={(e: SelectChangeEvent) => onUpdate(ticket.id, { status: e.target.value as TicketStatus })} sx={{ minWidth: 140 }}>
-          {TICKET_STATUS.map(s => <MenuItem key={s} value={s}>{s}</MenuItem>)}
-        </Select>
-      ) : <StatusChip label={ticket.status} color={color} />}
-    </Box>
+
+        <Paper variant="outlined" sx={{ bgcolor: "background.paper", borderColor: "divider", borderRadius: 1.5, overflow: "hidden" }}>
+          <Stack direction="row" alignItems="center" gap={1.25} sx={{ px: 2, py: 1.5 }}>
+            <ChecklistIcon sx={{ fontSize: 19, color: "text.secondary" }} />
+            <Typography sx={{ fontSize: 13, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>
+              Action taken
+            </Typography>
+            {actionPoints.length > 0 && (
+              <Chip
+                label={`${doneCount}/${actionPoints.length}`} size="small"
+                sx={{
+                  height: 21, fontSize: 11, fontWeight: 700,
+                  color: doneCount === actionPoints.length ? STATUS_HEX.green : "text.secondary",
+                  bgcolor: doneCount === actionPoints.length
+                    ? `color-mix(in srgb, ${STATUS_HEX.green} 18%, transparent)`
+                    : "action.selected",
+                }}
+              />
+            )}
+          </Stack>
+
+          {actionPoints.map(item => {
+            const isEditing = editingId === item.id;
+            return (
+              <Stack key={item.id} direction="row" alignItems="center" gap={1}
+                sx={{ px: 2, py: 1, borderTop: "1px solid", borderColor: "divider", bgcolor: isEditing ? "action.hover" : "transparent" }}>
+                <Checkbox size="small" checked={item.done} disabled={!canUpdate || isEditing} onChange={() => togglePoint(item.id)} sx={{ p: 0.5, ml: -0.5 }} />
+
+                {isEditing ? (
+                  <TextField
+                    value={editText} onChange={(e) => setEditText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") { e.preventDefault(); savePointText(item.id); }
+                      if (e.key === "Escape") { e.preventDefault(); setEditingId(null); setEditText(""); }
+                    }}
+                    autoFocus size="small" fullWidth
+                    sx={{ bgcolor: "background.default", "& .MuiInputBase-input": { fontSize: 14, py: 0.6 } }}
+                  />
+                ) : (
+                  <>
+                    <Typography sx={{
+                      flex: 1, minWidth: 0, fontSize: 14, wordBreak: "break-word", lineHeight: 1.4,
+                      color: item.done ? "text.disabled" : "text.primary",
+                      textDecoration: item.done ? "line-through" : "none",
+                    }}>
+                      {item.text}
+                    </Typography>
+                    {item.updatedAt && (
+                      <Typography sx={{ fontSize: 12.5, color: "text.disabled", flexShrink: 0, whiteSpace: "nowrap" }}>
+                        {item.done ? "Completed" : "Updated"} {fmtStamp(item.updatedAt)}
+                      </Typography>
+                    )}
+                  </>
+                )}
+
+                {canUpdate && (
+                  <Stack direction="row" gap={0.25} sx={{ flexShrink: 0 }}>
+                    {isEditing ? (
+                      <>
+                        <Tooltip title="Save">
+                          <span>
+                            <IconButton size="small" disabled={!editText.trim()} onClick={() => savePointText(item.id)} sx={{ color: STATUS_HEX.green }}>
+                              <CheckIcon sx={{ fontSize: 16 }} />
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                        <Tooltip title="Cancel">
+                          <IconButton size="small" onClick={() => { setEditingId(null); setEditText(""); }} sx={{ color: "text.secondary" }}>
+                            <CloseIcon sx={{ fontSize: 16 }} />
+                          </IconButton>
+                        </Tooltip>
+                      </>
+                    ) : (
+                      <>
+                        <Tooltip title="Edit point">
+                          <IconButton size="small" onClick={() => { setEditingId(item.id); setEditText(item.text); }} sx={{ color: "text.secondary" }}>
+                            <EditIcon sx={{ fontSize: 15 }} />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title={item.done ? "Completed points are kept as a record — untick it first to delete" : "Delete point"}>
+                          <span>
+                            <IconButton size="small" disabled={item.done} onClick={() => removePoint(item.id)} sx={{ color: "text.secondary" }}>
+                              <DeleteOutlineIcon sx={{ fontSize: 15 }} />
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                      </>
+                    )}
+                  </Stack>
+                )}
+              </Stack>
+            );
+          })}
+
+          {canUpdate ? (
+            <Box sx={{ px: 1.5, py: 1.5, borderTop: "1px solid", borderColor: "divider" }}>
+              <TextField
+                value={newPoint} onChange={(e) => setNewPoint(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addPoint(); } }}
+                placeholder="Add an action taken, then press Enter"
+                size="small" fullWidth
+                slotProps={{
+                  input: {
+                    startAdornment: <InputAdornment position="start"><AddCircleOutlineIcon sx={{ fontSize: 20, color: "primary.main" }} /></InputAdornment>,
+                    endAdornment: newPoint.trim() ? (
+                      <InputAdornment position="end"><Button size="small" onClick={addPoint} sx={{ fontSize: 12, minWidth: 0 }}>Add</Button></InputAdornment>
+                    ) : null,
+                  },
+                }}
+                sx={{ bgcolor: "background.default", "& .MuiInputBase-input": { fontSize: 14 } }}
+              />
+            </Box>
+          ) : actionPoints.length === 0 && (
+            <Typography variant="caption" color="text.disabled" sx={{ display: "block", px: 2, pb: 1.75 }}>
+              No action taken yet.
+            </Typography>
+          )}
+        </Paper>
+      </AccordionDetails>
+    </Accordion>
   );
 }
 
@@ -141,7 +358,12 @@ export function TicketsPanel({ actor, projects, refreshKey, onChanged }: {
 
   const load = useCallback(async () => {
     setLoading(true);
-    try { setTickets(await fetchTickets()); } catch { setTickets([]); }
+    try {
+      const fetched = await fetchTickets();
+      // Tickets stored before these two columns existed come back without
+      // them; normalize once here so no render path has to guard.
+      setTickets(fetched.map(t => ({ ...t, actionPoints: t.actionPoints ?? [], resolvedAt: t.resolvedAt ?? null })));
+    } catch { setTickets([]); }
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load, refreshKey]);
@@ -163,7 +385,16 @@ export function TicketsPanel({ actor, projects, refreshKey, onChanged }: {
   const updateTicket = async (id: string, updates: Partial<Ticket>) => {
     if (!roleCan(role, "updateTicketStatus")) return;
     setTickets(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
-    try { await updateTicketApi(id, updates); onChanged?.(); } catch (e) { console.error(e); }
+    try {
+      // Reconcile with what the server actually saved — resolvedAt is stamped
+      // there, so an optimistic-only update would leave the closing date blank
+      // until the next reload.
+      const saved = await updateTicketApi(id, updates);
+      setTickets(prev => prev.map(t => t.id === id
+        ? { ...t, ...saved, actionPoints: saved.actionPoints ?? [], resolvedAt: saved.resolvedAt ?? null }
+        : t));
+      onChanged?.();
+    } catch (e) { console.error(e); }
   };
 
   const grouped = useMemo(() => {

@@ -4,13 +4,15 @@ import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import Chip from "@mui/material/Chip";
 import Tooltip from "@mui/material/Tooltip";
+import Snackbar from "@mui/material/Snackbar";
+import Alert from "@mui/material/Alert";
 import Stack from "./Stack";
 import { alpha } from "@mui/material/styles";
 import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 import InboxOutlinedIcon from "@mui/icons-material/InboxOutlined";
 import { STATUS_OPTIONS, STATUS_COLOR, PRIORITY_COLOR } from "@/lib/data";
 import { AchievementBadge, EmployeeAvatar } from "./common";
-import { isOverdue, overdueWorkingDays } from "@/lib/businessLogic";
+import { isOverdue, overdueWorkingDays, openChecklistCount } from "@/lib/businessLogic";
 import { fmt } from "@/lib/dateUtils";
 import { useStatusHex } from "@/lib/theme";
 import type { Phase, Task, TaskStatus, WeekDay } from "@/lib/types";
@@ -39,6 +41,7 @@ export function KanbanView({
   const STATUS_HEX = useStatusHex();
   const [dragId, setDragId] = useState<string | null>(null);
   const [dragOverStatus, setDragOverStatus] = useState<TaskStatus | null>(null);
+  const [blockedMsg, setBlockedMsg] = useState<string | null>(null);
 
   const phaseName = useMemo(() => {
     const map: Record<string, string> = {};
@@ -48,11 +51,25 @@ export function KanbanView({
 
   const columns = useMemo(() => {
     const byStatus: Record<TaskStatus, Task[]> = {
-      "Not Started": [], "In Progress": [], "Pending Approval": [], "Delayed": [], "Completed": [],
+      "Not Started": [], "In Progress": [], "Pending Approval": [], "Delayed": [], "Blocked": [], "Completed": [],
     };
     tasks.forEach(t => { (byStatus[t.status] || byStatus["Not Started"]).push(t); });
     return byStatus;
   }, [tasks]);
+
+  // Same rule TaskCard's status Select enforces — dragging straight to
+  // Completed is a second way to trigger the same transition, so it needs
+  // the same gate or the checklist rule is trivially bypassed.
+  const tryStatusChange = (task: Task, status: TaskStatus) => {
+    if (status === "Completed") {
+      const open = openChecklistCount(task);
+      if (open > 0) {
+        setBlockedMsg(`${open} critical point${open === 1 ? "" : "s"} still open — complete ${open === 1 ? "it" : "them"} first.`);
+        return;
+      }
+    }
+    onStatusChange(task.id, status);
+  };
 
   return (
     <Stack direction="row" spacing={2} sx={{ height: "100%", overflowX: "auto", pb: 1 }}>
@@ -73,7 +90,8 @@ export function KanbanView({
             onDragLeave={() => setDragOverStatus(s => (s === status ? null : s))}
             onDrop={(e) => {
               e.preventDefault();
-              if (dropAllowed && dragId) onStatusChange(dragId, status);
+              const task = dropAllowed && dragId ? tasks.find(t => t.id === dragId) : undefined;
+              if (task) tryStatusChange(task, status);
               setDragId(null);
               setDragOverStatus(null);
             }}
@@ -156,6 +174,9 @@ export function KanbanView({
           </Box>
         );
       })}
+      <Snackbar open={!!blockedMsg} autoHideDuration={4000} onClose={() => setBlockedMsg(null)}>
+        <Alert severity="warning" variant="filled" onClose={() => setBlockedMsg(null)}>{blockedMsg}</Alert>
+      </Snackbar>
     </Stack>
   );
 }

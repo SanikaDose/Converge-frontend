@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import AppBar from "@mui/material/AppBar";
-import { ThemeProvider } from "@mui/material/styles";
+import { alpha, darken, ThemeProvider } from "@mui/material/styles";
 import { LIGHT_THEME, DASHBOARD_COLORS } from "@/lib/theme";
 import Toolbar from "@mui/material/Toolbar";
 import MenuItem from "@mui/material/MenuItem";
@@ -26,12 +26,18 @@ import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import NotificationsNoneIcon from "@mui/icons-material/NotificationsNone";
 import LogoutIcon from "@mui/icons-material/Logout";
+import AddIcon from "@mui/icons-material/Add";
+import FlagCircleIcon from "@mui/icons-material/FlagCircle";
 import { ConvergeNavbarLogo } from "./Logo";
-import { initials, avatarColor } from "@/lib/data";
-import { fetchTickets } from "@/lib/api";
+import { ProjectForm, type ProjectFormPayload } from "./ProjectForm";
+import { TicketForm } from "./TicketsPanel";
+import { initials, avatarColor, roleCan } from "@/lib/data";
+import { fetchTickets, fetchProjectsIndex, createProjectApi, createTicketApi } from "@/lib/api";
 import { useAppContext } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
-import type { Ticket } from "@/lib/types";
+import type { CreateTicketInput, ProjectIndexRow, Ticket } from "@/lib/types";
+
+const WINE_RED = "#A4243B";
 
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: DashboardIcon },
@@ -131,6 +137,99 @@ function AccountMenu() {
   );
 }
 
+/**
+ * "Raise ticket" / "New project" — moved here from the Dashboard page so
+ * they're reachable from any route, not just "/". AppShell sits at a
+ * stable position in the tree (rendered once by AuthGate, see that file),
+ * so this component doesn't unmount on client-side navigation between
+ * pages — the fetched project list persists rather than re-fetching on
+ * every route change.
+ */
+function ProjectQuickActions() {
+  const router = useRouter();
+  const { role } = useAppContext();
+  const [projects, setProjects] = useState<ProjectIndexRow[]>([]);
+  const [showNewProject, setShowNewProject] = useState(false);
+  const [projectBusy, setProjectBusy] = useState(false);
+  const [showTicketForm, setShowTicketForm] = useState(false);
+  const [ticketBusy, setTicketBusy] = useState(false);
+
+  const loadProjects = useCallback(async () => {
+    try { setProjects(await fetchProjectsIndex()); } catch { setProjects([]); }
+  }, []);
+  useEffect(() => { loadProjects(); }, [loadProjects]);
+
+  const projectOptions = projects.map(p => ({ id: p.id, name: p.name }));
+
+  const createProject = async (payload: ProjectFormPayload) => {
+    if (!roleCan(role, "createProject")) return;
+    setProjectBusy(true);
+    try {
+      const project = await createProjectApi(payload);
+      setShowNewProject(false);
+      loadProjects();
+      router.push(`/projects/${project.id}`);
+    } catch (e) {
+      console.error(e);
+    }
+    setProjectBusy(false);
+  };
+
+  const raiseTicket = async (payload: CreateTicketInput) => {
+    if (!roleCan(role, "raiseTicket")) return;
+    setTicketBusy(true);
+    try {
+      await createTicketApi(payload);
+      setShowTicketForm(false);
+    } catch (e) {
+      console.error(e);
+    }
+    setTicketBusy(false);
+  };
+
+  return (
+    <>
+      {roleCan(role, "raiseTicket") && (
+        <Button
+          size="small" variant="outlined" startIcon={<FlagCircleIcon fontSize="small" />}
+          onClick={() => setShowTicketForm(true)} disabled={!projectOptions.length}
+          sx={{
+            // Wine red, not the vivid DASHBOARD_COLORS.red used for
+            // delayed/error states elsewhere — a deliberately deeper,
+            // muted tone for this one button.
+            color: WINE_RED, borderColor: WINE_RED,
+            "&:hover": { borderColor: WINE_RED, bgcolor: alpha(WINE_RED, 0.08) },
+          }}
+        >
+          Raise Ticket
+        </Button>
+      )}
+      {roleCan(role, "createProject") && (
+        <Button
+          size="small" variant="contained" startIcon={<AddIcon fontSize="small" />}
+          onClick={() => setShowNewProject(true)}
+          sx={{
+            bgcolor: DASHBOARD_COLORS.blue, color: "#fff",
+            "&:hover": { bgcolor: darken(DASHBOARD_COLORS.blue, 0.15) },
+          }}
+        >
+          New Project
+        </Button>
+      )}
+
+      {showNewProject && roleCan(role, "createProject") && (
+        <ProjectForm
+          title="New project" initial={null} submitLabel="Create project" busy={projectBusy}
+          onClose={() => setShowNewProject(false)} onSubmit={createProject}
+        />
+      )}
+      {showTicketForm && roleCan(role, "raiseTicket") && (
+        <TicketForm projects={projectOptions} busy={ticketBusy} onClose={() => setShowTicketForm(false)} onSubmit={raiseTicket} />
+      )}
+    </>
+  );
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const { mode, toggleMode } = useAppContext();
   const pathname = usePathname();
@@ -168,6 +267,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Box sx={{ flex: 1 }} />
 
           <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap" }}>
+            <ProjectQuickActions />
+
             <Box sx={{ display: "flex", alignItems: "center", border: "1px solid", borderColor: "divider", borderRadius: 2, p: 0.25 }}>
               <Tooltip title="Light theme">
                 <IconButton size="small" onClick={() => mode !== "light" && toggleMode()}

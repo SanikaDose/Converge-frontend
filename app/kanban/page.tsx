@@ -4,7 +4,6 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Box from "@mui/material/Box";
 import Stack from "@/components/Stack";
-import Typography from "@mui/material/Typography";
 import Select, { type SelectChangeEvent } from "@mui/material/Select";
 import MenuItem from "@mui/material/MenuItem";
 import ListSubheader from "@mui/material/ListSubheader";
@@ -15,23 +14,24 @@ import Tooltip from "@mui/material/Tooltip";
 import CircularProgress from "@mui/material/CircularProgress";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import PeopleAltOutlinedIcon from "@mui/icons-material/PeopleAltOutlined";
+import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
+import FlagOutlinedIcon from "@mui/icons-material/FlagOutlined";
 import { GlobalKanbanBoard, type GlobalKanbanTask } from "@/components/GlobalKanbanBoard";
 import { fetchProjectsIndex, fetchProject, updateProjectApi } from "@/lib/api";
 import { computeAchievement } from "@/lib/businessLogic";
 import { todayISO } from "@/lib/dateUtils";
-import { roleCan } from "@/lib/data";
+import { roleCan, STATUS_OPTIONS } from "@/lib/data";
 import { useAppContext } from "@/context/AppContext";
 import { useOrgContext } from "@/context/OrgContext";
 import type { HistoryEntry, ProjectDetailData, ProjectIndexRow, Task, TaskStatus } from "@/lib/types";
 
-const ALL_USERS = "__all__";
+const ALL_USERS = "__all_users__";
+const ALL_PROJECTS = "__all_projects__";
 
-function projectFilterLabel(value: string, projects: ProjectIndexRow[]): string {
-  if (value === "type:Product") return "All Product";
-  if (value === "type:Solution") return "All Project/Solution";
-  if (value.startsWith("proj:")) return projects.find(p => p.id === value.slice(5))?.name || "Project";
-  return "All";
-}
+// Delayed is excluded by default — it's a derived/warning state, not
+// somewhere work is expected to sit, so the board opens focused on the
+// statuses someone would actually triage day to day.
+const DEFAULT_STATUSES: TaskStatus[] = STATUS_OPTIONS.filter(s => s !== "Delayed") as TaskStatus[];
 
 export default function GlobalKanbanPage() {
   const router = useRouter();
@@ -44,7 +44,8 @@ export default function GlobalKanbanPage() {
   const [projectDetails, setProjectDetails] = useState<ProjectDetailData[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
-  const [projectFilter, setProjectFilter] = useState<string>("all");
+  const [projectFilter, setProjectFilter] = useState<string[]>([]);
+  const [selectedStatuses, setSelectedStatuses] = useState<TaskStatus[]>(DEFAULT_STATUSES);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -84,12 +85,25 @@ export default function GlobalKanbanPage() {
   const filteredTasks = useMemo(() => {
     return allTasks.filter(t => {
       if (selectedUserIds.length > 0 && !(t.assignedTo && selectedUserIds.includes(t.assignedTo))) return false;
-      if (projectFilter === "all") return true;
-      if (projectFilter.startsWith("type:")) return t.projectType === projectFilter.slice(5);
-      if (projectFilter.startsWith("proj:")) return t.projectId === projectFilter.slice(5);
+      if (!selectedStatuses.includes(t.status)) return false;
+      if (projectFilter.length > 0) {
+        const matches = projectFilter.includes(`type:${t.projectType}`) || projectFilter.includes(`proj:${t.projectId}`);
+        if (!matches) return false;
+      }
       return true;
     });
-  }, [allTasks, selectedUserIds, projectFilter]);
+  }, [allTasks, selectedUserIds, selectedStatuses, projectFilter]);
+
+  // `selectedStatuses` reflects the order the checkboxes were *clicked*
+  // in (MUI's multi-select Select appends a newly-toggled value to the
+  // end of the array, it doesn't resort) — deselecting then reselecting a
+  // status would otherwise knock its column out of the canonical
+  // left-to-right order. Re-deriving from STATUS_OPTIONS keeps the board
+  // order fixed regardless of click order.
+  const orderedVisibleStatuses = useMemo(
+    () => STATUS_OPTIONS.filter(s => selectedStatuses.includes(s)),
+    [selectedStatuses],
+  );
 
   const handleStatusChange = async (task: GlobalKanbanTask, status: TaskStatus) => {
     const pd = projectDetails.find(p => p.id === task.projectId);
@@ -122,63 +136,109 @@ export default function GlobalKanbanPage() {
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: { xs: "calc(100vh - 96px)", md: "calc(100vh - 116px)" } }}>
       <Box sx={{ flexShrink: 0 }}>
-        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" flexWrap="wrap" gap={2}>
-          <Box>
-            <Typography variant="h4">Kanban</Typography>
-            <Typography color="text.secondary" sx={{ mt: 0.5 }}>
-              Every task across every product and project/solution, in one board.
-            </Typography>
-          </Box>
-          <Tooltip title="Refresh"><IconButton onClick={load}><RefreshIcon fontSize="small" /></IconButton></Tooltip>
-        </Stack>
-
-        <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" sx={{ mt: 2.5, mb: 2 }}>
-          <Select<string[]>
-            multiple size="small" displayEmpty
-            value={selectedUserIds}
-            onChange={(e: SelectChangeEvent<string[]>) => {
-              const raw = e.target.value;
-              const arr = typeof raw === "string" ? raw.split(",") : raw;
-              // ALL_USERS is never part of the controlled value itself (only
-              // ever a manually-checked display state) — it appears in `arr`
-              // here only when the user just clicked it, unambiguously, so
-              // this always means "reset to no filter" regardless of what
-              // else was previously selected.
-              if (arr.includes(ALL_USERS)) { setSelectedUserIds([]); return; }
-              setSelectedUserIds(arr);
-            }}
-            renderValue={() => selectedUserIds.length
-              ? (selectedUserIds.length === 1 ? (employeeById[selectedUserIds[0]]?.name || "1 selected") : `${selectedUserIds.length} selected`)
-              : "All"}
-            startAdornment={<PeopleAltOutlinedIcon fontSize="small" sx={{ color: "text.secondary", mr: 1, ml: 0.5 }} />}
-            sx={{ minWidth: 220 }}
-          >
-            <MenuItem value={ALL_USERS}>
-              <Checkbox size="small" checked={selectedUserIds.length === 0} />
-              <ListItemText primary="All" />
-            </MenuItem>
-            {employees.map(emp => (
-              <MenuItem key={emp.id} value={emp.id}>
-                <Checkbox size="small" checked={selectedUserIds.includes(emp.id)} />
-                <ListItemText primary={emp.name} />
+        <Stack direction="row" justifyContent="flex-end" alignItems="center" flexWrap="wrap" gap={1.5} sx={{ mb: 2 }}>
+          <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap">
+            <Select<string[]>
+              multiple size="small" displayEmpty
+              value={selectedUserIds}
+              onChange={(e: SelectChangeEvent<string[]>) => {
+                const raw = e.target.value;
+                const arr = typeof raw === "string" ? raw.split(",") : raw;
+                // ALL_USERS is never part of the controlled value itself
+                // (only ever a manually-checked display state) — it appears
+                // in `arr` here only when the user just clicked it,
+                // unambiguously, so this always means "reset to no filter"
+                // regardless of what else was previously selected.
+                if (arr.includes(ALL_USERS)) { setSelectedUserIds([]); return; }
+                setSelectedUserIds(arr);
+              }}
+              renderValue={() => selectedUserIds.length
+                ? (selectedUserIds.length === 1 ? (employeeById[selectedUserIds[0]]?.name || "1 selected") : `${selectedUserIds.length} selected`)
+                : "All"}
+              startAdornment={<PeopleAltOutlinedIcon fontSize="small" sx={{ color: "text.secondary", mr: 1, ml: 0.5 }} />}
+              sx={{ minWidth: 200 }}
+            >
+              <MenuItem value={ALL_USERS}>
+                <Checkbox size="small" checked={selectedUserIds.length === 0} />
+                <ListItemText primary="All" />
               </MenuItem>
-            ))}
-          </Select>
+              {employees.map(emp => (
+                <MenuItem key={emp.id} value={emp.id}>
+                  <Checkbox size="small" checked={selectedUserIds.includes(emp.id)} />
+                  <ListItemText primary={emp.name} />
+                </MenuItem>
+              ))}
+            </Select>
 
-          <Select
-            size="small" value={projectFilter}
-            onChange={(e: SelectChangeEvent) => setProjectFilter(e.target.value)}
-            renderValue={(v) => projectFilterLabel(v, projectsIndex)}
-            sx={{ minWidth: 220 }}
-          >
-            <MenuItem value="all">All</MenuItem>
-            <ListSubheader>Product</ListSubheader>
-            <MenuItem value="type:Product">All Product</MenuItem>
-            {productProjects.map(p => <MenuItem key={p.id} value={`proj:${p.id}`} sx={{ pl: 4 }}>{p.name}</MenuItem>)}
-            <ListSubheader>Project / Solution</ListSubheader>
-            <MenuItem value="type:Solution">All Project/Solution</MenuItem>
-            {solutionProjects.map(p => <MenuItem key={p.id} value={`proj:${p.id}`} sx={{ pl: 4 }}>{p.name}</MenuItem>)}
-          </Select>
+            <Select<string[]>
+              multiple size="small" displayEmpty
+              value={projectFilter}
+              onChange={(e: SelectChangeEvent<string[]>) => {
+                const raw = e.target.value;
+                const arr = typeof raw === "string" ? raw.split(",") : raw;
+                if (arr.includes(ALL_PROJECTS)) { setProjectFilter([]); return; }
+                setProjectFilter(arr);
+              }}
+              renderValue={() => projectFilter.length
+                ? (projectFilter.length === 1 ? projectFilterItemLabel(projectFilter[0], projectsIndex) : `${projectFilter.length} selected`)
+                : "All"}
+              startAdornment={<FolderOutlinedIcon fontSize="small" sx={{ color: "text.secondary", mr: 1, ml: 0.5 }} />}
+              sx={{ minWidth: 220 }}
+            >
+              <MenuItem value={ALL_PROJECTS}>
+                <Checkbox size="small" checked={projectFilter.length === 0} />
+                <ListItemText primary="All" />
+              </MenuItem>
+              <ListSubheader>Product</ListSubheader>
+              <MenuItem value="type:Product">
+                <Checkbox size="small" checked={projectFilter.includes("type:Product")} />
+                <ListItemText primary="All Product" />
+              </MenuItem>
+              {productProjects.map(p => (
+                <MenuItem key={p.id} value={`proj:${p.id}`} sx={{ pl: 4 }}>
+                  <Checkbox size="small" checked={projectFilter.includes(`proj:${p.id}`)} />
+                  <ListItemText primary={p.name} />
+                </MenuItem>
+              ))}
+              <ListSubheader>Project / Solution</ListSubheader>
+              <MenuItem value="type:Solution">
+                <Checkbox size="small" checked={projectFilter.includes("type:Solution")} />
+                <ListItemText primary="All Project/Solution" />
+              </MenuItem>
+              {solutionProjects.map(p => (
+                <MenuItem key={p.id} value={`proj:${p.id}`} sx={{ pl: 4 }}>
+                  <Checkbox size="small" checked={projectFilter.includes(`proj:${p.id}`)} />
+                  <ListItemText primary={p.name} />
+                </MenuItem>
+              ))}
+            </Select>
+
+            <Select<TaskStatus[]>
+              multiple size="small" displayEmpty
+              value={selectedStatuses}
+              onChange={(e: SelectChangeEvent<TaskStatus[]>) => {
+                const raw = e.target.value;
+                const arr = (typeof raw === "string" ? raw.split(",") : raw) as TaskStatus[];
+                setSelectedStatuses(arr);
+              }}
+              renderValue={() => selectedStatuses.length === STATUS_OPTIONS.length
+                ? "All"
+                : selectedStatuses.length
+                  ? `${selectedStatuses.length} selected`
+                  : "None"}
+              startAdornment={<FlagOutlinedIcon fontSize="small" sx={{ color: "text.secondary", mr: 1, ml: 0.5 }} />}
+              sx={{ minWidth: 200 }}
+            >
+              {STATUS_OPTIONS.map(s => (
+                <MenuItem key={s} value={s}>
+                  <Checkbox size="small" checked={selectedStatuses.includes(s)} />
+                  <ListItemText primary={s} />
+                </MenuItem>
+              ))}
+            </Select>
+          </Stack>
+
+          <Tooltip title="Refresh"><IconButton onClick={load}><RefreshIcon fontSize="small" /></IconButton></Tooltip>
         </Stack>
       </Box>
 
@@ -187,7 +247,7 @@ export default function GlobalKanbanPage() {
           <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}><CircularProgress /></Box>
         ) : (
           <GlobalKanbanBoard
-            tasks={filteredTasks} today={today} canEdit={canEdit}
+            tasks={filteredTasks} today={today} canEdit={canEdit} visibleStatuses={orderedVisibleStatuses}
             onStatusChange={handleStatusChange}
             onOpenTask={(t) => router.push(`/projects/${t.projectId}`)}
           />
@@ -195,4 +255,11 @@ export default function GlobalKanbanPage() {
       </Box>
     </Box>
   );
+}
+
+function projectFilterItemLabel(value: string, projects: ProjectIndexRow[]): string {
+  if (value === "type:Product") return "All Product";
+  if (value === "type:Solution") return "All Project/Solution";
+  if (value.startsWith("proj:")) return projects.find(p => p.id === value.slice(5))?.name || "Project";
+  return "All";
 }

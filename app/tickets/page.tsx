@@ -3,11 +3,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Box from "@mui/material/Box";
 import Grid from "@mui/material/Grid";
-import Stack from "@/components/Stack";
-import Typography from "@mui/material/Typography";
-import IconButton from "@mui/material/IconButton";
-import Tooltip from "@mui/material/Tooltip";
-import RefreshIcon from "@mui/icons-material/Refresh";
 import ConfirmationNumberIcon from "@mui/icons-material/ConfirmationNumber";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import DonutLargeIcon from "@mui/icons-material/DonutLarge";
@@ -24,7 +19,6 @@ export default function TicketsPage() {
   const [projects, setProjects] = useState<ProjectIndexRow[]>([]);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [baseline, setBaseline] = useState<DashboardBaseline | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
 
   const loadTickets = useCallback(async () => {
     try { setTickets(await fetchTickets()); } catch { setTickets([]); }
@@ -33,7 +27,7 @@ export default function TicketsPage() {
     try { setProjects(await fetchProjectsIndex()); } catch { setProjects([]); }
     await loadTickets();
   }, [loadTickets]);
-  useEffect(() => { load(); }, [load, refreshKey]);
+  useEffect(() => { load(); }, [load]);
 
   // Baseline is a real snapshot captured once per backend session (see
   // Dashboard.tsx's identical pattern) — fetched once, not on every
@@ -57,19 +51,7 @@ export default function TicketsPage() {
 
   return (
     <Box>
-      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" flexWrap="wrap" gap={2}>
-        <Box>
-          <Typography variant="h4">Tickets</Typography>
-          <Typography color="text.secondary" sx={{ mt: 0.5 }}>
-            Every issue reported across all projects, in one place.
-          </Typography>
-        </Box>
-        <Tooltip title="Refresh">
-          <IconButton onClick={() => setRefreshKey((k) => k + 1)}><RefreshIcon fontSize="small" /></IconButton>
-        </Tooltip>
-      </Stack>
-
-      <Grid container spacing={1.5} sx={{ mt: 2.5, mb: 3 }}>
+      <Grid container spacing={1.5} sx={{ mb: 3 }}>
         <Grid size={{ xs: 6, sm: 3 }}>
           <StatCard icon={ConfirmationNumberIcon} label="Total Tickets" value={stats.total} color={DASHBOARD_COLORS.blue} trend={trends?.total} />
         </Grid>
@@ -88,7 +70,7 @@ export default function TicketsPage() {
       <TicketsPanel
         actor={actor}
         projects={projects.map(p => ({ id: p.id, name: p.name }))}
-        refreshKey={refreshKey}
+        refreshKey={0}
         onChanged={loadTickets}
       />
     </Box>

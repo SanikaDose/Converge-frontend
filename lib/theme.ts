@@ -23,6 +23,7 @@ export const STATUS_HEX_DARK: Record<StatusColorKey, string> = {
   red: "#e5615a",
   slate: "#5b6a7d",
   violet: "#9d7fe0",
+  orange: "#e0813f",
 };
 
 export const STATUS_HEX_LIGHT: Record<StatusColorKey, string> = {
@@ -31,6 +32,7 @@ export const STATUS_HEX_LIGHT: Record<StatusColorKey, string> = {
   red: "#c53a34",
   slate: "#4d5b70",
   violet: "#6c3fc0",
+  orange: "#b45309",
 };
 
 /** @deprecated prefer `useStatusHex()` inside components so colors follow theme mode. Kept as the dark map for any non-component callers. */

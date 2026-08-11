@@ -10,7 +10,7 @@
 import { TEMPLATE, genId } from "./data";
 import { addWorkingDays, businessDaysBetween, todayISO, DEFAULT_WEEK_OFF } from "./dateUtils";
 import type {
-  Achievement, Actor, Employee, HistoryEntry, LivePhaseRow, Phase, PhaseLite, PhaseSummary,
+  Achievement, Actor, ChecklistItem, Employee, HistoryEntry, LivePhaseRow, Phase, PhaseLite, PhaseSummary,
   ProjectBucket, ProjectDetailData, ProjectIndexRow, ProjectWithLiveStats, StatusColorKey,
   Summary, Task, TaskLite, TaskStatus, WeekDay,
 } from "./types";
@@ -144,6 +144,14 @@ export function isOverdue(task: { status: TaskStatus; plannedFinish: string }, t
 export function overdueWorkingDays(task: { status: TaskStatus; plannedFinish: string }, today: string, weekOff: WeekDay[] = DEFAULT_WEEK_OFF): number {
   if (!isOverdue(task, today)) return 0;
   return businessDaysBetween(today, task.plannedFinish, weekOff);
+}
+
+// Shared with TaskCard's own status Select (see requestStatusChange there) —
+// a task can't be marked Completed while its critical points are still
+// open. Kanban drag-and-drop is a second entry point to the same status
+// change, so it needs the same gate or it'd silently bypass the rule.
+export function openChecklistCount(task: { checklist: ChecklistItem[] }): number {
+  return (task.checklist || []).filter(c => !c.done).length;
 }
 
 export function summarize(tasks: Task[], today: string): Summary {

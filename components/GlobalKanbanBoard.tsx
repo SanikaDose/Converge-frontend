@@ -4,13 +4,15 @@ import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import Chip from "@mui/material/Chip";
 import Tooltip from "@mui/material/Tooltip";
+import Snackbar from "@mui/material/Snackbar";
+import Alert from "@mui/material/Alert";
 import Stack from "./Stack";
 import { alpha } from "@mui/material/styles";
 import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 import InboxOutlinedIcon from "@mui/icons-material/InboxOutlined";
 import { STATUS_OPTIONS, STATUS_COLOR, PRIORITY_COLOR } from "@/lib/data";
 import { AchievementBadge, EmployeeAvatar } from "./common";
-import { isOverdue, overdueWorkingDays } from "@/lib/businessLogic";
+import { isOverdue, overdueWorkingDays, openChecklistCount } from "@/lib/businessLogic";
 import { fmt } from "@/lib/dateUtils";
 import { useStatusHex } from "@/lib/theme";
 import type { ProjectType, Task, TaskStatus, WeekDay } from "@/lib/types";
@@ -32,26 +34,47 @@ export interface GlobalKanbanTask extends Task {
  * via `onStatusChange`, since each project persists independently.
  */
 export function GlobalKanbanBoard({
-  tasks, today, canEdit, onStatusChange, onOpenTask,
+  tasks, today, canEdit, visibleStatuses, onStatusChange, onOpenTask,
 }: {
   tasks: GlobalKanbanTask[];
   today: string;
   canEdit: boolean;
+  /** Which status columns to render at all — not just which tasks show
+   * inside them. A status left out of the filter shouldn't leave behind a
+   * permanently-empty lane. Defaults to every status. */
+  visibleStatuses?: readonly TaskStatus[];
   onStatusChange: (task: GlobalKanbanTask, status: TaskStatus) => void;
   onOpenTask: (task: GlobalKanbanTask) => void;
 }) {
   const STATUS_HEX = useStatusHex();
   const [dragId, setDragId] = useState<string | null>(null);
   const [dragOverStatus, setDragOverStatus] = useState<TaskStatus | null>(null);
+  const [blockedMsg, setBlockedMsg] = useState<string | null>(null);
 
   const columns: Record<TaskStatus, GlobalKanbanTask[]> = {
-    "Not Started": [], "In Progress": [], "Pending Approval": [], "Delayed": [], "Completed": [],
+    "Not Started": [], "In Progress": [], "Pending Approval": [], "Delayed": [], "Blocked": [], "Completed": [],
   };
   tasks.forEach(t => { (columns[t.status] || columns["Not Started"]).push(t); });
 
+  // Same rule TaskCard's status Select enforces — dragging straight to
+  // Completed is a second way to trigger the same transition, so it needs
+  // the same gate or the checklist rule is trivially bypassed.
+  const tryStatusChange = (task: GlobalKanbanTask, status: TaskStatus) => {
+    if (status === "Completed") {
+      const open = openChecklistCount(task);
+      if (open > 0) {
+        setBlockedMsg(`${open} critical point${open === 1 ? "" : "s"} still open — complete ${open === 1 ? "it" : "them"} first.`);
+        return;
+      }
+    }
+    onStatusChange(task, status);
+  };
+
+  const columnStatuses = visibleStatuses ?? STATUS_OPTIONS;
+
   return (
     <Stack direction="row" spacing={2} sx={{ height: "100%", overflowX: "auto", pb: 1 }}>
-      {STATUS_OPTIONS.map(status => {
+      {columnStatuses.map(status => {
         const color = STATUS_HEX[STATUS_COLOR[status]];
         const colTasks = columns[status];
         const dropAllowed = canEdit && status !== "Pending Approval";
@@ -69,7 +92,7 @@ export function GlobalKanbanBoard({
             onDrop={(e) => {
               e.preventDefault();
               const task = dropAllowed && dragId ? tasks.find(t => t.id === dragId) : undefined;
-              if (task) onStatusChange(task, status);
+              if (task) tryStatusChange(task, status);
               setDragId(null);
               setDragOverStatus(null);
             }}
@@ -152,6 +175,9 @@ export function GlobalKanbanBoard({
           </Box>
         );
       })}
+      <Snackbar open={!!blockedMsg} autoHideDuration={4000} onClose={() => setBlockedMsg(null)}>
+        <Alert severity="warning" variant="filled" onClose={() => setBlockedMsg(null)}>{blockedMsg}</Alert>
+      </Snackbar>
     </Stack>
   );
 }

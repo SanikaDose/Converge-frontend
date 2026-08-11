@@ -116,12 +116,13 @@ export const TEMPLATE: TemplatePhase[] = [
   ]},
 ];
 
-export const STATUS_OPTIONS = ["Not Started", "In Progress", "Pending Approval", "Delayed", "Completed"] as const;
+export const STATUS_OPTIONS = ["Not Started", "In Progress", "Pending Approval", "Delayed", "Blocked", "Completed"] as const;
 export const STATUS_COLOR = {
   "Not Started": "slate",
   "In Progress": "amber",
   "Pending Approval": "violet",
   "Delayed": "red",
+  "Blocked": "orange",
   "Completed": "green",
 } as const;
 

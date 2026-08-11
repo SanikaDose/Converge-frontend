@@ -2,10 +2,9 @@
 
 import React, { useCallback, useEffect, useMemo, useState, type ElementType, type ReactNode } from "react";
 import Box from "@mui/material/Box";
-import { alpha, darken, useTheme } from "@mui/material/styles";
+import { alpha, useTheme } from "@mui/material/styles";
 import Stack from "./Stack";
 import Typography from "@mui/material/Typography";
-import Button from "@mui/material/Button";
 import TextField from "@mui/material/TextField";
 import InputAdornment from "@mui/material/InputAdornment";
 import IconButton from "@mui/material/IconButton";
@@ -22,7 +21,6 @@ import Grid from "@mui/material/Grid";
 import CircularProgress from "@mui/material/CircularProgress";
 import Checkbox from "@mui/material/Checkbox";
 import FormControlLabel from "@mui/material/FormControlLabel";
-import AddIcon from "@mui/icons-material/Add";
 import SearchIcon from "@mui/icons-material/Search";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -33,19 +31,15 @@ import ErrorOutlineIcon from "@mui/icons-material/ErrorOutlineOutlined";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import WorkOutlinedIcon from "@mui/icons-material/WorkOutlined";
 import DonutLargeIcon from "@mui/icons-material/DonutLarge";
-import FlagCircleIcon from "@mui/icons-material/FlagCircle";
 import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 
 import { ProjectCard } from "./ProjectCard";
-import { TicketForm } from "./TicketsPanel";
 import { StatCard, computeStatTrend } from "./common";
 import { DonutChart, TrendLineChart } from "./charts";
-import { fetchProjectsIndex, createTicketApi, fetchDashboardBaseline } from "@/lib/api";
+import { fetchProjectsIndex, fetchDashboardBaseline } from "@/lib/api";
 import { withLiveStats } from "@/lib/businessLogic";
 import { todayISO, addDays, diffDays } from "@/lib/dateUtils";
-import { roleCan } from "@/lib/data";
 import { DASHBOARD_COLORS } from "@/lib/theme";
-import type { CreateTicketInput } from "@/lib/types";
 import type { Actor, DashboardBaseline, ProjectIndexRow, ProjectType, ProjectWithLiveStats } from "@/lib/types";
 
 type BucketKey = "In Progress" | "Completed";
@@ -146,11 +140,9 @@ function AnalyticsCard({ title, action, children }: { title: string; action?: Re
   );
 }
 
-export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
+export function Dashboard({ actor, onOpen }: {
   actor: Actor;
   onOpen: (id: string) => void;
-  refreshKey: number;
-  onNew: () => void;
 }) {
   const { role } = actor;
   const theme = useTheme();
@@ -161,8 +153,6 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
   const [typeFilter, setTypeFilter] = useState<"All" | ProjectType>("All");
   const [dateScope, setDateScope] = useState<DateScope>("all");
   const [expanded, setExpanded] = useState<Record<BucketKey, boolean>>({ "In Progress": true, "Completed": true });
-  const [showTicketForm, setShowTicketForm] = useState(false);
-  const [ticketBusy, setTicketBusy] = useState(false);
   const [baseline, setBaseline] = useState<DashboardBaseline | null>(null);
   const [trendRange, setTrendRange] = useState<TrendRange>("month");
   const [deadlineFilter, setDeadlineFilter] = useState<"upcoming" | "overdue">("upcoming");
@@ -173,7 +163,7 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
     try { setProjectsRaw(await fetchProjectsIndex()); } catch { setProjectsRaw([]); }
     setLoading(false);
   }, []);
-  useEffect(() => { load(); }, [load, refreshKey]);
+  useEffect(() => { load(); }, [load]);
 
   // Baseline is a real snapshot captured once per server session (see
   // mockDb.getDashboardBaseline) — fetched once here too, not on every
@@ -274,54 +264,9 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
     [upcomingDeadlines, today],
   );
 
-  const projectOptions = useMemo(() => projects.map(p => ({ id: p.id, name: p.name })), [projects]);
-
-  const raiseTicket = async (payload: CreateTicketInput) => {
-    if (!roleCan(role, "raiseTicket")) return;
-    setTicketBusy(true);
-    try {
-      await createTicketApi(payload);
-      setShowTicketForm(false);
-    } catch (e) {
-      console.error(e);
-    }
-    setTicketBusy(false);
-  };
-
   return (
     <Box>
-      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" flexWrap="wrap" gap={2}>
-        <Box>
-          {/* <Typography variant="h4">Project Portfolio</Typography> */}
-          <Typography color="text.primary" sx={{ mt: 0.15 }}>Track all projects, progress, and overall portfolio health.</Typography>
-        </Box>
-        <Stack direction="row" spacing={1.25}>
-          {roleCan(role, "raiseTicket") && (
-            <Button
-              variant="outlined" startIcon={<FlagCircleIcon />} onClick={() => setShowTicketForm(true)} disabled={!projectOptions.length}
-              sx={{
-                color: DASHBOARD_COLORS.blue, borderColor: DASHBOARD_COLORS.blue,
-                "&:hover": { borderColor: DASHBOARD_COLORS.blue, bgcolor: alpha(DASHBOARD_COLORS.blue, 0.08) },
-              }}
-            >
-              Raise ticket
-            </Button>
-          )}
-          {roleCan(role, "createProject") && (
-            <Button
-              variant="contained" startIcon={<AddIcon />} onClick={onNew}
-              sx={{
-                bgcolor: DASHBOARD_COLORS.blue, color: "#fff",
-                "&:hover": { bgcolor: darken(DASHBOARD_COLORS.blue, 0.15) },
-              }}
-            >
-              New project
-            </Button>
-          )}
-        </Stack>
-      </Stack>
-
-      <Grid container spacing={1.5} sx={{ mt: 2.5, mb: 1.5 }}>
+      <Grid container spacing={1.5} sx={{ mb: 1.5 }}>
         <Grid size={{ xs: 6, sm: 4, md: 2 }}>
           <StatCard icon={WorkOutlinedIcon} label="Active Projects" value={portfolio.count} color={DASHBOARD_COLORS.blue} trend={trends?.active} />
         </Grid>
@@ -528,10 +473,6 @@ export function Dashboard({ actor, onOpen, refreshKey, onNew }: {
             </Accordion>
           ))}
         </Stack>
-      )}
-
-      {showTicketForm && roleCan(role, "raiseTicket") && (
-        <TicketForm projects={projectOptions} busy={ticketBusy} onClose={() => setShowTicketForm(false)} onSubmit={raiseTicket} />
       )}
     </Box>
   );

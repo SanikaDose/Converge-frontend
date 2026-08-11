@@ -186,8 +186,6 @@ export function TeamPerformance({ refreshKey }: { refreshKey: number }) {
 
   return (
     <Box>
-      <Typography variant="h4" sx={{ mb: 3 }}>Team</Typography>
-
       <Grid container spacing={1.5} sx={{ mb: 3 }}>
         <Grid size={{ xs: 6, sm: 3 }}>
           <StatCard icon={GroupsIcon} label="Team Members" value={summary.members} />

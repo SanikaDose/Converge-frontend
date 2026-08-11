@@ -72,8 +72,8 @@ export interface Actor {
 /* ---------------------------------------------------------------------
    TASK / PHASE / PROJECT TEMPLATE
 ------------------------------------------------------------------------ */
-export type TaskStatus = "Not Started" | "In Progress" | "Pending Approval" | "Delayed" | "Completed";
-export type StatusColorKey = "green" | "amber" | "red" | "slate" | "violet";
+export type TaskStatus = "Not Started" | "In Progress" | "Pending Approval" | "Delayed" | "Blocked" | "Completed";
+export type StatusColorKey = "green" | "amber" | "red" | "slate" | "violet" | "orange";
 export type Priority = "Low" | "Medium" | "High" | "Critical";
 
 export type TemplateTaskTuple = [name: string, dayOffset: number, duration: number];

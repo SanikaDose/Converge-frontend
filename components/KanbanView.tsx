@@ -36,7 +36,8 @@ export function KanbanView({
   weekOff: WeekDay[];
   canEdit: boolean;
   onStatusChange: (taskId: string, status: TaskStatus) => void;
-  onOpenPhase: (phaseId: string) => void;
+  /** Jump to a card's task in Phases view — the task id opens that card expanded. */
+  onOpenPhase: (phaseId: string, taskId: string) => void;
 }) {
   const STATUS_HEX = useStatusHex();
   const [dragId, setDragId] = useState<string | null>(null);
@@ -129,7 +130,7 @@ export function KanbanView({
                     draggable={canEdit && !locked}
                     onDragStart={() => setDragId(t.id)}
                     onDragEnd={() => { setDragId(null); setDragOverStatus(null); }}
-                    onClick={() => onOpenPhase(t.phaseId)}
+                    onClick={() => onOpenPhase(t.phaseId, t.id)}
                     sx={{
                       p: 1.25, borderRadius: 1.5, bgcolor: "background.paper", border: "1px solid", borderColor: "divider",
                       borderLeft: "3px solid", borderLeftColor: overdue ? STATUS_HEX.red : color,

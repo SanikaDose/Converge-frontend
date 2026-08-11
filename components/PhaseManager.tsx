@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import Tooltip from "@mui/material/Tooltip";
@@ -141,7 +141,7 @@ export function PhaseTaskPanel({
   onUpdateTask, onOpenEditor, onOpenHistory, onDeleteTask, onApprove, onReject,
   onAddTask, onReorder,
   onCommitOwner, onCommitOffset, onCommitStartDate, onCommitDuration, onCommitDescription,
-  onChecklistChange,
+  onChecklistChange, focusTask,
 }: {
   phase: PhaseSummary;
   tasks: Task[];
@@ -165,11 +165,31 @@ export function PhaseTaskPanel({
   onCommitDuration: (taskId: string, duration: string | number, reason: string) => void;
   onCommitDescription: (taskId: string, description: string) => void;
   onChecklistChange: (taskId: string, checklist: ChecklistItem[]) => void;
+  /**
+   * "Open this task." Set when the user arrives from a Kanban card or a
+   * Timeline bar — the panel expands that task and scrolls it into view.
+   * Carries a `seq` because the same task can be clicked twice in a row:
+   * without a changing value the effect wouldn't re-fire after the user
+   * had collapsed the card by hand.
+   */
+  focusTask?: { id: string; seq: number } | null;
 }) {
   const [dragId, setDragId] = useState<string | null>(null);
   // Only one task accordion open at a time — expanding a new one closes
   // whichever was previously open.
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+  const taskRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  useEffect(() => {
+    if (!focusTask) return;
+    setExpandedTaskId(focusTask.id);
+    // Next frame: the accordion has to actually be expanding before the
+    // scroll target has its final height, or we land short of the card.
+    const raf = requestAnimationFrame(() => {
+      taskRefs.current[focusTask.id]?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [focusTask]);
   const sorted = tasks.slice().sort((a, b) => a.order - b.order);
   const wStart = phase.weekStart, wEnd = phase.weekEnd;
 
@@ -230,6 +250,7 @@ export function PhaseTaskPanel({
         {sorted.map((t) => (
           <Box
             key={t.id}
+            ref={(el: HTMLDivElement | null) => { taskRefs.current[t.id] = el; }}
             draggable={canManage}
             onDragStart={() => setDragId(t.id)}
             onDragOver={(e) => canManage && e.preventDefault()}

@@ -249,7 +249,9 @@ export default function GlobalKanbanPage() {
           <GlobalKanbanBoard
             tasks={filteredTasks} today={today} canEdit={canEdit} visibleStatuses={orderedVisibleStatuses}
             onStatusChange={handleStatusChange}
-            onOpenTask={(t) => router.push(`/projects/${t.projectId}`)}
+            // ?task= survives the page change — ProjectDetail reads it once
+            // loaded and opens that card expanded, same as an in-page jump.
+            onOpenTask={(t) => router.push(`/projects/${t.projectId}?task=${encodeURIComponent(t.id)}`)}
           />
         )}
       </Box>

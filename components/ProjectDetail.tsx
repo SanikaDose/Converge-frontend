@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import Box from "@mui/material/Box";
 import Stack from "./Stack";
 import Typography from "@mui/material/Typography";
@@ -43,7 +43,13 @@ import type { Actor, ChecklistItem, HistoryEntry, ProjectDetailData, Task, TaskS
 
 type ViewMode = "phases" | "timeline" | "kanban";
 
-export function ProjectDetail({ projectId, actor, onBack }: { projectId: string; actor: Actor; onBack: () => void }) {
+export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }: {
+  projectId: string;
+  actor: Actor;
+  onBack: () => void;
+  /** Task to open expanded on arrival (the portfolio Kanban's `?task=` param). */
+  initialTaskId?: string | null;
+}) {
   const { role } = actor;
   const { employeeLabel } = useOrgContext();
   const [detail, setDetail] = useState<ProjectDetailData | null>(null);
@@ -56,7 +62,18 @@ export function ProjectDetail({ projectId, actor, onBack }: { projectId: string;
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [historyTask, setHistoryTask] = useState<Task | null>(null);
   const [addTaskPhaseId, setAddTaskPhaseId] = useState<string | null>(null);
+  // Which task PhaseTaskPanel should open expanded, set when arriving from a
+  // Kanban card, a Timeline bar, or a ?task= link off the portfolio Kanban.
+  const [focusTask, setFocusTask] = useState<{ id: string; seq: number } | null>(null);
   const today = todayISO();
+
+  /** Switch to Phases view with `taskId`'s card open and scrolled to. */
+  const openTask = useCallback((phaseId: string, taskId: string) => {
+    setActivePhaseId(phaseId);
+    setViewMode("phases");
+    // Bump seq so clicking the same task twice re-opens it after a manual collapse.
+    setFocusTask(prev => ({ id: taskId, seq: (prev?.seq ?? 0) + 1 }));
+  }, []);
 
   const canEditProjectSettings = roleCan(role, "editProjectSettings");
   const canDeleteProject = roleCan(role, "deleteProject");
@@ -87,6 +104,19 @@ export function ProjectDetail({ projectId, actor, onBack }: { projectId: string;
   }, [projectId]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Deep link from the portfolio Kanban. Deliberately waits for `detail` —
+  // the URL carries only a task id, and the phase to switch to has to be
+  // looked up on the loaded task. Runs once per id; a task id that no longer
+  // exists is ignored rather than switching to an empty phase.
+  const appliedInitialTask = useRef<string | null>(null);
+  useEffect(() => {
+    if (!detail || !initialTaskId || appliedInitialTask.current === initialTaskId) return;
+    const task = detail.tasks.find(t => t.id === initialTaskId);
+    if (!task) return;
+    appliedInitialTask.current = initialTaskId;
+    openTask(task.phaseId, task.id);
+  }, [detail, initialTaskId, openTask]);
 
   // Full project detail (meta + phases + tasks) is PATCHed to the mock
   // API as one document; the API recomputes the dashboard's lightweight
@@ -335,6 +365,7 @@ export function ProjectDetail({ projectId, actor, onBack }: { projectId: string;
                   onCommitStartDate={handleCommitStartDate} onCommitDuration={handleCommitDuration}
                   onCommitDescription={handleCommitDescription}
                   onChecklistChange={handleChecklistChange}
+                  focusTask={focusTask}
                 />
               )}
             </Box>
@@ -343,7 +374,7 @@ export function ProjectDetail({ projectId, actor, onBack }: { projectId: string;
           <Box sx={{ height: "100%", overflowY: "auto" }}>
             <TimelineView
               phases={detail.phases} tasks={detail.tasks} projectStartDate={detail.meta.startDate} projectEndDate={detail.meta.endDate} today={today} weekOff={detail.meta.weekOff}
-              onOpenPhase={(phaseId) => { setActivePhaseId(phaseId); setViewMode("phases"); }}
+              onOpenPhase={openTask}
             />
           </Box>
         ) : (
@@ -351,7 +382,7 @@ export function ProjectDetail({ projectId, actor, onBack }: { projectId: string;
             tasks={detail.tasks} phases={detail.phases} today={today} weekOff={detail.meta.weekOff}
             canEdit={canEditTask}
             onStatusChange={handleStatusChange}
-            onOpenPhase={(phaseId) => { setActivePhaseId(phaseId); setViewMode("phases"); }}
+            onOpenPhase={openTask}
           />
         )}
       </Box>

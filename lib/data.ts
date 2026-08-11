@@ -167,7 +167,7 @@ export function avatarColor(name: string | null | undefined): string {
    kept intact so real role differentiation is a data change here, not a
    rewrite, once real requirements define proper role-based access.
 ------------------------------------------------------------------------ */
-export const ROLES: AppRole[] = ["Admin", "Developer"];
+export const ROLES: AppRole[] = ["Admin", "User"];
 const ALL_ROLES = ROLES;
 export const PERMISSIONS: Record<PermissionAction, AppRole[]> = {
   createProject: ALL_ROLES,

@@ -11,7 +11,12 @@ export type ThemeMode = "light" | "dark";
 /* ---------------------------------------------------------------------
    ORGANIZATION DIRECTORY
 ------------------------------------------------------------------------ */
-export type OrgRole = "Team Lead" | "Developer";
+/**
+ * Directory role. Replaced the earlier "Team Lead" | "Developer" pair: the
+ * directory now distinguishes only who administers the app from everyone
+ * else, so the two roles line up 1:1 with AppRole.
+ */
+export type OrgRole = "Admin" | "User";
 
 export interface TeamMember {
   id: string;
@@ -33,7 +38,7 @@ export interface Employee extends TeamMember {
 /* ---------------------------------------------------------------------
    ROLES & PERMISSIONS ("viewing as" simulation)
 ------------------------------------------------------------------------ */
-export type AppRole = "Admin" | "Developer";
+export type AppRole = "Admin" | "User";
 
 export type PermissionAction =
   | "createProject"
@@ -54,7 +59,7 @@ export interface AuthedUser {
   id: string;
   name: string;
   employeeCode: string;
-  /** Org job title, e.g. "Team Lead". */
+  /** Org job title, e.g. "Admin". */
   role: OrgRole;
   /** Application access role — drives `roleCan()`. */
   appRole: AppRole;

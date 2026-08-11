@@ -32,6 +32,7 @@ import { ConvergeNavbarLogo } from "./Logo";
 import { ProjectForm, type ProjectFormPayload } from "./ProjectForm";
 import { TicketForm } from "./TicketsPanel";
 import { initials, avatarColor, roleCan } from "@/lib/data";
+import { recordNavigation } from "@/lib/navHistory";
 import { fetchTickets, fetchProjectsIndex, createProjectApi, createTicketApi } from "@/lib/api";
 import { useAppContext } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
@@ -233,6 +234,11 @@ function ProjectQuickActions() {
 export function AppShell({ children }: { children: ReactNode }) {
   const { mode, toggleMode } = useAppContext();
   const pathname = usePathname();
+
+  // AppShell renders once for the whole session and never remounts, so this
+  // is the one place that sees every route change — it's what lets a page's
+  // Back button tell "go back" from "there's nowhere to go back to".
+  useEffect(() => { recordNavigation(pathname); }, [pathname]);
 
   return (
     <Box sx={{ minHeight: "100%", bgcolor: "background.default", color: "text.primary" }}>

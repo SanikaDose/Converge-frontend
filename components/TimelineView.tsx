@@ -52,7 +52,8 @@ export function TimelineView({ phases, tasks, projectStartDate, projectEndDate, 
   projectEndDate: string;
   today: string;
   weekOff: WeekDay[];
-  onOpenPhase?: (phaseId: string) => void;
+  /** Jump to a bar's task in Phases view — the task id opens that card expanded. */
+  onOpenPhase?: (phaseId: string, taskId: string) => void;
 }) {
   const STATUS_HEX = useStatusHex();
   const theme = useTheme();
@@ -173,7 +174,7 @@ export function TimelineView({ phases, tasks, projectStartDate, projectEndDate, 
             </Box>
           ) : (
             <Box
-              key={i} onClick={() => onOpenPhase?.(r.task.phaseId)}
+              key={i} onClick={() => onOpenPhase?.(r.task.phaseId, r.task.id)}
               sx={{
                 height: ROW_H, display: "flex", alignItems: "center", gap: 1, px: 1.75, borderBottom: "1px solid", borderColor: "divider",
                 cursor: onOpenPhase ? "pointer" : "default", "&:hover": { bgcolor: "rgba(139,148,163,0.06)" },
@@ -225,12 +226,12 @@ export function TimelineView({ phases, tasks, projectStartDate, projectEndDate, 
                   return (
                     <React.Fragment key={i}>
                       <Box
-                        onClick={() => onOpenPhase?.(t.phaseId)}
+                        onClick={() => onOpenPhase?.(t.phaseId, t.id)}
                         sx={{ position: "absolute", left: 0, right: 0, top: rowY, height: ROW_H, cursor: onOpenPhase ? "pointer" : "default", "&:hover": { bgcolor: "action.hover" } }}
                       />
                       <Tooltip title={`${t.name} · ${fmt(t.plannedStart)} → ${fmt(t.plannedFinish)} · ${overdue ? "Overdue · " : ""}${t.status}`}>
                         <Box
-                          onClick={() => onOpenPhase?.(t.phaseId)}
+                          onClick={() => onOpenPhase?.(t.phaseId, t.id)}
                           sx={{
                             position: "absolute", top: rowY + (ROW_H - BAR_H) / 2, left, width, height: BAR_H, borderRadius: 1, bgcolor: color,
                             border: t.status === "Pending Approval" ? `1px dashed ${STATUS_HEX.violet}` : "none",

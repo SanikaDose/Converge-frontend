@@ -35,8 +35,8 @@ import type { OrgRole, TeamPerformanceRow } from "@/lib/types";
 type StatusFilter = "all" | "delayed" | "unassigned";
 
 const ROLE_COLOR: Record<OrgRole, string> = {
-  "Team Lead": DASHBOARD_COLORS.violet,
-  "Developer": DASHBOARD_COLORS.blue,
+  "Admin": DASHBOARD_COLORS.violet,
+  "User": DASHBOARD_COLORS.blue,
 };
 
 /**

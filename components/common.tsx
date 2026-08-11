@@ -89,7 +89,7 @@ export function PendingApprovalChip({ size = "small" }: { size?: ChipProps["size
 
 /**
  * Grouped organization-member <Select>. Renders every team as a
- * ListSubheader followed by its members ("Team Lead" suffixed "(TL)"),
+ * ListSubheader followed by its members (admins suffixed "(Admin)"),
  * used everywhere a free-text owner/assignee field used to live:
  * ProjectForm (project lead), TaskEditorDrawer (assigned to), TicketForm
  * (assign to).
@@ -120,7 +120,7 @@ export function OrgSelect({ label, value, onChange, allowUnassigned = true, erro
         </ListSubheader>,
         ...team.members.map(m => (
           <MenuItem key={m.id} value={m.id} sx={{ pl: 3 }}>
-            {m.name}{m.role === "Team Lead" ? " (TL)" : ""}
+            {m.name}{m.role === "Admin" ? " (Admin)" : ""}
           </MenuItem>
         )),
       ])}

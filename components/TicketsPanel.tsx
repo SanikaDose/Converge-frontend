@@ -32,11 +32,12 @@ import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutlineOutlined";
 import ChecklistIcon from "@mui/icons-material/Checklist";
+import ConfirmationNumberIcon from "@mui/icons-material/ConfirmationNumberOutlined";
 import { OrgSelect, StatusChip, EmployeeAvatar } from "./common";
 import { TEMPLATE, roleCan, genId } from "@/lib/data";
 import { fmt } from "@/lib/dateUtils";
 import { fetchTickets, createTicketApi, updateTicketApi } from "@/lib/api";
-import { useStatusHex } from "@/lib/theme";
+import { useStatusHex, DASHBOARD_COLORS } from "@/lib/theme";
 import type { CreateTicketInput } from "@/lib/types";
 import type { Actor, ChecklistItem, Priority, StatusColorKey, Ticket, TicketStatus } from "@/lib/types";
 
@@ -50,14 +51,21 @@ function fmtStamp(iso: string): string {
 const TICKET_STATUS: TicketStatus[] = ["Open", "In Progress", "Resolved", "Closed"];
 const TICKET_STATUS_COLOR: Record<TicketStatus, StatusColorKey> = { Open: "red", "In Progress": "amber", Resolved: "green", Closed: "slate" };
 
+// Urgency, as a color — drives each row's left accent bar so a list of
+// tickets can be triaged by edge color before reading a single word.
+const PRIORITY_COLOR: Record<Priority, StatusColorKey> = { Critical: "red", High: "orange", Medium: "amber", Low: "slate" };
+
+/** Translucent wash of `hex` — the shading used for every tinted band and pill here. */
+const tint = (hex: string, pct: number) => `color-mix(in srgb, ${hex} ${pct}%, transparent)`;
+
 type BucketKey = "Raised" | "Completed";
 
 // Two ticket buckets — "Raised" folds Open and In Progress together
 // (neither is done yet), "Completed" folds Resolved and Closed (neither
 // needs further action). No separate "In Progress" accordion.
-const BUCKETS: { key: BucketKey; label: string; icon: ElementType; color: string; match: (t: Ticket) => boolean }[] = [
-  { key: "Raised", label: "Raised Tickets", icon: FlagCircleIcon, color: "error.main", match: (t) => t.status === "Open" || t.status === "In Progress" },
-  { key: "Completed", label: "Completed", icon: CheckCircleIcon, color: "success.main", match: (t) => t.status === "Resolved" || t.status === "Closed" },
+const BUCKETS: { key: BucketKey; label: string; hint: string; icon: ElementType; tone: StatusColorKey; match: (t: Ticket) => boolean }[] = [
+  { key: "Raised", label: "Raised Tickets", hint: "Still need action", icon: FlagCircleIcon, tone: "red", match: (t) => t.status === "Open" || t.status === "In Progress" },
+  { key: "Completed", label: "Completed", hint: "Resolved & closed", icon: CheckCircleIcon, tone: "green", match: (t) => t.status === "Resolved" || t.status === "Closed" },
 ];
 
 export interface ProjectOption { id: string; name: string }
@@ -158,23 +166,63 @@ function TicketRow({ ticket, canUpdate, onUpdate }: {
     onUpdate(ticket.id, { actionPoints: actionPoints.filter(c => c.id !== id) });
   };
 
+  // Two maps on purpose: STATUS_HEX is tuned to read as *text* on a tint of
+  // itself, DASHBOARD_COLORS to read as a solid fill. The edge bar and status
+  // dot are fills — STATUS_HEX_LIGHT's amber (#9a5b00) goes brown as a bar.
+  const statusHex = STATUS_HEX[color];
+  const statusFill = DASHBOARD_COLORS[color];
+  const priorityHex = STATUS_HEX[PRIORITY_COLOR[ticket.priority]];
+  const priorityFill = DASHBOARD_COLORS[PRIORITY_COLOR[ticket.priority]];
+  const urgent = ticket.priority === "High" || ticket.priority === "Critical";
+  const settled = ticket.status === "Resolved" || ticket.status === "Closed";
+
   return (
     <Accordion
       expanded={expanded} onChange={() => setExpanded(v => !v)} disableGutters
       sx={{
-        bgcolor: "background.default", border: "1px solid", borderColor: "divider",
-        borderRadius: "10px !important", overflow: "hidden", "&:before": { display: "none" },
+        bgcolor: "background.paper", border: "1px solid", borderColor: "divider",
+        // Priority reads as a left edge bar; the faint wash off it keeps the
+        // cue legible without shouting on a list of a dozen rows.
+        borderLeft: `3px solid ${priorityFill}`,
+        borderRadius: "10px !important", overflow: "hidden",
+        "&:before": { display: "none" },
+        transition: "border-color .16s ease, box-shadow .16s ease",
+        // Settled tickets recede — the eye should land on what's still open.
+        opacity: settled && !expanded ? 0.82 : 1,
+        "&:hover": { borderColor: tint(priorityFill, 55), borderLeftColor: priorityFill, boxShadow: `0 2px 10px ${tint(priorityFill, 18)}` },
+        "&.Mui-expanded": { borderColor: tint(priorityFill, 45), boxShadow: `0 3px 14px ${tint(priorityFill, 15)}` },
       }}
     >
       <AccordionSummary
         expandIcon={<ExpandMoreIcon fontSize="small" />}
-        sx={{ px: 1.75, minHeight: 58, "& .MuiAccordionSummary-content": { display: "flex", alignItems: "center", gap: 1.5, minWidth: 0, my: 1, flexWrap: "wrap" } }}
+        sx={{
+          px: 1.75, minHeight: 58,
+          background: `linear-gradient(90deg, ${tint(priorityFill, 7)}, transparent 45%)`,
+          "& .MuiAccordionSummary-content": { display: "flex", alignItems: "center", gap: 1.5, minWidth: 0, my: 1, flexWrap: "wrap" },
+        }}
       >
         <Box sx={{ minWidth: 0, flex: 1 }}>
           <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-            <Typography variant="caption" color="text.secondary">#{ticket.seq}</Typography>
-            <Typography variant="body2">{ticket.title}</Typography>
-            {ticket.priority === "High" && <Chip label="High" size="small" color="error" variant="outlined" sx={{ height: 18 }} />}
+            {/* Status as a dot: color without spending a chip's worth of width. */}
+            <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: statusFill, boxShadow: `0 0 0 3px ${tint(statusFill, 20)}`, flexShrink: 0 }} />
+            <Typography variant="caption" sx={{ color: "text.disabled", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>#{ticket.seq}</Typography>
+            <Typography variant="body2" sx={{ fontWeight: 600, textDecoration: settled ? "line-through" : "none", textDecorationColor: tint(statusHex, 60) }}>
+              {ticket.title}
+            </Typography>
+            {urgent && (
+              <Chip label={ticket.priority} size="small"
+                sx={{ height: 19, fontSize: 10.5, fontWeight: 700, letterSpacing: 0.3, color: priorityHex, bgcolor: tint(priorityHex, 15), border: "1px solid", borderColor: tint(priorityHex, 35) }} />
+            )}
+            {actionPoints.length > 0 && (
+              <Chip label={`${doneCount}/${actionPoints.length}`} size="small"
+                icon={<ChecklistIcon sx={{ fontSize: 13, ml: 0.6 }} />}
+                sx={{
+                  height: 19, fontSize: 10.5, fontWeight: 700,
+                  color: doneCount === actionPoints.length ? STATUS_HEX.green : "text.secondary",
+                  bgcolor: doneCount === actionPoints.length ? tint(STATUS_HEX.green, 15) : "action.selected",
+                  "& .MuiChip-icon": { color: "inherit" },
+                }} />
+            )}
             <EmployeeAvatar employeeId={ticket.assignedTo} size={20} />
           </Stack>
           <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.4 }}>
@@ -185,7 +233,13 @@ function TicketRow({ ticket, canUpdate, onUpdate }: {
         <Box onClick={(e) => e.stopPropagation()} sx={{ flexShrink: 0 }}>
           {canUpdate ? (
             <Select size="small" value={ticket.status} onChange={(e: SelectChangeEvent) => onUpdate(ticket.id, { status: e.target.value as TicketStatus })}
-              MenuProps={{ onClick: (e) => e.stopPropagation() }} sx={{ minWidth: 140 }}>
+              MenuProps={{ onClick: (e) => e.stopPropagation() }}
+              sx={{
+                minWidth: 140, fontWeight: 600, color: statusHex, bgcolor: tint(statusHex, 10),
+                "& .MuiOutlinedInput-notchedOutline": { borderColor: tint(statusHex, 35) },
+                "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: tint(statusHex, 60) },
+                "& .MuiSelect-icon": { color: statusHex },
+              }}>
               {TICKET_STATUS.map(s => <MenuItem key={s} value={s}>{s}</MenuItem>)}
             </Select>
           ) : <StatusChip label={ticket.status} color={color} />}
@@ -198,7 +252,7 @@ function TicketRow({ ticket, canUpdate, onUpdate }: {
           onBlur={() => canUpdate && description !== (ticket.description || "") && onUpdate(ticket.id, { description })}
           placeholder={canUpdate ? "Add a description for this issue…" : "No description added."}
           disabled={!canUpdate} multiline minRows={1} maxRows={4} fullWidth
-          sx={{ mb: 2, bgcolor: "background.paper", "& .MuiInputBase-input": { fontSize: 13 } }}
+          sx={{ mb: 2, bgcolor: "background.default", "& .MuiInputBase-input": { fontSize: 13 } }}
         />
 
         {/* Same shape as TaskCard's "Plan → / Started / Finished" strip: the
@@ -212,8 +266,8 @@ function TicketRow({ ticket, canUpdate, onUpdate }: {
           )}
         </Stack>
 
-        <Paper variant="outlined" sx={{ bgcolor: "background.paper", borderColor: "divider", borderRadius: 1.5, overflow: "hidden" }}>
-          <Stack direction="row" alignItems="center" gap={1.25} sx={{ px: 2, py: 1.5 }}>
+        <Paper variant="outlined" sx={{ bgcolor: "background.default", borderColor: "divider", borderRadius: 1.5, overflow: "hidden" }}>
+          <Stack direction="row" alignItems="center" gap={1.25} sx={{ px: 2, py: 1.5, bgcolor: "action.hover" }}>
             <ChecklistIcon sx={{ fontSize: 19, color: "text.secondary" }} />
             <Typography sx={{ fontSize: 13, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>
               Action taken
@@ -247,7 +301,7 @@ function TicketRow({ ticket, canUpdate, onUpdate }: {
                       if (e.key === "Escape") { e.preventDefault(); setEditingId(null); setEditText(""); }
                     }}
                     autoFocus size="small" fullWidth
-                    sx={{ bgcolor: "background.default", "& .MuiInputBase-input": { fontSize: 14, py: 0.6 } }}
+                    sx={{ bgcolor: "background.paper", "& .MuiInputBase-input": { fontSize: 14, py: 0.6 } }}
                   />
                 ) : (
                   <>
@@ -320,7 +374,7 @@ function TicketRow({ ticket, canUpdate, onUpdate }: {
                     ) : null,
                   },
                 }}
-                sx={{ bgcolor: "background.default", "& .MuiInputBase-input": { fontSize: 14 } }}
+                sx={{ bgcolor: "background.paper", "& .MuiInputBase-input": { fontSize: 14 } }}
               />
             </Box>
           ) : actionPoints.length === 0 && (
@@ -350,6 +404,7 @@ export function TicketsPanel({ actor, projects, refreshKey, onChanged }: {
   onChanged?: () => void;
 }) {
   const { role } = actor;
+  const STATUS_HEX = useStatusHex();
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -406,18 +461,64 @@ export function TicketsPanel({ actor, projects, refreshKey, onChanged }: {
     return g;
   }, [tickets]);
 
-  const openCount = tickets.filter(t => t.status !== "Closed" && t.status !== "Resolved").length;
+  // One tally per status, so the header can show the actual mix rather than
+  // a single "n open" number that hides where everything is sitting.
+  const byStatus = useMemo(() => {
+    const counts: Record<TicketStatus, number> = { Open: 0, "In Progress": 0, Resolved: 0, Closed: 0 };
+    tickets.forEach(t => { counts[t.status] += 1; });
+    return counts;
+  }, [tickets]);
+  const openCount = byStatus.Open + byStatus["In Progress"];
 
   return (
-    <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: 3, p: 2.25, mb: 2.5 }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1.5} sx={{ mb: 1.75 }}>
-        <Box>
-          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>Reported issues</Typography>
-          <Typography variant="caption" color="text.secondary">{openCount} open{tickets.length ? ` of ${tickets.length}` : ""}</Typography>
-        </Box>
+    <Box sx={{
+      bgcolor: "background.paper", border: "1px solid", borderColor: "divider",
+      borderRadius: 3, mb: 2.5, overflow: "hidden",
+    }}>
+      {/* Titled header band — a tinted strip and an icon tile give the panel a
+          top edge to sit under, instead of a heading floating on flat paper. */}
+      <Stack
+        direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1.5}
+        sx={{
+          px: 2.25, py: 1.75, borderBottom: "1px solid", borderColor: "divider",
+          background: `linear-gradient(135deg, ${tint(STATUS_HEX.red, 9)}, ${tint(STATUS_HEX.violet, 6)} 55%, transparent)`,
+        }}
+      >
+        <Stack direction="row" alignItems="center" gap={1.5} sx={{ minWidth: 0 }}>
+          <Box sx={{
+            width: 38, height: 38, borderRadius: 2, flexShrink: 0,
+            display: "grid", placeItems: "center",
+            color: STATUS_HEX.red, bgcolor: tint(STATUS_HEX.red, 14),
+            border: "1px solid", borderColor: tint(STATUS_HEX.red, 28),
+          }}>
+            <ConfirmationNumberIcon sx={{ fontSize: 20 }} />
+          </Box>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 700, lineHeight: 1.25 }}>Reported issues</Typography>
+            {tickets.length > 0 ? (
+              <Stack direction="row" alignItems="center" gap={1.25} flexWrap="wrap" sx={{ mt: 0.4 }}>
+                {([
+                  ["Open", byStatus.Open, DASHBOARD_COLORS.red],
+                  ["In progress", byStatus["In Progress"], DASHBOARD_COLORS.amber],
+                  ["Done", byStatus.Resolved + byStatus.Closed, DASHBOARD_COLORS.green],
+                ] as const).map(([label, n, hex]) => (
+                  <Stack key={label} direction="row" alignItems="center" gap={0.6}>
+                    <Box sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: n ? hex : "text.disabled" }} />
+                    <Typography variant="caption" sx={{ color: n ? "text.secondary" : "text.disabled", fontWeight: 600 }}>
+                      {n} {label}
+                    </Typography>
+                  </Stack>
+                ))}
+              </Stack>
+            ) : (
+              <Typography variant="caption" color="text.secondary">Nothing reported yet</Typography>
+            )}
+          </Box>
+        </Stack>
         {roleCan(role, "raiseTicket") && <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={() => setShowForm(true)} disabled={!projects.length}>Raise ticket</Button>}
       </Stack>
 
+      <Box sx={{ p: 2.25 }}>
       {loading ? (
         <Box sx={{ display: "flex", justifyContent: "center", py: 2 }}><CircularProgress size={18} /></Box>
       ) : tickets.length === 0 ? (
@@ -425,30 +526,49 @@ export function TicketsPanel({ actor, projects, refreshKey, onChanged }: {
           {projects.length === 0 ? "Add a project first, then issues can be raised against it." : "No issues reported yet."}
         </Typography>
       ) : (
-        <Stack spacing={1}>
-          {BUCKETS.map(({ key, label, icon: Icon, color }) => (
-            <Accordion key={key} expanded={!!expanded[key]} onChange={() => setExpanded(e => ({ ...e, [key]: !e[key] }))}
-              disableGutters sx={{ bgcolor: "background.default", border: "1px solid", borderColor: "divider", "&:before": { display: "none" } }}>
-              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                <Stack direction="row" spacing={1.25} alignItems="center">
-                  <Icon sx={{ fontSize: 18, color }} />
-                  <Typography variant="body2" sx={{ fontWeight: 700 }}>{label}</Typography>
-                  <Chip label={grouped[key].length} size="small" />
-                </Stack>
-              </AccordionSummary>
-              <AccordionDetails>
-                {grouped[key].length === 0 ? (
-                  <Typography color="text.secondary" sx={{ py: 1 }}>No tickets here.</Typography>
-                ) : (
-                  <Stack spacing={1}>
-                    {grouped[key].map(t => <TicketRow key={t.id} ticket={t} canUpdate={roleCan(role, "updateTicketStatus")} onUpdate={updateTicket} />)}
+        <Stack spacing={1.25}>
+          {BUCKETS.map(({ key, label, hint, icon: Icon, tone }) => {
+            const hex = STATUS_HEX[tone];
+            const fill = DASHBOARD_COLORS[tone];
+            const count = grouped[key].length;
+            return (
+              <Accordion key={key} expanded={!!expanded[key]} onChange={() => setExpanded(e => ({ ...e, [key]: !e[key] }))}
+                disableGutters sx={{
+                  bgcolor: "background.default", border: "1px solid", borderColor: "divider",
+                  borderLeft: `3px solid ${count ? fill : "transparent"}`,
+                  borderRadius: "12px !important", overflow: "hidden", "&:before": { display: "none" },
+                }}>
+                <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{
+                  px: 2, minHeight: 56,
+                  background: `linear-gradient(90deg, ${tint(hex, count ? 11 : 0)}, transparent 55%)`,
+                  "& .MuiAccordionSummary-content": { alignItems: "center", my: 1 },
+                }}>
+                  <Stack direction="row" spacing={1.25} alignItems="center">
+                    <Icon sx={{ fontSize: 19, color: count ? fill : "text.disabled" }} />
+                    <Typography variant="body2" sx={{ fontWeight: 700 }}>{label}</Typography>
+                    <Chip label={count} size="small" sx={{
+                      height: 20, minWidth: 26, fontSize: 11.5, fontWeight: 700,
+                      color: count ? hex : "text.disabled",
+                      bgcolor: count ? tint(hex, 16) : "action.selected",
+                    }} />
+                    <Typography variant="caption" sx={{ color: "text.disabled", display: { xs: "none", sm: "block" } }}>{hint}</Typography>
                   </Stack>
-                )}
-              </AccordionDetails>
-            </Accordion>
-          ))}
+                </AccordionSummary>
+                <AccordionDetails sx={{ px: 1.5, pt: 0.5, pb: 1.75 }}>
+                  {count === 0 ? (
+                    <Typography variant="body2" color="text.disabled" sx={{ py: 1.5, textAlign: "center" }}>No tickets here.</Typography>
+                  ) : (
+                    <Stack spacing={1}>
+                      {grouped[key].map(t => <TicketRow key={t.id} ticket={t} canUpdate={roleCan(role, "updateTicketStatus")} onUpdate={updateTicket} />)}
+                    </Stack>
+                  )}
+                </AccordionDetails>
+              </Accordion>
+            );
+          })}
         </Stack>
       )}
+      </Box>
 
       {showForm && roleCan(role, "raiseTicket") && (
         <TicketForm projects={projects} busy={busy} onClose={() => setShowForm(false)} onSubmit={addTicket} />

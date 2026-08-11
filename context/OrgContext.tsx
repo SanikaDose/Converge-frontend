@@ -8,7 +8,7 @@ interface OrgContextValue {
   teams: Team[];
   employees: Employee[];
   employeeById: Record<string, Employee>;
-  /** "Name (TL)" for a Team Lead, plain "Name" otherwise, "Unassigned" for a missing/unknown id. */
+  /** "Name (Admin)" for an admin, plain "Name" otherwise, "Unassigned" for a missing/unknown id. */
   employeeLabel: (id: string | null | undefined) => string;
   loading: boolean;
 }
@@ -49,7 +49,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
   const employeeLabel = useMemo(() => (id: string | null | undefined): string => {
     const e = id ? employeeById[id] : undefined;
     if (!e) return "Unassigned";
-    return e.role === "Team Lead" ? `${e.name} (TL)` : e.name;
+    return e.role === "Admin" ? `${e.name} (Admin)` : e.name;
   }, [employeeById]);
 
   const value = useMemo<OrgContextValue>(() => ({ teams, employees, employeeById, employeeLabel, loading }), [teams, employees, employeeById, employeeLabel, loading]);

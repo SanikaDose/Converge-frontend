@@ -4,8 +4,8 @@ import React, { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import AppBar from "@mui/material/AppBar";
-import { alpha, darken, ThemeProvider } from "@mui/material/styles";
-import { LIGHT_THEME, DASHBOARD_COLORS } from "@/lib/theme";
+import { alpha, darken } from "@mui/material/styles";
+import { DASHBOARD_COLORS } from "@/lib/theme";
 import Toolbar from "@mui/material/Toolbar";
 import MenuItem from "@mui/material/MenuItem";
 import Typography from "@mui/material/Typography";
@@ -249,11 +249,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <Box sx={{ minHeight: "100%", bgcolor: "background.default", color: "text.primary" }}>
-      {/* Pinned to the light theme, same reasoning as the login card: the
-          navbar logo (public/converge-navbar.png) has a baked-in white
-          background, so the bar it sits on has to always be light too, or
-          that background shows as a stray white rectangle in dark mode. */}
-      <ThemeProvider theme={LIGHT_THEME}>
+      {/* Follows the active theme. It used to be pinned to LIGHT_THEME
+          because the navbar logo had an opaque white background baked in —
+          now that ConvergeNavbarLogo swaps to a transparent dark-mode
+          asset, the bar can be dark like everything else. */}
       <AppBar position="fixed" sx={{ zIndex: (t) => t.zIndex.drawer + 1, bgcolor: "background.paper", borderBottom: "1px solid", borderColor: "divider" }} elevation={0}>
         <Toolbar sx={{ gap: 3 }}>
           <ConvergeNavbarLogo height={60} />
@@ -303,7 +302,6 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Box>
         </Toolbar>
       </AppBar>
-      </ThemeProvider>
 
       <Box component="main" sx={{ p: { xs: 2, md: 3.5 }, pt: { xs: 10, md: 11 } }}>
         {children}

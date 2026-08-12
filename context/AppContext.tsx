@@ -36,7 +36,9 @@ interface StoredPref {
  */
 export function AppProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  const [mode, setMode] = useState<ThemeMode>("dark");
+  // Light is the default for a first-time visitor; a stored preference in
+  // localStorage still wins (see the effect below).
+  const [mode, setMode] = useState<ThemeMode>("light");
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {

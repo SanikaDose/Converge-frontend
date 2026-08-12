@@ -1,6 +1,7 @@
 "use client";
 import React from "react";
 import Image from "next/image";
+import { useAppContext } from "@/context/AppContext";
 
 const ASPECT = 1774 / 887;
 
@@ -49,9 +50,16 @@ const NAVBAR_ASPECT = 1796 / 876;
  */
 export function ConvergeNavbarLogo({ height = 40 }: { height?: number }) {
   const width = Math.round(height * NAVBAR_ASPECT);
+  // The supplied asset is dark ink flattened onto an opaque white
+  // background, so on a dark bar it would show as a white rectangle with
+  // invisible text. converge-navbar-dark.png is the same artwork with the
+  // background made transparent and the wordmark lifted to white; the
+  // cyan/navy brand mark is untouched in both.
+  const { mode } = useAppContext();
+  const src = mode === "dark" ? "/converge-navbar-dark.png" : "/converge-navbar.png";
   return (
     <Image
-      src="/converge-navbar.png" alt="Converge"
+      src={src} alt="Converge"
       width={1796} height={876}
       style={{ width, height, objectFit: "contain", display: "block", flexShrink: 0 }}
       priority

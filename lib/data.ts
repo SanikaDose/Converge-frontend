@@ -158,29 +158,35 @@ export function avatarColor(name: string | null | undefined): string {
 /* ---------------------------------------------------------------------
    ROLES & PERMISSIONS
 
-   IMPORTANT: same caveat as before — this is a client-side "view as"
-   simulation with no real backend/auth, and the role switcher UI has
-   been removed from the navbar (the app just runs as whatever `role`
-   AppContext defaults to, currently Admin). Both roles are granted every
-   permission below — full access for both, temporarily — per explicit
-   request not to hide anything for Developer. The per-action table is
-   kept intact so real role differentiation is a data change here, not a
-   rewrite, once real requirements define proper role-based access.
+   Admin has full access; User is read-only. A User sees exactly what an
+   Admin sees — every project, task, ticket, board and breakdown — but
+   cannot create, edit, delete, move a Kanban card, or raise a ticket.
+
+   IMPORTANT — this is a UI gate, not a security boundary. The backend has
+   no auth guards (see converge_backend: every data endpoint is open, and
+   the session is an unsigned localStorage record), so a read-only user who
+   opens devtools can still call the API directly. Making "view only"
+   actually enforceable means issuing a real session token at login and
+   checking it in a Nest guard on every mutating route.
 ------------------------------------------------------------------------ */
 export const ROLES: AppRole[] = ["Admin", "User"];
 const ALL_ROLES = ROLES;
+/** Write access — Admin only. */
+const ADMIN_ONLY: AppRole[] = ["Admin"];
 export const PERMISSIONS: Record<PermissionAction, AppRole[]> = {
-  createProject: ALL_ROLES,
-  deleteProject: ALL_ROLES,
-  editProjectSettings: ALL_ROLES,
-  managePhases: ALL_ROLES,
-  editTask: ALL_ROLES,
-  // Scheduling edits made by these roles apply immediately; everyone else's
-  // scheduling edits are routed through the approval workflow instead.
-  editScheduleDirectly: ALL_ROLES,
-  approveChanges: ALL_ROLES,
-  raiseTicket: ALL_ROLES,
-  updateTicketStatus: ALL_ROLES,
+  createProject: ADMIN_ONLY,
+  deleteProject: ADMIN_ONLY,
+  editProjectSettings: ADMIN_ONLY,
+  managePhases: ADMIN_ONLY,
+  editTask: ADMIN_ONLY,
+  // Only matters for roles that can edit tasks at all. A User is blocked by
+  // `editTask` first, so this never routes them into the approval workflow —
+  // read-only means read-only, not "edit by request".
+  editScheduleDirectly: ADMIN_ONLY,
+  approveChanges: ADMIN_ONLY,
+  raiseTicket: ADMIN_ONLY,
+  updateTicketStatus: ADMIN_ONLY,
+  // Viewing is unrestricted — a User sees every breakdown an Admin does.
   seeFullBreakdowns: ALL_ROLES,
   seeStatusBreakdown: ALL_ROLES,
   seeTeamPerformance: ALL_ROLES,
@@ -188,6 +194,16 @@ export const PERMISSIONS: Record<PermissionAction, AppRole[]> = {
 export function roleCan(role: AppRole, action: PermissionAction): boolean {
   return (PERMISSIONS[action] || []).includes(role);
 }
+
+/**
+ * Tooltip shown on every control a read-only User can see but not use.
+ *
+ * Write controls are deliberately rendered *disabled* rather than removed:
+ * a User should see the same interface an Admin does, so the app reads the
+ * same for everyone and it's obvious what exists and why it's unavailable —
+ * rather than silently missing buttons that look like a broken page.
+ */
+export const VIEW_ONLY_HINT = "View-only access — ask an admin to make changes.";
 
 export const SCHEDULING_FIELDS = ["dayOffset", "plannedStart", "plannedFinish", "duration"] as const;
 

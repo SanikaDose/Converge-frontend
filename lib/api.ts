@@ -9,7 +9,11 @@ import type {
   ProjectIndexRow, Team, TeamPerformanceRow, Ticket, UpdateProjectPatch,
 } from "./types";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+// The backend serves everything under a global /api/v1 prefix (see
+// converge_backend main.ts). Kept as a separate constant from the host so
+// bumping the version is one edit here and in the backend's routeConstants.
+const API_ROOT = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+const API_BASE = `${API_ROOT}/api/v1`;
 
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) {

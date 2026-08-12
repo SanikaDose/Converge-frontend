@@ -34,7 +34,7 @@ import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutlineOutlined";
 import ChecklistIcon from "@mui/icons-material/Checklist";
 import ConfirmationNumberIcon from "@mui/icons-material/ConfirmationNumberOutlined";
 import { OrgSelect, StatusChip, EmployeeAvatar } from "./common";
-import { TEMPLATE, roleCan, genId } from "@/lib/data";
+import { TEMPLATE, roleCan, genId, VIEW_ONLY_HINT } from "@/lib/data";
 import { fmt } from "@/lib/dateUtils";
 import { fetchTickets, createTicketApi, updateTicketApi } from "@/lib/api";
 import { useStatusHex, DASHBOARD_COLORS } from "@/lib/theme";
@@ -469,6 +469,7 @@ export function TicketsPanel({ actor, projects, refreshKey, onChanged }: {
     return counts;
   }, [tickets]);
   const openCount = byStatus.Open + byStatus["In Progress"];
+  const canRaiseTicket = roleCan(role, "raiseTicket");
 
   return (
     <Box sx={{
@@ -515,7 +516,15 @@ export function TicketsPanel({ actor, projects, refreshKey, onChanged }: {
             )}
           </Box>
         </Stack>
-        {roleCan(role, "raiseTicket") && <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={() => setShowForm(true)} disabled={!projects.length}>Raise ticket</Button>}
+        {/* Shown disabled rather than removed for a read-only User — see VIEW_ONLY_HINT. */}
+        <Tooltip title={canRaiseTicket ? "" : VIEW_ONLY_HINT}>
+          <span>
+            <Button variant="contained" size="small" startIcon={<AddIcon />}
+              onClick={() => setShowForm(true)} disabled={!canRaiseTicket || !projects.length}>
+              Raise ticket
+            </Button>
+          </span>
+        </Tooltip>
       </Stack>
 
       <Box sx={{ p: 2.25 }}>

@@ -36,9 +36,9 @@ import {
   ensureProjectShape, phaseSummaries, summarize, computePlanned,
   approveScheduleChange, rejectScheduleChange, computeAchievement, requestScheduleChange, fieldLabel,
 } from "@/lib/businessLogic";
-import { genId, roleCan } from "@/lib/data";
+import { genId, roleCan, VIEW_ONLY_HINT } from "@/lib/data";
 import { useOrgContext } from "@/context/OrgContext";
-import { fmt, todayISO, diffDays } from "@/lib/dateUtils";
+import { fmt, todayISO, diffDays, businessDaysBetween } from "@/lib/dateUtils";
 import type { Actor, ChecklistItem, HistoryEntry, ProjectDetailData, Task, TaskStatus } from "@/lib/types";
 
 type ViewMode = "phases" | "timeline" | "kanban";
@@ -182,8 +182,41 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
   // Checklist edits deliberately bypass commitField: they'd push an entry
   // into the task's change history on every single checkbox tick, drowning
   // the genuinely notable status/scheduling changes it exists to surface.
+  /**
+   * Checklist edits, plus the rule that a Completed task can't quietly hold
+   * new unfinished work: adding an unticked critical point to a Completed
+   * task reopens it as In Progress.
+   *
+   * This is the mirror of TaskCard's "can't complete with open points" guard.
+   * Without it the two rules disagree — you couldn't reach Completed with an
+   * open point, but you could add one afterwards and the task would sit there
+   * claiming to be done.
+   *
+   * Scoped to *newly added* points on purpose. Unticking an existing point
+   * still doesn't reopen the task (a long-standing decision — see the task
+   * checklist notes in CLAUDE.md); this only fires for work that wasn't part
+   * of the task when it was signed off.
+   */
   const handleChecklistChange = (taskId: string, checklist: ChecklistItem[]) => {
-    mutateTasks(tasks => tasks.map(t => t.id === taskId ? { ...t, checklist } : t));
+    mutateTasks(tasks => tasks.map(t => {
+      if (t.id !== taskId) return t;
+
+      const previousIds = new Set((t.checklist ?? []).map(c => c.id));
+      const addedOpenPoints = checklist.filter(c => !previousIds.has(c.id) && !c.done).length;
+      if (t.status !== "Completed" || addedOpenPoints === 0) return { ...t, checklist };
+
+      // Reopening undoes the completion: the finish date and any early-finish
+      // achievement were earned against a scope that has since grown.
+      const history: HistoryEntry[] = [...(t.history || []), {
+        ts: new Date().toISOString(),
+        field: "Status",
+        from: "Completed",
+        to: "In Progress",
+        editedBy: actor.name || actor.role,
+        reason: `Reopened — ${addedOpenPoints} new critical point${addedOpenPoints === 1 ? "" : "s"} added after completion.`,
+      }];
+      return { ...t, checklist, status: "In Progress" as TaskStatus, actualFinish: null, achievement: null, history };
+    }));
   };
 
   /**
@@ -219,19 +252,25 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
     const { plannedStart, plannedFinish } = computePlanned(detail.meta.startDate, offset, task.duration, detail.meta.weekOff);
     commitSchedule(taskId, { dayOffset: offset, plannedStart, plannedFinish }, reason);
   };
-  const handleCommitStartDate = (taskId: string, nextDate: string, reason: string) => {
+  /**
+   * Commits a start/finish pair from the reschedule dialog.
+   *
+   * `duration` is derived here rather than sent by the card: the two dates
+   * are the source of truth now, and dayOffset/duration are the stored
+   * representation the template maths runs on. Both are recomputed so the
+   * Gantt, the phase window, and "day from start" all stay consistent with
+   * whatever the user picked.
+   */
+  const handleCommitDates = (taskId: string, plannedStart: string, plannedFinish: string, reason: string) => {
     const task = detail?.tasks.find(t => t.id === taskId);
-    if (!task || !detail || !nextDate || nextDate === task.plannedStart) return;
-    const offset = Math.max(0, diffDays(nextDate, detail.meta.startDate));
-    const { plannedStart, plannedFinish } = computePlanned(detail.meta.startDate, offset, task.duration, detail.meta.weekOff);
-    commitSchedule(taskId, { dayOffset: offset, plannedStart, plannedFinish }, reason);
-  };
-  const handleCommitDuration = (taskId: string, rawDuration: string | number, reason: string) => {
-    const task = detail?.tasks.find(t => t.id === taskId);
-    const duration = Math.max(1, Number(rawDuration) || 1);
-    if (!task || !detail || duration === task.duration) return;
-    const { plannedFinish } = computePlanned(detail.meta.startDate, task.dayOffset, duration, detail.meta.weekOff);
-    commitSchedule(taskId, { duration, plannedFinish }, reason);
+    if (!task || !detail || !plannedStart || !plannedFinish) return;
+    if (plannedFinish < plannedStart) return;
+    if (plannedStart === task.plannedStart && plannedFinish === task.plannedFinish) return;
+    const dayOffset = Math.max(0, diffDays(plannedStart, detail.meta.startDate));
+    // +1 because duration counts the start day itself, mirroring
+    // computePlanned's `finish = start + (duration - 1)`.
+    const duration = Math.max(1, businessDaysBetween(plannedFinish, plannedStart, detail.meta.weekOff) + 1);
+    commitSchedule(taskId, { dayOffset, duration, plannedStart, plannedFinish }, reason);
   };
   const handleAddTask = ({ name, assignedTo, dayOffset, duration }: NewTaskPayload) => {
     if (!addTaskPhaseId || !detail) return;
@@ -246,20 +285,6 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
     };
     mutateTasks(tasks => [...tasks, newTask]);
     setAddTaskPhaseId(null);
-  };
-  const handleReorder = (dragId: string, dropId: string) => {
-    mutateTasks(tasks => {
-      const phaseId = tasks.find(t => t.id === dragId)?.phaseId;
-      const inPhase = tasks.filter(t => t.phaseId === phaseId).sort((a, b) => a.order - b.order);
-      const others = tasks.filter(t => t.phaseId !== phaseId);
-      const fromIdx = inPhase.findIndex(t => t.id === dragId);
-      const toIdx = inPhase.findIndex(t => t.id === dropId);
-      const reordered = inPhase.slice();
-      const [moved] = reordered.splice(fromIdx, 1);
-      reordered.splice(toIdx, 0, moved);
-      reordered.forEach((t, i) => { t.order = i; });
-      return [...others, ...reordered];
-    });
   };
 
   const saveSettings = async (meta: ProjectFormPayload) => {
@@ -320,16 +345,22 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
               label={s.delayed > 0 ? `${s.delayed} delayed` : "On track"} size="small"
               color={s.delayed > 0 ? "error" : "success"} variant={s.delayed > 0 ? "filled" : "outlined"}
             />
-            {canEditProjectSettings && (
-              <Tooltip title="Project settings"><IconButton size="small" onClick={() => setShowSettings(true)}><SettingsIcon fontSize="small" /></IconButton></Tooltip>
-            )}
-            {canDeleteProject && (
-              <Tooltip title="Delete project">
-                <IconButton size="small" onClick={() => setShowDelete(true)} sx={{ color: "error.main" }}>
+            {/* Both stay visible and go disabled for a read-only User. */}
+            <Tooltip title={canEditProjectSettings ? "Project settings" : VIEW_ONLY_HINT}>
+              <span>
+                <IconButton size="small" disabled={!canEditProjectSettings} onClick={() => setShowSettings(true)}>
+                  <SettingsIcon fontSize="small" />
+                </IconButton>
+              </span>
+            </Tooltip>
+            <Tooltip title={canDeleteProject ? "Delete project" : VIEW_ONLY_HINT}>
+              <span>
+                <IconButton size="small" disabled={!canDeleteProject} onClick={() => setShowDelete(true)}
+                  sx={{ color: canDeleteProject ? "error.main" : undefined }}>
                   <DeleteOutlineIcon fontSize="small" />
                 </IconButton>
-              </Tooltip>
-            )}
+              </span>
+            </Tooltip>
             <CompletionRing pct={s.pct} size={48} />
           </Stack>
         </Stack>
@@ -360,9 +391,8 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
                   onOpenEditor={setEditingTask} onOpenHistory={setHistoryTask}
                   onDeleteTask={handleDeleteTask} onApprove={handleApprove} onReject={handleReject}
                   onAddTask={() => setAddTaskPhaseId(activePhaseRow.id)}
-                  onReorder={handleReorder}
                   onCommitOwner={handleCommitOwner} onCommitOffset={handleCommitOffset}
-                  onCommitStartDate={handleCommitStartDate} onCommitDuration={handleCommitDuration}
+                  onCommitDates={handleCommitDates}
                   onCommitDescription={handleCommitDescription}
                   onChecklistChange={handleChecklistChange}
                   focusTask={focusTask}

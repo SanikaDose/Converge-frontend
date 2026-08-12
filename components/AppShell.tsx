@@ -31,7 +31,7 @@ import FlagCircleIcon from "@mui/icons-material/FlagCircle";
 import { ConvergeNavbarLogo } from "./Logo";
 import { ProjectForm, type ProjectFormPayload } from "./ProjectForm";
 import { TicketForm } from "./TicketsPanel";
-import { initials, avatarColor, roleCan } from "@/lib/data";
+import { initials, avatarColor, roleCan, VIEW_ONLY_HINT } from "@/lib/data";
 import { recordNavigation } from "@/lib/navHistory";
 import { fetchTickets, fetchProjectsIndex, createProjectApi, createTicketApi } from "@/lib/api";
 import { useAppContext } from "@/context/AppContext";
@@ -161,6 +161,8 @@ function ProjectQuickActions() {
   useEffect(() => { loadProjects(); }, [loadProjects]);
 
   const projectOptions = projects.map(p => ({ id: p.id, name: p.name }));
+  const canRaiseTicket = roleCan(role, "raiseTicket");
+  const canCreateProject = roleCan(role, "createProject");
 
   const createProject = async (payload: ProjectFormPayload) => {
     if (!roleCan(role, "createProject")) return;
@@ -190,33 +192,40 @@ function ProjectQuickActions() {
 
   return (
     <>
-      {roleCan(role, "raiseTicket") && (
-        <Button
-          size="small" variant="outlined" startIcon={<FlagCircleIcon fontSize="small" />}
-          onClick={() => setShowTicketForm(true)} disabled={!projectOptions.length}
-          sx={{
-            // Wine red, not the vivid DASHBOARD_COLORS.red used for
-            // delayed/error states elsewhere — a deliberately deeper,
-            // muted tone for this one button.
-            color: WINE_RED, borderColor: WINE_RED,
-            "&:hover": { borderColor: WINE_RED, bgcolor: alpha(WINE_RED, 0.08) },
-          }}
-        >
-          Raise Ticket
-        </Button>
-      )}
-      {roleCan(role, "createProject") && (
-        <Button
-          size="small" variant="contained" startIcon={<AddIcon fontSize="small" />}
-          onClick={() => setShowNewProject(true)}
-          sx={{
-            bgcolor: DASHBOARD_COLORS.blue, color: "#fff",
-            "&:hover": { bgcolor: darken(DASHBOARD_COLORS.blue, 0.15) },
-          }}
-        >
-          New Project
-        </Button>
-      )}
+      {/* Both stay visible for a read-only User and render disabled — see
+          VIEW_ONLY_HINT. Tooltip needs the span: a disabled button doesn't
+          emit the pointer events Tooltip listens for. */}
+      <Tooltip title={canRaiseTicket ? "" : VIEW_ONLY_HINT}>
+        <span>
+          <Button
+            size="small" variant="outlined" startIcon={<FlagCircleIcon fontSize="small" />}
+            onClick={() => setShowTicketForm(true)} disabled={!canRaiseTicket || !projectOptions.length}
+            sx={{
+              // Wine red, not the vivid DASHBOARD_COLORS.red used for
+              // delayed/error states elsewhere — a deliberately deeper,
+              // muted tone for this one button.
+              color: WINE_RED, borderColor: WINE_RED,
+              "&:hover": { borderColor: WINE_RED, bgcolor: alpha(WINE_RED, 0.08) },
+            }}
+          >
+            Raise Ticket
+          </Button>
+        </span>
+      </Tooltip>
+      <Tooltip title={canCreateProject ? "" : VIEW_ONLY_HINT}>
+        <span>
+          <Button
+            size="small" variant="contained" startIcon={<AddIcon fontSize="small" />}
+            onClick={() => setShowNewProject(true)} disabled={!canCreateProject}
+            sx={{
+              bgcolor: DASHBOARD_COLORS.blue, color: "#fff",
+              "&:hover": { bgcolor: darken(DASHBOARD_COLORS.blue, 0.15) },
+            }}
+          >
+            New Project
+          </Button>
+        </span>
+      </Tooltip>
 
       {showNewProject && roleCan(role, "createProject") && (
         <ProjectForm

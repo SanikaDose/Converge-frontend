@@ -181,16 +181,28 @@ boundary** — read this whole section before assuming anything is protected.
   Closing this means issuing a real session token on login and verifying it in a Nest guard on
   every non-auth route.
 
-## Roles (currently simplified)
+## Roles — Admin writes, User reads
 
-`ROLES = ["Admin", "Developer"]` in `lib/data.ts` — **both roles currently have every
-permission** (`PERMISSIONS` maps every action to `ALL_ROLES`), per an explicit request not to
-hide anything from Developers. Don't "helpfully" re-restrict Developer without being asked.
+`ROLES = ["Admin", "User"]` in `lib/data.ts`. **Admin has full access; User is read-only.**
+`PERMISSIONS` grants every write action (`createProject`, `deleteProject`,
+`editProjectSettings`, `managePhases`, `editTask`, `editScheduleDirectly`, `approveChanges`,
+`raiseTicket`, `updateTicketStatus`) to `ADMIN_ONLY`, and the three `see*` actions to
+`ALL_ROLES` — a User sees every project, board, ticket and breakdown an Admin does, but cannot
+change any of it or move a Kanban card.
 
-A user's `appRole` is assigned at seed time from their org title (Team Lead → Admin, everyone
-else → Developer) and comes back with the login response; `AppContext.role` reads it. Since
-both roles hold every permission right now, that mapping changes nothing user-visible yet —
-it's the seam real role-based access will use once requirements exist.
+**This is a UI gate, not a security boundary** — see "Known limitations". Every backend data
+endpoint is still unauthenticated, so a read-only user with devtools can call the API directly.
+Closing that means issuing a real session token at login and checking it in a Nest guard on
+every mutating route.
+
+Both roles are the same in the directory too: `OrgRole` is `"Admin" | "User"` (it replaced
+`"Team Lead" | "Developer"`), and `appRoleFor()` in the backend maps them 1:1. A user's role
+comes back with the login response and `AppContext.role` reads it, so **changing someone's role
+requires them to sign out and back in** — the session is a localStorage snapshot taken at login.
+
+Every write surface already routes through `roleCan()`, so role changes are a data edit in the
+`PERMISSIONS` table rather than a component rewrite. If you add a new mutating control, gate it
+the same way — don't rely on the surrounding panel being hidden.
 
 Task owners are **never pre-assigned** — every task (seed data included) is created with
 `assignedTo: null`. This was a deliberate change: the seed project used to auto-assign its first
@@ -200,9 +212,11 @@ Owner dropdown.
 
 The approval workflow (a task's scheduling edit by someone without `editScheduleDirectly`
 creates a Pending-Approval change request instead of applying immediately) is still fully
-implemented in `businessLogic.ts` and wired into `TaskCard`/`ProjectDetail`, but it's currently
-**unreachable** — reintroducing a role without `editScheduleDirectly` in the `PERMISSIONS` table
-in `lib/data.ts` is all it takes to make it live again.
+implemented in `businessLogic.ts` and wired into `TaskCard`/`ProjectDetail`, but it remains
+**unreachable**: User lacks `editScheduleDirectly` but is blocked by `editTask` first, so a
+read-only user never reaches the request path — read-only means read-only, not "edit by
+request". Making it live needs a third role that can edit tasks but not schedule them
+directly.
 
 ## Backend & data — real Postgres, not mock data
 

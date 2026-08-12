@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState, type HTMLAttributes } from "react";
+import React, { useEffect, useState } from "react";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import IconButton from "@mui/material/IconButton";
@@ -27,16 +27,15 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import EditIcon from "@mui/icons-material/Edit";
 import HistoryIcon from "@mui/icons-material/History";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
-import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutlineOutlined";
 import ChecklistIcon from "@mui/icons-material/Checklist";
-import { STATUS_OPTIONS, STATUS_COLOR, PRIORITY_COLOR, genId } from "@/lib/data";
+import { STATUS_OPTIONS, STATUS_COLOR, PRIORITY_COLOR, genId, VIEW_ONLY_HINT } from "@/lib/data";
 import { StatusChip, AchievementBadge, PendingApprovalChip, EmployeeAvatar } from "./common";
 import { OrgSelect } from "./common";
 import { isOverdue, overdueWorkingDays } from "@/lib/businessLogic";
-import { fmt } from "@/lib/dateUtils";
+import { fmt, businessDaysBetween } from "@/lib/dateUtils";
 import { useStatusHex } from "@/lib/theme";
 import { ScheduleReasonDialog, type PendingScheduleEdit } from "./ScheduleReasonDialog";
 import type { ChecklistItem, Task, TaskStatus, WeekDay } from "@/lib/types";
@@ -79,15 +78,14 @@ function fmtStamp(iso: string): string {
  * PhaseTaskPanel can enforce that.
  */
 export function TaskCard({
-  task, canEdit, canApprove, canReorder, today, weekOff, expanded, onToggleExpand,
+  task, canEdit, canApprove, today, weekOff, expanded, onToggleExpand,
   onStatusChange, onOpenEditor, onOpenHistory, onDelete, onApprove, onReject,
-  onCommitOwner, onCommitOffset, onCommitStartDate, onCommitDuration, onCommitDescription,
-  onChecklistChange, phaseBounds, dragHandleProps,
+  onCommitOwner, onCommitOffset, onCommitDates, onCommitDescription,
+  onChecklistChange, phaseBounds,
 }: {
   task: Task;
   canEdit: boolean;
   canApprove: boolean;
-  canReorder: boolean;
   today: string;
   weekOff: WeekDay[];
   expanded: boolean;
@@ -101,13 +99,12 @@ export function TaskCard({
   onCommitOwner: (ownerId: string | null) => void;
   // Scheduling commits carry the reason captured by ScheduleReasonDialog.
   onCommitOffset: (offset: string | number, reason: string) => void;
-  onCommitStartDate: (date: string, reason: string) => void;
-  onCommitDuration: (duration: string | number, reason: string) => void;
+  /** Start and finish move together now — duration is derived from the pair. */
+  onCommitDates: (plannedStart: string, plannedFinish: string, reason: string) => void;
   onCommitDescription: (description: string) => void;
   onChecklistChange: (checklist: ChecklistItem[]) => void;
   /** Allowed planned-start window from the phase's other tasks; null when this is the only task. */
   phaseBounds: { min: string; max: string } | null;
-  dragHandleProps?: HTMLAttributes<HTMLDivElement>;
 }) {
   const STATUS_HEX = useStatusHex();
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -116,6 +113,7 @@ export function TaskCard({
   const [owner, setOwner] = useState(task.assignedTo);
   const [dayOffset, setDayOffset] = useState<string | number>(task.dayOffset);
   const [startDateLocal, setStartDateLocal] = useState(task.plannedStart);
+  const [finishDateLocal, setFinishDateLocal] = useState(task.plannedFinish);
   const [duration, setDuration] = useState<string | number>(task.duration);
   const [description, setDescription] = useState(task.description || "");
   const [newPoint, setNewPoint] = useState("");
@@ -127,6 +125,7 @@ export function TaskCard({
   useEffect(() => { setOwner(task.assignedTo); }, [task.assignedTo]);
   useEffect(() => { setDayOffset(task.dayOffset); }, [task.dayOffset]);
   useEffect(() => { setStartDateLocal(task.plannedStart); }, [task.plannedStart]);
+  useEffect(() => { setFinishDateLocal(task.plannedFinish); }, [task.plannedFinish]);
   useEffect(() => { setDuration(task.duration); }, [task.duration]);
   useEffect(() => { setDescription(task.description || ""); }, [task.description]);
 
@@ -146,15 +145,55 @@ export function TaskCard({
   // committing on blur, so task history records *why* a date moved, not just
   // that it did. `cancel` restores the field's shown value — otherwise
   // backing out would leave the input displaying a change that never saved.
-  const commitStartDateIfValid = () => {
-    if (outsidePhase) { setStartDateLocal(task.plannedStart); return; }
-    if (startDateLocal === task.plannedStart) return;
+  /**
+   * Asks for a reason the moment a date is picked, rather than waiting for
+   * blur — choosing a date *is* the decision, so having to click elsewhere
+   * before the app reacted felt like the click had been ignored.
+   *
+   * Takes the new value as an argument instead of reading `startDateLocal`:
+   * this runs from the field's own onChange, where the state setter hasn't
+   * flushed yet and the closure still holds the previous date.
+   */
+  /**
+   * Opens the reschedule dialog as soon as either date is picked, seeded with
+   * both dates so the other one can be adjusted in the same step.
+   *
+   * Takes the new values as arguments instead of reading the local state:
+   * this runs from a field's own onChange, where the setter hasn't flushed
+   * yet and the closure still holds the previous date.
+   */
+  const openReschedule = (nextStart: string, nextFinish: string) => {
+    // Empty means a half-cleared input mid-edit, and an out-of-phase start is
+    // already flagged inline — neither is a decision worth interrupting for.
+    // Blur reverts those (browsers accept out-of-range dates typed directly).
+    if (!nextStart || !nextFinish) return;
+    if (nextStart === task.plannedStart && nextFinish === task.plannedFinish) return;
+    if (phaseBounds && (nextStart < phaseBounds.min || nextStart > phaseBounds.max)) return;
     setPendingEdit({
-      fieldLabel: "Planned start date",
-      from: fmt(task.plannedStart),
-      to: fmt(startDateLocal),
-      apply: (reason) => { setPendingEdit(null); onCommitStartDate(startDateLocal, reason); },
-      cancel: () => { setPendingEdit(null); setStartDateLocal(task.plannedStart); },
+      fieldLabel: "Planned start / finish",
+      from: `${fmt(task.plannedStart)} → ${fmt(task.plannedFinish)}`,
+      to: `${fmt(nextStart)} → ${fmt(nextFinish)}`,
+      apply: () => {},
+      cancel: () => {
+        setPendingEdit(null);
+        setStartDateLocal(task.plannedStart);
+        setFinishDateLocal(task.plannedFinish);
+      },
+      dateEdit: {
+        start: nextStart,
+        finish: nextFinish,
+        originalStart: task.plannedStart,
+        originalFinish: task.plannedFinish,
+        minStart: phaseBounds?.min,
+        maxStart: phaseBounds?.max,
+        // Inclusive of the start day, mirroring computePlanned's
+        // `finish = start + (duration - 1)`.
+        durationFor: (s, f) => businessDaysBetween(f, s, weekOff) + 1,
+        apply: (s, f, reason) => {
+          setPendingEdit(null);
+          onCommitDates(s, f, reason);
+        },
+      },
     });
   };
 
@@ -170,17 +209,6 @@ export function TaskCard({
     });
   };
 
-  const commitDurationIfChanged = () => {
-    const next = Math.max(1, Number(duration) || 1);
-    if (next === task.duration) return;
-    setPendingEdit({
-      fieldLabel: "Duration",
-      from: `${task.duration} day${task.duration === 1 ? "" : "s"}`,
-      to: `${next} day${next === 1 ? "" : "s"}`,
-      apply: (reason) => { setPendingEdit(null); onCommitDuration(next, reason); },
-      cancel: () => { setPendingEdit(null); setDuration(task.duration); },
-    });
-  };
 
   // A task can't be called done while its own critical points are open —
   // that's the whole point of tracking them.
@@ -240,11 +268,6 @@ export function TaskCard({
             "& .MuiAccordionSummary-content": { display: "flex", alignItems: "center", gap: 1.5, minWidth: 0, my: 1 },
           }}
         >
-          {canReorder && (
-            <Box {...dragHandleProps} onClick={(e) => e.stopPropagation()} sx={{ cursor: "grab", color: "text.secondary", display: "flex", flexShrink: 0 }}>
-              <DragIndicatorIcon fontSize="small" />
-            </Box>
-          )}
           <Tooltip title={overdue ? `${overdueDays}d overdue` : task.status}>
             <Box sx={{ width: 9, height: 9, borderRadius: "50%", flexShrink: 0, bgcolor: overdue ? STATUS_HEX.red : STATUS_HEX[color] }} />
           </Tooltip>
@@ -351,12 +374,26 @@ export function TaskCard({
                   // browsers accept regardless of min/max.
                   slotProps={{ htmlInput: { sx: fieldInputSx, min: phaseBounds?.min, max: phaseBounds?.max } }}
                   sx={{ flex: 1 }}
-                  onChange={(e) => setStartDateLocal(e.target.value)}
-                  onBlur={() => canEdit && !locked && commitStartDateIfValid()} />
+                  onChange={(e) => {
+                    setStartDateLocal(e.target.value);
+                    if (canEdit && !locked) openReschedule(e.target.value, finishDateLocal);
+                  }}
+                  // onChange already handled anything committable; blur is now
+                  // only the guard that puts an out-of-phase date back.
+                  onBlur={() => { if (outsidePhase) setStartDateLocal(task.plannedStart); }} />
                 <TextField
-                  size="small" fullWidth value={fmt(task.plannedFinish)} disabled
-                  slotProps={{ htmlInput: { sx: fieldInputSx } }}
-                  sx={{ flex: 1, "& .MuiInputBase-input.Mui-disabled": { WebkitTextFillColor: "unset", color: "text.primary", fontWeight: 600 } }} />
+                  type="date" size="small" fullWidth value={finishDateLocal} disabled={!canEdit || locked}
+                  error={!!finishDateLocal && finishDateLocal < startDateLocal}
+                  // Not clamped to the phase window like the start is: pushing a
+                  // task's finish past the phase end is how a phase legitimately
+                  // grows, whereas its start is pinned by what precedes it.
+                  slotProps={{ htmlInput: { sx: fieldInputSx, min: startDateLocal } }}
+                  sx={{ flex: 1 }}
+                  onChange={(e) => {
+                    setFinishDateLocal(e.target.value);
+                    if (canEdit && !locked) openReschedule(startDateLocal, e.target.value);
+                  }}
+                  onBlur={() => { if (finishDateLocal < startDateLocal) setFinishDateLocal(task.plannedFinish); }} />
               </Stack>
               {phaseBounds && (
                 <Typography sx={{
@@ -374,10 +411,15 @@ export function TaskCard({
 
             <Box sx={{ flex: "0 1 120px", minWidth: 108 }}>
               <Typography sx={fieldLabelSx}>Duration (days)</Typography>
-              <TextField type="number" size="small" fullWidth value={duration} disabled={!canEdit || locked}
-                slotProps={{ htmlInput: { min: 1, sx: fieldInputSx } }}
-                onChange={(e) => setDuration(e.target.value)}
-                onBlur={() => canEdit && !locked && commitDurationIfChanged()} />
+              {/* Read-only: duration is now a result of the two dates, not an
+                  input. Editing it as well would give three fields that each
+                  redefine the other two, with no clear winner. */}
+              <Tooltip title="Working days between the planned start and finish — set those to change it.">
+                <TextField
+                  size="small" fullWidth value={task.duration} disabled
+                  slotProps={{ htmlInput: { sx: fieldInputSx } }}
+                  sx={{ "& .MuiInputBase-input.Mui-disabled": { WebkitTextFillColor: "unset", color: "text.primary", fontWeight: 600 } }} />
+              </Tooltip>
             </Box>
           </Stack>
           </Paper>
@@ -537,16 +579,19 @@ export function TaskCard({
               </span>
             </Tooltip>
             <Box sx={{ flex: 1 }} />
-            {canEdit && (
-              <Tooltip title="Edit name, description, priority & dependencies">
-                <IconButton size="small" onClick={onOpenEditor}><EditIcon fontSize="small" /></IconButton>
-              </Tooltip>
-            )}
-            {canEdit && (
-              <Tooltip title="Delete task">
-                <IconButton size="small" color="error" onClick={() => setConfirmDelete(true)}><DeleteOutlineIcon fontSize="small" /></IconButton>
-              </Tooltip>
-            )}
+            {/* Visible-but-disabled for a read-only User, same as every
+                other write control — see VIEW_ONLY_HINT. */}
+            <Tooltip title={canEdit ? "Edit name, description, priority & dependencies" : VIEW_ONLY_HINT}>
+              <span>
+                <IconButton size="small" disabled={!canEdit} onClick={onOpenEditor}><EditIcon fontSize="small" /></IconButton>
+              </span>
+            </Tooltip>
+            <Tooltip title={canEdit ? "Delete task" : VIEW_ONLY_HINT}>
+              <span>
+                <IconButton size="small" disabled={!canEdit} color={canEdit ? "error" : undefined}
+                  onClick={() => setConfirmDelete(true)}><DeleteOutlineIcon fontSize="small" /></IconButton>
+              </span>
+            </Tooltip>
           </Stack>
 
           {task.status === "Pending Approval" && task.pendingChange && (

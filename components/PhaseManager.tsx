@@ -17,6 +17,7 @@ import { CompletionRing } from "./CompletionRing";
 import { TaskCard } from "./TaskCard";
 import { fmt } from "@/lib/dateUtils";
 import { computePlanned } from "@/lib/businessLogic";
+import { VIEW_ONLY_HINT } from "@/lib/data";
 import { useStatusHex } from "@/lib/theme";
 import type { ChecklistItem, PhaseSummary, Task, TaskStatus, WeekDay } from "@/lib/types";
 
@@ -132,15 +133,19 @@ export function AddTaskDialog({ projectStartDate, projectWeekOff, onClose, onCre
 }
 
 /**
- * Task list for the active phase. Supports native HTML5 drag & drop
- * reordering (no extra dependency) when `canReorder` is true — dragging
- * a card over another swaps their `order` values via `onReorder`.
+ * Task list for the active phase.
+ *
+ * Tasks are deliberately NOT reorderable: their sequence comes from the
+ * 12-phase template's day-offsets, so position in this list mirrors the
+ * schedule. Dragging a card would have changed only `order` while leaving
+ * the dates untouched, letting the list disagree with the Gantt.
+ * Resequencing is done by editing a task's dates, not by dragging.
  */
 export function PhaseTaskPanel({
   phase, tasks, today, weekOff, canEdit, canManage, canApprove,
   onUpdateTask, onOpenEditor, onOpenHistory, onDeleteTask, onApprove, onReject,
-  onAddTask, onReorder,
-  onCommitOwner, onCommitOffset, onCommitStartDate, onCommitDuration, onCommitDescription,
+  onAddTask,
+  onCommitOwner, onCommitOffset, onCommitDates, onCommitDescription,
   onChecklistChange, focusTask,
 }: {
   phase: PhaseSummary;
@@ -158,11 +163,9 @@ export function PhaseTaskPanel({
   onApprove: (taskId: string) => void;
   onReject: (taskId: string, comment: string) => void;
   onAddTask: () => void;
-  onReorder: (dragId: string, dropId: string) => void;
   onCommitOwner: (taskId: string, ownerId: string | null) => void;
   onCommitOffset: (taskId: string, offset: string | number, reason: string) => void;
-  onCommitStartDate: (taskId: string, date: string, reason: string) => void;
-  onCommitDuration: (taskId: string, duration: string | number, reason: string) => void;
+  onCommitDates: (taskId: string, plannedStart: string, plannedFinish: string, reason: string) => void;
   onCommitDescription: (taskId: string, description: string) => void;
   onChecklistChange: (taskId: string, checklist: ChecklistItem[]) => void;
   /**
@@ -174,7 +177,6 @@ export function PhaseTaskPanel({
    */
   focusTask?: { id: string; seq: number } | null;
 }) {
-  const [dragId, setDragId] = useState<string | null>(null);
   // Only one task accordion open at a time — expanding a new one closes
   // whichever was previously open.
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
@@ -243,26 +245,20 @@ export function PhaseTaskPanel({
               </Typography>
             )}
           </Box>
-          {canManage && <Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={onAddTask}>Add task</Button>}
+          <Tooltip title={canManage ? "" : VIEW_ONLY_HINT}>
+            <span>
+              <Button size="small" variant="outlined" startIcon={<AddIcon />} disabled={!canManage} onClick={onAddTask}>
+                Add task
+              </Button>
+            </span>
+          </Tooltip>
         </Stack>
       </Box>
       <Stack spacing={1.5} sx={{ p: 2.5 }}>
         {sorted.map((t) => (
-          <Box
-            key={t.id}
-            ref={(el: HTMLDivElement | null) => { taskRefs.current[t.id] = el; }}
-            draggable={canManage}
-            onDragStart={() => setDragId(t.id)}
-            onDragOver={(e) => canManage && e.preventDefault()}
-            onDrop={(e) => {
-              e.preventDefault();
-              if (canManage && dragId && dragId !== t.id) onReorder(dragId, t.id);
-              setDragId(null);
-            }}
-            sx={{ opacity: dragId === t.id ? 0.5 : 1 }}
-          >
+          <Box key={t.id} ref={(el: HTMLDivElement | null) => { taskRefs.current[t.id] = el; }}>
             <TaskCard
-              task={t} canEdit={canEdit} canApprove={canApprove} canReorder={canManage} today={today} weekOff={weekOff}
+              task={t} canEdit={canEdit} canApprove={canApprove} today={today} weekOff={weekOff}
               expanded={expandedTaskId === t.id}
               onToggleExpand={() => setExpandedTaskId(prev => prev === t.id ? null : t.id)}
               onStatusChange={(status) => onUpdateTask(t.id, status)}
@@ -273,8 +269,7 @@ export function PhaseTaskPanel({
               onReject={(comment) => onReject(t.id, comment)}
               onCommitOwner={(ownerId) => onCommitOwner(t.id, ownerId)}
               onCommitOffset={(offset, reason) => onCommitOffset(t.id, offset, reason)}
-              onCommitStartDate={(date, reason) => onCommitStartDate(t.id, date, reason)}
-              onCommitDuration={(duration, reason) => onCommitDuration(t.id, duration, reason)}
+              onCommitDates={(startDate, finishDate, reason) => onCommitDates(t.id, startDate, finishDate, reason)}
               onCommitDescription={(desc) => onCommitDescription(t.id, desc)}
               onChecklistChange={(checklist) => onChecklistChange(t.id, checklist)}
               phaseBounds={phaseBounds}

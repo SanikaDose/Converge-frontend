@@ -36,7 +36,8 @@ import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 import { ProjectCard } from "./ProjectCard";
 import { StatCard, computeStatTrend } from "./common";
 import { DonutChart, TrendLineChart } from "./charts";
-import { fetchProjectsIndex, fetchDashboardBaseline } from "@/lib/api";
+import { useGetProjectsQuery } from "@/store/api/projectsApi";
+import { useGetDashboardBaselineQuery } from "@/store/api/dashboardApi";
 import { withLiveStats } from "@/lib/businessLogic";
 import { todayISO, addDays, diffDays } from "@/lib/dateUtils";
 import { DASHBOARD_COLORS } from "@/lib/theme";
@@ -146,29 +147,27 @@ export function Dashboard({ actor, onOpen }: {
 }) {
   const { role } = actor;
   const theme = useTheme();
-  const [projectsRaw, setProjectsRaw] = useState<ProjectIndexRow[]>([]);
-  const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [myOnly, setMyOnly] = useState(false);
   const [typeFilter, setTypeFilter] = useState<"All" | ProjectType>("All");
   const [dateScope, setDateScope] = useState<DateScope>("all");
   const [expanded, setExpanded] = useState<Record<BucketKey, boolean>>({ "In Progress": true, "Completed": true });
-  const [baseline, setBaseline] = useState<DashboardBaseline | null>(null);
   const [trendRange, setTrendRange] = useState<TrendRange>("month");
   const [deadlineFilter, setDeadlineFilter] = useState<"upcoming" | "overdue">("upcoming");
   const today = todayISO();
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try { setProjectsRaw(await fetchProjectsIndex()); } catch { setProjectsRaw([]); }
-    setLoading(false);
-  }, []);
-  useEffect(() => { load(); }, [load]);
+  // Refresh maps to RTK Query's refetch; an error still yields an empty
+  // list so the empty-state renders rather than the page breaking.
+  const { data: projectsData, isFetching, refetch } = useGetProjectsQuery();
+  const projectsRaw: ProjectIndexRow[] = useMemo(() => projectsData ?? [], [projectsData]);
+  const loading = isFetching;
+  const load = refetch;
 
-  // Baseline is a real snapshot captured once per server session (see
-  // mockDb.getDashboardBaseline) — fetched once here too, not on every
-  // refresh, so the "vs last month" comparison stays stable.
-  useEffect(() => { fetchDashboardBaseline().then(setBaseline).catch(() => setBaseline(null)); }, []);
+  // Baseline is a real snapshot captured once per server session — the
+  // cache keeps it stable across refreshes here too, so the "vs last month"
+  // comparison doesn't move under the user.
+  const { data: baselineData } = useGetDashboardBaselineQuery();
+  const baseline: DashboardBaseline | null = baselineData ?? null;
 
   // Recompute bucket/delayed-count against *today's* date on every render
   // instead of trusting the write-time snapshot — see businessLogic's

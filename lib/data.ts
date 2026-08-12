@@ -207,6 +207,22 @@ export const VIEW_ONLY_HINT = "View-only access — ask an admin to make changes
 
 export const SCHEDULING_FIELDS = ["dayOffset", "plannedStart", "plannedFinish", "duration"] as const;
 
+/**
+ * A real v4 UUID, for anything that becomes a database primary key —
+ * currently a task created from the "Add task" dialog, which reaches
+ * Postgres via the full-sync PATCH. Must match the backend's `newId()`:
+ * the `tasks.id` column is a native `uuid`, so the old
+ * `${prefix}_${Date.now()}_${random}` format would now be rejected.
+ */
+export function newId(): string {
+  return crypto.randomUUID();
+}
+
+/**
+ * Prefixed id for items that live *inside* a jsonb column (checklist
+ * points, ticket action points) rather than as their own row. These are
+ * never primary keys, so a readable prefix is more useful here than a UUID.
+ */
 export function genId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }

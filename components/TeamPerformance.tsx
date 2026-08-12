@@ -27,7 +27,7 @@ import RefreshIcon from "@mui/icons-material/Refresh";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import FilterAltIcon from "@mui/icons-material/FilterAlt";
 import { EmployeeAvatar, StatCard } from "./common";
-import { fetchTeamPerformance } from "@/lib/api";
+import { useGetTeamPerformanceQuery } from "@/store/api/teamPerformanceApi";
 import { avatarColor } from "@/lib/data";
 import { DASHBOARD_COLORS } from "@/lib/theme";
 import type { OrgRole, TeamPerformanceRow } from "@/lib/types";
@@ -53,19 +53,19 @@ const ROLE_COLOR: Record<OrgRole, string> = {
  * full table column was pure duplication.
  */
 export function TeamPerformance({ refreshKey }: { refreshKey: number }) {
-  const [rows, setRows] = useState<TeamPerformanceRow[]>([]);
-  const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [teamFilter, setTeamFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [actionMenu, setActionMenu] = useState<{ el: HTMLElement; row: TeamPerformanceRow } | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try { setRows(await fetchTeamPerformance()); } catch { setRows([]); }
-    setLoading(false);
-  }, []);
-  useEffect(() => { load(); }, [load, refreshKey]);
+  // `refreshKey` is retained as a prop so the page's contract is unchanged;
+  // a bump still forces a refetch, and the Refresh button maps to RTK
+  // Query's own refetch. An error falls back to an empty list, as before.
+  const { data, isFetching, refetch } = useGetTeamPerformanceQuery();
+  const rows: TeamPerformanceRow[] = useMemo(() => data ?? [], [data]);
+  const loading = isFetching;
+  const load = refetch;
+  useEffect(() => { if (refreshKey) refetch(); }, [refreshKey, refetch]);
 
   const summary = useMemo(() => {
     const active = rows.filter(r => r.total > 0);

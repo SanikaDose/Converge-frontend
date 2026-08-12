@@ -13,7 +13,8 @@ import CircularProgress from "@mui/material/CircularProgress";
 import Stack from "./Stack";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 
-import { loginApi, deleteProjectApi } from "@/lib/api";
+import { useLoginMutation } from "@/store/api/authApi";
+import { useDeleteProjectMutation } from "@/store/api/projectsApi";
 import { useAuth } from "@/context/AuthContext";
 
 /**
@@ -31,6 +32,8 @@ export function DeleteProjectDialog({ projectId, projectName, onClose, onDeleted
   onDeleted: () => void;
 }) {
   const { user } = useAuth();
+  const [loginMutation] = useLoginMutation();
+  const [deleteProjectMutation] = useDeleteProjectMutation();
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,14 +44,14 @@ export function DeleteProjectDialog({ projectId, projectName, onClose, onDeleted
     setBusy(true);
     setError(null);
     try {
-      await loginApi(user.employeeCode, password);
+      await loginMutation({ employeeCode: user.employeeCode, password }).unwrap();
     } catch {
       setError("Incorrect password.");
       setBusy(false);
       return;
     }
     try {
-      await deleteProjectApi(projectId);
+      await deleteProjectMutation(projectId).unwrap();
       onDeleted();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete project. Please try again.");

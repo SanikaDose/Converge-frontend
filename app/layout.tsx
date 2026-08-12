@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import ThemeRegistry from "@/components/ThemeRegistry";
+import GlobalReduxProvider from "@/Providers/GlobalReduxProvider";
 import { AppProvider } from "@/context/AppContext";
 import { AuthProvider } from "@/context/AuthContext";
 import { OrgProvider } from "@/context/OrgContext";
@@ -21,15 +22,19 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>
-        <OrgProvider>
-          <AuthProvider>
-            <AppProvider>
-              <ThemeRegistry>
-                <AuthGate>{children}</AuthGate>
-              </ThemeRegistry>
-            </AppProvider>
-          </AuthProvider>
-        </OrgProvider>
+        {/* Outermost: OrgProvider and AuthProvider now fetch through RTK
+            Query, so the store has to exist above them. */}
+        <GlobalReduxProvider>
+          <OrgProvider>
+            <AuthProvider>
+              <AppProvider>
+                <ThemeRegistry>
+                  <AuthGate>{children}</AuthGate>
+                </ThemeRegistry>
+              </AppProvider>
+            </AuthProvider>
+          </OrgProvider>
+        </GlobalReduxProvider>
       </body>
     </html>
   );

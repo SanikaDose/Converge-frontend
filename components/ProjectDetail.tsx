@@ -31,12 +31,12 @@ import { ProjectForm, type ProjectFormPayload } from "./ProjectForm";
 import { DeleteProjectDialog } from "./DeleteProjectDialog";
 import { EmployeeAvatar } from "./common";
 
-import { fetchProject, updateProjectApi } from "@/lib/api";
+import { useGetProjectQuery, useUpdateProjectMutation } from "@/store/api/projectsApi";
 import {
   ensureProjectShape, phaseSummaries, summarize, computePlanned,
   approveScheduleChange, rejectScheduleChange, computeAchievement, requestScheduleChange, fieldLabel,
 } from "@/lib/businessLogic";
-import { genId, roleCan, VIEW_ONLY_HINT } from "@/lib/data";
+import { newId, roleCan, VIEW_ONLY_HINT } from "@/lib/data";
 import { useOrgContext } from "@/context/OrgContext";
 import { fmt, todayISO, diffDays, businessDaysBetween } from "@/lib/dateUtils";
 import type { Actor, ChecklistItem, HistoryEntry, ProjectDetailData, Task, TaskStatus } from "@/lib/types";
@@ -53,7 +53,6 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
   const { role } = actor;
   const { employeeLabel } = useOrgContext();
   const [detail, setDetail] = useState<ProjectDetailData | null>(null);
-  const [loading, setLoading] = useState(true);
   const [activePhaseId, setActivePhaseId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("phases");
   const [showSettings, setShowSettings] = useState(false);
@@ -82,28 +81,32 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
   const canEditScheduleDirectly = roleCan(role, "editScheduleDirectly");
   const canApprove = roleCan(role, "approveChanges");
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const raw = await fetchProject(projectId);
-      const data = ensureProjectShape(raw);
-      setDetail(data);
-      if (data) {
-        setActivePhaseId(prev => {
-          if (prev) return prev;
-          const phases = phaseSummaries(data.phases, data.tasks, today, data.meta.startDate);
-          const idx = phases.findIndex(p => p.completed < p.total);
-          return (idx === -1 ? phases[phases.length - 1] : phases[idx])?.id || null;
-        });
-      }
-    } catch {
-      setDetail(null);
-    }
-    setLoading(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId]);
+  /**
+   * The fetch moves to RTK Query, but the *editing* model deliberately does
+   * not: this screen holds the whole project document in `detail` and
+   * mutates it locally before PATCHing the full thing back (see `persist`).
+   * Driving that off the cache directly would mean re-deriving the document
+   * on every keystroke, so the query seeds local state and local state stays
+   * the source of truth while the page is open.
+   */
+  const { data: fetchedProject, isFetching, isError } = useGetProjectQuery(projectId);
+  const [updateProjectMutation] = useUpdateProjectMutation();
+  const loading = isFetching && !detail;
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (isError) { setDetail(null); return; }
+    if (!fetchedProject) return;
+    const data = ensureProjectShape(fetchedProject);
+    setDetail(data);
+    if (!data) return;
+    setActivePhaseId(prev => {
+      if (prev) return prev;
+      const phases = phaseSummaries(data.phases, data.tasks, today, data.meta.startDate);
+      const idx = phases.findIndex(p => p.completed < p.total);
+      return (idx === -1 ? phases[phases.length - 1] : phases[idx])?.id || null;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchedProject, isError]);
 
   // Deep link from the portfolio Kanban. Deliberately waits for `detail` —
   // the URL carries only a task id, and the phase to switch to has to be
@@ -124,17 +127,27 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
   // so there's no separate index to keep in sync here.
   const persist = async (next: ProjectDetailData) => {
     setDetail(next);
-    try { await updateProjectApi(projectId, { meta: next.meta, phases: next.phases, tasks: next.tasks }); }
+    try { await updateProjectMutation({ id: projectId, patch: { meta: next.meta, phases: next.phases, tasks: next.tasks } }).unwrap(); }
     catch (e) { console.error(e); }
   };
 
+  /**
+   * Applies a task-list change and persists it.
+   *
+   * The next state is computed *outside* any updater on purpose. This used
+   * to run `fn` and call `persist` inside `setDetail(prev => …)`, which
+   * makes the updater impure — it fired a network request and a nested
+   * setState. React invokes updaters twice in development to surface
+   * exactly that, and the doubled run was appending a newly created task
+   * twice, producing "Encountered two children with the same key".
+   *
+   * `persist` already calls `setDetail(next)`, so state still updates
+   * immediately; every caller is a discrete user action, so reading
+   * `detail` from the closure is safe here.
+   */
   const mutateTasks = (fn: (tasks: Task[]) => Task[]) => {
-    setDetail(prev => {
-      if (!prev) return prev;
-      const next = { ...prev, tasks: fn(prev.tasks) };
-      persist(next);
-      return next;
-    });
+    if (!detail) return;
+    persist({ ...detail, tasks: fn(detail.tasks) });
   };
 
   const handleStatusChange = (taskId: string, status: TaskStatus) => {
@@ -277,7 +290,7 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
     const { plannedStart, plannedFinish } = computePlanned(detail.meta.startDate, dayOffset, duration, detail.meta.weekOff);
     const siblingOrders = detail.tasks.filter(t => t.phaseId === addTaskPhaseId).map(t => t.order);
     const newTask: Task = {
-      id: genId("task"), phaseId: addTaskPhaseId, order: siblingOrders.length ? Math.max(...siblingOrders) + 1 : 0,
+      id: newId(), phaseId: addTaskPhaseId, order: siblingOrders.length ? Math.max(...siblingOrders) + 1 : 0,
       name, description: "", assignedTo, priority: "Medium", dependencies: [],
       dayOffset, duration, plannedStart, plannedFinish, actualStart: null, actualFinish: null,
       status: "Not Started", pendingChange: null, achievement: null, checklist: [],

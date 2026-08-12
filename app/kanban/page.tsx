@@ -17,7 +17,7 @@ import PeopleAltOutlinedIcon from "@mui/icons-material/PeopleAltOutlined";
 import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 import FlagOutlinedIcon from "@mui/icons-material/FlagOutlined";
 import { GlobalKanbanBoard, type GlobalKanbanTask } from "@/components/GlobalKanbanBoard";
-import { fetchProjectsIndex, fetchProject, updateProjectApi } from "@/lib/api";
+import { useGetProjectsWithDetailsQuery, useUpdateProjectMutation } from "@/store/api/projectsApi";
 import { computeAchievement } from "@/lib/businessLogic";
 import { todayISO } from "@/lib/dateUtils";
 import { roleCan, STATUS_OPTIONS } from "@/lib/data";
@@ -40,27 +40,18 @@ export default function GlobalKanbanPage() {
   const canEdit = roleCan(role, "editTask");
   const today = todayISO();
 
-  const [projectsIndex, setProjectsIndex] = useState<ProjectIndexRow[]>([]);
-  const [projectDetails, setProjectDetails] = useState<ProjectDetailData[]>([]);
-  const [loading, setLoading] = useState(true);
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [projectFilter, setProjectFilter] = useState<string[]>([]);
   const [selectedStatuses, setSelectedStatuses] = useState<TaskStatus[]>(DEFAULT_STATUSES);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const index = await fetchProjectsIndex();
-      setProjectsIndex(index);
-      const details = await Promise.all(index.map(p => fetchProject(p.id)));
-      setProjectDetails(details);
-    } catch {
-      setProjectsIndex([]);
-      setProjectDetails([]);
-    }
-    setLoading(false);
-  }, []);
-  useEffect(() => { load(); }, [load]);
+  // Index + every project's detail as one cached query — see
+  // getProjectsWithDetails. Refresh maps to its refetch.
+  const { data, isFetching, refetch } = useGetProjectsWithDetailsQuery();
+  const projectsIndex: ProjectIndexRow[] = useMemo(() => data?.index ?? [], [data]);
+  const projectDetails: ProjectDetailData[] = useMemo(() => data?.details ?? [], [data]);
+  const loading = isFetching;
+  const load = refetch;
+  const [updateProjectMutation] = useUpdateProjectMutation();
 
   const productProjects = useMemo(() => projectsIndex.filter(p => p.type === "Product"), [projectsIndex]);
   const solutionProjects = useMemo(() => projectsIndex.filter(p => p.type === "Solution"), [projectsIndex]);
@@ -124,9 +115,12 @@ export default function GlobalKanbanPage() {
       merged.history = history;
       return merged;
     });
-    setProjectDetails(prev => prev.map(p => (p.id === pd.id ? { ...p, tasks: updatedTasks } : p)));
     try {
-      await updateProjectApi(pd.id, { tasks: updatedTasks });
+      // The mutation invalidates "Projects", which this query provides, so
+      // the board refetches with the saved state. The card visibly moves on
+      // the drop either way because GlobalKanbanBoard renders from the
+      // returned data; a failure leaves the board on the server's truth.
+      await updateProjectMutation({ id: pd.id, patch: { tasks: updatedTasks } }).unwrap();
     } catch (e) {
       console.error(e);
       load();

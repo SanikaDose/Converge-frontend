@@ -36,7 +36,7 @@ import ConfirmationNumberIcon from "@mui/icons-material/ConfirmationNumberOutlin
 import { OrgSelect, StatusChip, EmployeeAvatar } from "./common";
 import { TEMPLATE, roleCan, genId, VIEW_ONLY_HINT } from "@/lib/data";
 import { fmt } from "@/lib/dateUtils";
-import { fetchTickets, createTicketApi, updateTicketApi } from "@/lib/api";
+import { useGetTicketsQuery, useCreateTicketMutation, useUpdateTicketMutation } from "@/store/api/ticketsApi";
 import { useStatusHex, DASHBOARD_COLORS } from "@/lib/theme";
 import type { CreateTicketInput } from "@/lib/types";
 import type { Actor, ChecklistItem, Priority, StatusColorKey, Ticket, TicketStatus } from "@/lib/types";
@@ -405,49 +405,37 @@ export function TicketsPanel({ actor, projects, refreshKey, onChanged }: {
 }) {
   const { role } = actor;
   const STATUS_HEX = useStatusHex();
-  const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [busy, setBusy] = useState(false);
   const [expanded, setExpanded] = useState<Record<BucketKey, boolean>>({ Raised: true, Completed: false });
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const fetched = await fetchTickets();
-      // Tickets stored before these two columns existed come back without
-      // them; normalize once here so no render path has to guard.
-      setTickets(fetched.map(t => ({ ...t, actionPoints: t.actionPoints ?? [], resolvedAt: t.resolvedAt ?? null })));
-    } catch { setTickets([]); }
-    setLoading(false);
-  }, []);
-  useEffect(() => { load(); }, [load, refreshKey]);
+  // Normalisation of legacy rows now lives in the endpoint's
+  // transformResponse, so every consumer of this query gets it.
+  const { data, isFetching, refetch } = useGetTicketsQuery();
+  const tickets: Ticket[] = useMemo(() => data ?? [], [data]);
+  const loading = isFetching;
+  useEffect(() => { if (refreshKey) refetch(); }, [refreshKey, refetch]);
+
+  const [createTicketMutation, { isLoading: busy }] = useCreateTicketMutation();
+  const [updateTicketMutation] = useUpdateTicketMutation();
 
   const addTicket = async (payload: CreateTicketInput) => {
     if (!roleCan(role, "raiseTicket")) return;
-    setBusy(true);
     try {
-      const ticket = await createTicketApi(payload);
-      setTickets(prev => [ticket, ...prev]);
+      await createTicketMutation(payload).unwrap();
       setShowForm(false);
       onChanged?.();
     } catch (e) {
       console.error(e);
     }
-    setBusy(false);
   };
 
+  // Optimistic update and server reconcile both live in the mutation's
+  // onQueryStarted — see ticketsApi. Every view reading getTickets (this
+  // panel, the navbar bell, the Tickets page KPIs) updates from one place.
   const updateTicket = async (id: string, updates: Partial<Ticket>) => {
     if (!roleCan(role, "updateTicketStatus")) return;
-    setTickets(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
     try {
-      // Reconcile with what the server actually saved — resolvedAt is stamped
-      // there, so an optimistic-only update would leave the closing date blank
-      // until the next reload.
-      const saved = await updateTicketApi(id, updates);
-      setTickets(prev => prev.map(t => t.id === id
-        ? { ...t, ...saved, actionPoints: saved.actionPoints ?? [], resolvedAt: saved.resolvedAt ?? null }
-        : t));
+      await updateTicketMutation({ id, patch: updates }).unwrap();
       onChanged?.();
     } catch (e) { console.error(e); }
   };

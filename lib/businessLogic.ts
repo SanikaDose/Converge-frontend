@@ -7,7 +7,7 @@
  * frontend no longer holds every project's full task list in memory at
  * once; TeamPerformance.tsx just calls GET /team-performance.)
  */
-import { TEMPLATE, genId } from "./data";
+import { TEMPLATE, genId, newId } from "./data";
 import { addWorkingDays, businessDaysBetween, todayISO, DEFAULT_WEEK_OFF } from "./dateUtils";
 import type {
   Achievement, Actor, ChecklistItem, Employee, HistoryEntry, LivePhaseRow, Phase, PhaseLite, PhaseSummary,
@@ -22,7 +22,7 @@ import type {
 // one project never affects the shared TEMPLATE or any other project.
 export function buildProjectPhases(): Phase[] {
   return TEMPLATE.map((p, i) => ({
-    id: `ph_${i}_${genId("x")}`,
+    id: newId(),
     name: p.phase,
     critical: p.critical,
     order: i,
@@ -43,7 +43,7 @@ export function buildTasks(startDate: string, phases: Phase[], weekOff: WeekDay[
     p.tasks.forEach(([name, offset, duration], ti) => {
       const { plannedStart, plannedFinish } = computePlanned(startDate, offset, duration, weekOff);
       tasks.push({
-        id: `p${pi}_t${ti}`,
+        id: newId(),
         phaseId: phase.id,
         order: ti,
         name,

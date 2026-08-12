@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState, type ReactNode } from "react";
+import React, { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import AppBar from "@mui/material/AppBar";
@@ -33,7 +33,8 @@ import { ProjectForm, type ProjectFormPayload } from "./ProjectForm";
 import { TicketForm } from "./TicketsPanel";
 import { initials, avatarColor, roleCan, VIEW_ONLY_HINT } from "@/lib/data";
 import { recordNavigation } from "@/lib/navHistory";
-import { fetchTickets, fetchProjectsIndex, createProjectApi, createTicketApi } from "@/lib/api";
+import { useGetProjectsQuery, useCreateProjectMutation } from "@/store/api/projectsApi";
+import { useGetTicketsQuery, useCreateTicketMutation } from "@/store/api/ticketsApi";
 import { useAppContext } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
 import type { CreateTicketInput, ProjectIndexRow, Ticket } from "@/lib/types";
@@ -50,13 +51,13 @@ const NAV_ITEMS = [
 /** Bell icon fed by real open/in-progress tickets — no fake unread count. */
 function NotificationsMenu() {
   const router = useRouter();
-  const [tickets, setTickets] = useState<Ticket[]>([]);
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
 
-  const load = useCallback(async () => {
-    try { setTickets(await fetchTickets()); } catch { setTickets([]); }
-  }, []);
-  useEffect(() => { load(); }, [load]);
+  // Opening the bell still refetches, as it did before; the cache means
+  // this shares one request with the Tickets page rather than duplicating it.
+  const { data, refetch } = useGetTicketsQuery();
+  const tickets: Ticket[] = useMemo(() => data ?? [], [data]);
+  const load = refetch;
 
   const open = tickets.filter(t => t.status === "Open" || t.status === "In Progress");
 
@@ -149,16 +150,15 @@ function AccountMenu() {
 function ProjectQuickActions() {
   const router = useRouter();
   const { role } = useAppContext();
-  const [projects, setProjects] = useState<ProjectIndexRow[]>([]);
   const [showNewProject, setShowNewProject] = useState(false);
-  const [projectBusy, setProjectBusy] = useState(false);
   const [showTicketForm, setShowTicketForm] = useState(false);
-  const [ticketBusy, setTicketBusy] = useState(false);
 
-  const loadProjects = useCallback(async () => {
-    try { setProjects(await fetchProjectsIndex()); } catch { setProjects([]); }
-  }, []);
-  useEffect(() => { loadProjects(); }, [loadProjects]);
+  const { data: projectsData } = useGetProjectsQuery();
+  const projects: ProjectIndexRow[] = useMemo(() => projectsData ?? [], [projectsData]);
+  // `isLoading` from the mutation replaces the hand-rolled busy flags, so
+  // the forms' spinners are driven by the request itself.
+  const [createProjectMutation, { isLoading: projectBusy }] = useCreateProjectMutation();
+  const [createTicketMutation, { isLoading: ticketBusy }] = useCreateTicketMutation();
 
   const projectOptions = projects.map(p => ({ id: p.id, name: p.name }));
   const canRaiseTicket = roleCan(role, "raiseTicket");
@@ -166,28 +166,26 @@ function ProjectQuickActions() {
 
   const createProject = async (payload: ProjectFormPayload) => {
     if (!roleCan(role, "createProject")) return;
-    setProjectBusy(true);
     try {
-      const project = await createProjectApi(payload);
+      // The mutation invalidates "Projects", so the list here and every
+      // other view of it refetch — the explicit loadProjects() call this
+      // replaced only refreshed this one component's copy.
+      const project = await createProjectMutation(payload).unwrap();
       setShowNewProject(false);
-      loadProjects();
       router.push(`/projects/${project.id}`);
     } catch (e) {
       console.error(e);
     }
-    setProjectBusy(false);
   };
 
   const raiseTicket = async (payload: CreateTicketInput) => {
     if (!roleCan(role, "raiseTicket")) return;
-    setTicketBusy(true);
     try {
-      await createTicketApi(payload);
+      await createTicketMutation(payload).unwrap();
       setShowTicketForm(false);
     } catch (e) {
       console.error(e);
     }
-    setTicketBusy(false);
   };
 
   return (

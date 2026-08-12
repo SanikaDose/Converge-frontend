@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import Box from "@mui/material/Box";
 import Grid from "@mui/material/Grid";
 import ConfirmationNumberIcon from "@mui/icons-material/ConfirmationNumber";
@@ -9,30 +9,24 @@ import DonutLargeIcon from "@mui/icons-material/DonutLarge";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import { TicketsPanel } from "@/components/TicketsPanel";
 import { StatCard, computeStatTrend } from "@/components/common";
-import { fetchProjectsIndex, fetchTickets, fetchDashboardBaseline } from "@/lib/api";
+import { useGetProjectsQuery } from "@/store/api/projectsApi";
+import { useGetTicketsQuery } from "@/store/api/ticketsApi";
+import { useGetDashboardBaselineQuery } from "@/store/api/dashboardApi";
 import { DASHBOARD_COLORS } from "@/lib/theme";
 import { useAppContext } from "@/context/AppContext";
 import type { DashboardBaseline, ProjectIndexRow, Ticket } from "@/lib/types";
 
 export default function TicketsPage() {
   const { actor } = useAppContext();
-  const [projects, setProjects] = useState<ProjectIndexRow[]>([]);
-  const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [baseline, setBaseline] = useState<DashboardBaseline | null>(null);
-
-  const loadTickets = useCallback(async () => {
-    try { setTickets(await fetchTickets()); } catch { setTickets([]); }
-  }, []);
-  const load = useCallback(async () => {
-    try { setProjects(await fetchProjectsIndex()); } catch { setProjects([]); }
-    await loadTickets();
-  }, [loadTickets]);
-  useEffect(() => { load(); }, [load]);
-
-  // Baseline is a real snapshot captured once per backend session (see
-  // Dashboard.tsx's identical pattern) — fetched once, not on every
-  // refresh, so the "vs last month" comparison stays stable.
-  useEffect(() => { fetchDashboardBaseline().then(setBaseline).catch(() => setBaseline(null)); }, []);
+  // These KPIs read the same cached queries the panel below does, so a
+  // ticket edit updates both from one request instead of the panel having
+  // to call back up via onChanged.
+  const { data: projectsData } = useGetProjectsQuery();
+  const { data: ticketsData } = useGetTicketsQuery();
+  const { data: baselineData } = useGetDashboardBaselineQuery();
+  const projects: ProjectIndexRow[] = useMemo(() => projectsData ?? [], [projectsData]);
+  const tickets: Ticket[] = useMemo(() => ticketsData ?? [], [ticketsData]);
+  const baseline: DashboardBaseline | null = baselineData ?? null;
 
   const stats = useMemo(() => {
     const total = tickets.length;
@@ -71,7 +65,6 @@ export default function TicketsPage() {
         actor={actor}
         projects={projects.map(p => ({ id: p.id, name: p.name }))}
         refreshKey={0}
-        onChanged={loadTickets}
       />
     </Box>
   );

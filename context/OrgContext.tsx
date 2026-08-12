@@ -1,7 +1,7 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { fetchEmployees } from "@/lib/api";
+import React, { createContext, useContext, useMemo, type ReactNode } from "react";
+import { useGetEmployeesQuery } from "@/store/api/employeesApi";
 import type { Employee, Team } from "@/lib/types";
 
 interface OrgContextValue {
@@ -27,22 +27,14 @@ const OrgContext = createContext<OrgContextValue | null>(null);
  * this context rather than the other way around.
  */
 export function OrgProvider({ children }: { children: ReactNode }) {
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchEmployees()
-      .then(({ teams, employees }) => {
-        if (cancelled) return;
-        setTeams(teams);
-        setEmployees(employees);
-      })
-      .catch(() => { if (!cancelled) { setTeams([]); setEmployees([]); } })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, []);
+  // RTK Query replaces the fetch-once effect: it dedupes across consumers,
+  // caches for the session, and handles the unmount race the old `cancelled`
+  // flag existed to guard. A failed request falls back to empty lists, same
+  // as the old .catch() did.
+  const { data, isLoading } = useGetEmployeesQuery();
+  const teams: Team[] = useMemo(() => data?.teams ?? [], [data]);
+  const employees: Employee[] = useMemo(() => data?.employees ?? [], [data]);
+  const loading = isLoading;
 
   const employeeById = useMemo(() => Object.fromEntries(employees.map(e => [e.id, e])), [employees]);
 

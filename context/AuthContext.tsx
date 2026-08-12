@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { loginApi } from "@/lib/api";
+import { useLoginMutation } from "@/store/api/authApi";
 import type { AuthedUser } from "@/lib/types";
 
 interface AuthContextValue {
@@ -45,11 +45,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setReady(true);
   }, []);
 
+  const [loginMutation] = useLoginMutation();
+
+  // `.unwrap()` re-throws the rejection so the login form's existing
+  // try/catch and error banner keep working unchanged — RTK Query
+  // otherwise resolves with an { error } object rather than throwing.
   const signIn = useCallback(async (employeeCode: string, password: string) => {
-    const authed = await loginApi(employeeCode, password);
+    const authed = await loginMutation({ employeeCode, password }).unwrap();
     setUser(authed);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(authed));
-  }, []);
+  }, [loginMutation]);
 
   const signOut = useCallback(() => {
     setUser(null);

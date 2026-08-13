@@ -41,9 +41,10 @@ app/
   tickets/page.tsx           Tickets route — KPI row (same StatCard style as the Dashboard,
                               ticket-flavored) above TicketsPanel.
   projects/[id]/page.tsx     Project detail route
+  profile/page.tsx           My-profile route — renders components/UserProfile.
 
-  No app/api/** anymore — every fetch in lib/api.ts hits the real backend
-  (NEXT_PUBLIC_API_URL, see .env.local) instead of a Next.js route handler.
+  No app/api/** anymore, and no lib/api.ts either — every request goes through RTK
+  Query (store/api/*, NEXT_PUBLIC_API_URL) rather than a Next.js route handler.
 
 components/                  All "use client" — this app has no server components.
   AppShell.tsx                Top AppBar only — NO sidebar (removed deliberately). Logo +
@@ -85,6 +86,8 @@ components/                  All "use client" — this app has no server compone
                                PhaseTaskPanel (native HTML5 drag & drop for task reordering).
   TimelineView.tsx                Gantt: weekend shading, today marker, achievement icons,
                                pending-approval dashed border, Week/Month/Quarter zoom.
+  UserProfile.tsx                 The /profile page body: identity banner, editable name, and
+                               the change-password form. See "User profile" below.
   TeamPerformance.tsx              MUI DataGrid fed by /api/team-performance. KPI summary row
                                (StatCard from common.tsx) above the grid; Total/Completed/Pending
                                columns are consolidated into one "Tasks" cell, zero-task rows show
@@ -127,15 +130,24 @@ lib/                          Framework-agnostic — no React imports, safe to u
                                mode-independent palette for KPI icons / donut segments / project-
                                card accents — see that export's own doc comment for why it's not
                                just reusing STATUS_HEX.
-  api.ts                       fetch() wrappers, one per converge_backend route. NEXT_PUBLIC_API_URL
-                               (.env.local) points at it, defaulting to http://localhost:4000.
+  authToken.ts                 get/set/clearToken for the bearer token, plus the
+                               UNAUTHORIZED_EVENT name. A plain module, not React state, because
+                               RTK Query's prepareHeaders runs outside the component tree.
+
+store/                        RTK Query data layer (Scout's convention — see "Authentication").
+  store.ts                     configureStore wiring baseApi's reducer + middleware.
+  api/baseApi.ts               The one createApi: bearer-token prepareHeaders, the 401 →
+                               sign-out wrapper, and the shared tagTypes.
+  api/*.ts                     One injectEndpoints slice per resource (projects, tickets,
+                               employees, teamPerformance, dashboard, auth).
 
 context/
   AuthContext.tsx               Sign-in state: `user` (the AuthedUser returned by
                                POST /auth/login), `ready` (false until the stored session has
-                               been read — guards MUST wait on this), signIn(), signOut().
-                               Session persists to localStorage. See "Authentication" below
-                               for what this does and does not secure.
+                               been read — guards MUST wait on this), signIn(), signOut(),
+                               applyProfile(). Profile persists to localStorage; the token
+                               lives in lib/authToken.ts. Also listens for UNAUTHORIZED_EVENT
+                               and signs out on it. See "Authentication" below.
   AppContext.tsx                role / selfId / actor / mode (+ toggleMode). `role` and
                                `selfId` are DERIVED from AuthContext's user — there are no
                                setters any more (changing who you are = sign out and back in).
@@ -154,18 +166,38 @@ public/ApplicationIcon.png    The real Converge logo (uploaded by the user) — 
                               the navbar mark and the browser favicon.
 ```
 
-## Authentication
+## Authentication — JWT bearer tokens
 
-Sign-in is real (bcrypt-verified server-side), but it is **not yet an access-control
-boundary** — read this whole section before assuming anything is protected.
+Sign-in is real (bcrypt-verified server-side) and **every backend data endpoint now requires a
+valid token**. This is an access-control boundary, not just a UI gate.
 
 - **Flow**: `app/login/page.tsx` → `AuthContext.signIn()` → `POST /auth/login`
-  (`converge_backend/src/auth/`) → bcrypt-compares against `employees.password_hash` →
-  returns the employee's non-secret profile (`AuthedUser`). No hash ever leaves the backend.
+  (`converge_backend/src/auth/`) → bcrypt-compares against `employees.password_hash` → returns
+  the employee's non-secret profile **plus a signed `accessToken`**. No hash ever leaves the
+  backend.
+- **The guard is global, opt-out**: `JwtAuthGuard` is registered as an `APP_GUARD` in
+  `auth.module.ts`, so a new controller is protected the moment it exists. `POST /auth/login` is
+  the only route that opts out, via `@Public()`. Adding an endpoint requires no auth wiring —
+  *forgetting* to protect one is what's now impossible.
+- **Identity comes from the token, never the body**: `@CurrentUser()` reads the payload the
+  guard verified and attached to the request. No endpoint accepts a user id from the caller, so
+  there is no "act as someone else" parameter to tamper with.
+- **Token storage**: `lib/authToken.ts` (localStorage, key `converge_projects_token_v1`), kept
+  *separate* from the profile record so the two can't be confused. RTK Query's `prepareHeaders`
+  in `store/api/baseApi.ts` attaches `Authorization: Bearer <token>` to every request.
+- **401 means one thing: the token is no good.** `baseApi`'s `baseQueryWithAuth` treats any 401
+  (except from `login` itself) as a dead session — it clears the token and fires a
+  `converge:unauthorized` window event that `AuthContext` listens for and signs out on. This is
+  why `changePassword` returns **400**, not 401, for a wrong current password: the caller *was*
+  authenticated, so a 401 there would eject them from the app over a typo. Keep that invariant
+  if you add auth-adjacent endpoints.
+- **The stored profile is a render cache, not a credential.** Editing the localStorage session
+  record changes what the navbar draws and nothing the API will accept — the backend re-reads
+  the employee from the database on every request.
 - **Credentials**: employees sign in with an `employeeCode` — initials + a global sequence
   number (`VP001`, `SD003`). The sequence is load-bearing: plain initials collide (Prachi
   Jamgaonkar and Pavitra Joshi are both "PJ" → `PJ004` / `PJ009`). Codes are matched
-  case-insensitively. Derivation lives in `converge_backend/src/common/credentials.ts`.
+  case-insensitively. Derivation lives in `converge_backend/src/utils/credentials.ts`.
 - **Seeded password**: every seeded employee shares `DEFAULT_PASSWORD` ("Converge@123") — a
   development convenience, not a production secret. `SeedService.ensureCredentials()` runs on
   every boot (not just first seed) and fills only *missing* code/hash/appRole columns, so it
@@ -174,12 +206,30 @@ boundary** — read this whole section before assuming anything is protected.
 - **No user enumeration**: a bad code and a bad password return the same generic 401, and the
   service bcrypt-compares against a dummy hash when no employee matches so response timing
   doesn't leak which codes are real.
-- **What this does NOT do** (the important part): the session is a plain localStorage record
-  with no token, and **every backend data endpoint is still unauthenticated** — no guards, CORS
-  only. Anyone who can reach the API can read/write without signing in, and anyone with
-  devtools can forge the session record. `AuthGate` is a UI gate, not a security boundary.
-  Closing this means issuing a real session token on login and verifying it in a Nest guard on
-  every non-auth route.
+- **`JWT_SECRET` must be set in any deployed environment.** `Config.DEFAULT_JWT_SECRET` is an
+  in-repo development fallback — anyone with the source could mint valid tokens against it.
+  `JWT_EXPIRES_IN` defaults to 12h.
+
+## User profile
+
+`/profile` (`components/UserProfile.tsx`, linked from the navbar account menu) is where a user
+manages their own account. Scoped entirely to the caller — no request carries a user id.
+
+- **Editable**: display name, and password (current + new + confirm).
+- **Read-only**: employee ID, team, role — shown under "Managed by your administrator".
+  `UpdateProfileDto` contains *only* `name`, and `ValidationPipe({ whitelist: true })` strips
+  everything else, so a User cannot promote themselves by adding `appRole` to the request body.
+  Verified: extra fields are silently dropped and the DB row is unchanged.
+- **Changing the password signs you out** (~1.8s after the success toast). The old token stays
+  valid until it expires otherwise, which would let a stolen session outlive the very reset
+  meant to shut it out.
+- **`GET /auth/me` re-reads from the database** rather than rendering the login-time snapshot,
+  so a role/team change made by an admin shows up on this page without a re-login. Saving the
+  name calls `AuthContext.applyProfile()` to keep the navbar in step, and invalidates the
+  `Employees` tag so the org directory picks it up too.
+- **The seeder deliberately does not reconcile `name`** (`ensureOrgDirectory` in
+  `converge_backend/src/seed/seed.service.ts`) — it used to, which would silently revert a
+  user's own profile edit on the next backend restart. Role/appRole/team are still reconciled.
 
 ## Roles — Admin writes, User reads
 
@@ -190,10 +240,12 @@ boundary** — read this whole section before assuming anything is protected.
 `ALL_ROLES` — a User sees every project, board, ticket and breakdown an Admin does, but cannot
 change any of it or move a Kanban card.
 
-**This is a UI gate, not a security boundary** — see "Known limitations". Every backend data
-endpoint is still unauthenticated, so a read-only user with devtools can call the API directly.
-Closing that means issuing a real session token at login and checking it in a Nest guard on
-every mutating route.
+**`roleCan()` gates what the UI offers, and the backend gates what it accepts** — every data
+endpoint requires a valid token (see "Authentication"). Note the two are not yet the same check:
+the guard verifies *who you are*, but does not yet enforce Admin-only *writes* server-side, so a
+read-only user with devtools and their own token could still call a mutating endpoint directly.
+Closing that means a role check in the guard (or a `@Roles('Admin')` decorator) on the mutating
+routes — the token already carries `appRole`, so the data is there.
 
 Both roles are the same in the directory too: `OrgRole` is `"Admin" | "User"` (it replaced
 `"Team Lead" | "Developer"`), and `appRoleFor()` in the backend maps them 1:1. A user's role
@@ -386,14 +438,19 @@ dark (the original look).
 
 ## Known limitations
 
-- **Sign-in exists but protects nothing server-side** — passwords are really bcrypt-verified,
-  but no data endpoint requires a session and the session itself is an unsigned localStorage
-  record. See "Authentication" above for exactly what's missing. Fine for local dev, not for a
-  real deploy.
-- Everyone shares one seeded dev password, and there's no signup, password-change, or reset
-  flow — accounts exist only because the seeder created them.
-- No CSRF protection on the backend either — just CORS locked to `CORS_ORIGIN` (defaults to
-  `http://localhost:3000`).
+- **Authentication is enforced; per-role authorization is not.** Every endpoint requires a valid
+  token, but the guard checks identity only — it doesn't yet reject a `User` calling a mutating
+  route. See the note under "Roles" above.
+- **The token lives in localStorage**, so a successful XSS can steal it. An httpOnly cookie is
+  stronger, but needs CSRF protection and same-site handling that this split-origin deployment
+  (Vercel frontend, Railway backend) doesn't have yet.
+- **No token refresh and no server-side revocation** — a token is valid until it expires
+  (`JWT_EXPIRES_IN`, 12h). Signing out clears it client-side; it isn't blacklisted.
+- Everyone starts on one seeded dev password, and there's no signup or forgot-password reset
+  flow — accounts exist only because the seeder created them. Users *can* now change their own
+  password (see "User profile").
+- No CSRF protection on the backend — mitigated in practice by the bearer token being sent from
+  JS rather than ambiently attached like a cookie, plus CORS locked to `CORS_ORIGIN`.
 - `converge_backend` uses TypeORM's `synchronize: true` instead of migrations — appropriate for
   this stage, not once the database holds data worth protecting from schema drift.
 - `next lint` currently fails ("Invalid project directory") — Next 16 changed how the built-in
@@ -438,24 +495,35 @@ changed several APIs from what older MUI docs/examples show:
 
 ## History of notable decisions (most recent first)
 
-1. Task card, second pass: scheduling row regrouped to a supplied reference — planned start and
+1. Closed the standing security gap: **JWT bearer auth end to end, plus a self-service profile
+   page** (see "Authentication" and "User profile"). The backend gained a global `APP_GUARD`
+   `JwtAuthGuard` with a `@Public()` opt-out (login only) and a `@CurrentUser()` param decorator,
+   so identity can only come from a verified token and never from a request body; the frontend
+   gained `lib/authToken.ts`, a token-attaching `prepareHeaders`, and a 401 → sign-out wrapper
+   around the base query. Two decisions worth keeping: `UpdateProfileDto` carries *only* `name`
+   (so `ValidationPipe`'s `whitelist` is what blocks a User writing themselves an `appRole`),
+   and `changePassword` returns **400** rather than 401 for a wrong current password — caught in
+   testing, where a mistyped password tripped the global 401 handler and threw the user out of
+   the app instead of showing an inline error. `SeedService.ensureOrgDirectory` also stopped
+   reconciling `name`, which would have reverted every profile edit on the next boot.
+2. Task card, second pass: scheduling row regrouped to a supplied reference — planned start and
    finish sit under one "Planned start / finish" label with the phase window called out once
    beneath both, a vertical divider separates Duration, and the finish shows as a disabled field
    rather than loose text. Added the mandatory schedule-change reason dialog and the
    completed-blocked-by-open-checklist rule (both sections above).
-2. Expanded-task-card pass: sub-sections (scheduling, critical points) are now shaded
+3. Expanded-task-card pass: sub-sections (scheduling, critical points) are now shaded
    `Paper variant="outlined"` panels on `background.default` so they read as distinct sections
    instead of one flat surface; checklist points gained inline edit + created/updated
    timestamps and became undeletable once ticked; and the planned-start field is now clamped to
    the phase window (see "Planned-start is clamped to the phase window" above for the
    derived-bounds trap).
-3. Added a per-task "critical points" checklist (see "Task checklist" above) — new
+4. Added a per-task "critical points" checklist (see "Task checklist" above) — new
    `tasks.checklist` jsonb column, threaded through `PlainTask`/`TaskPatch`/`toPlainTask`/
    `syncTasks` on the backend and `Task`/`buildTasks`/`ensureProjectShape` on the frontend, with
    the editor living in the expanded `TaskCard`. Typed as required on `Task` rather than
    optional, which is what made `tsc` immediately point at the frontend `buildTasks` that would
    otherwise have shipped tasks with an undefined checklist.
-4. Added sign-in (see "Authentication" above): a `/login` split-card screen modelled on a
+5. Added sign-in (see "Authentication" above): a `/login` split-card screen modelled on a
    supplied reference, a `converge_backend` `auth` module doing real bcrypt verification, and
    `employees.employee_code` / `password_hash` / `app_role` columns provisioned idempotently by
    the seeder on every boot. Identity stopped being a client-side toy: the navbar's "Viewing
@@ -467,7 +535,7 @@ changed several APIs from what older MUI docs/examples show:
    old "OrgProvider must wrap AppProvider" constraint is now just "AuthProvider must wrap
    AppProvider". Deliberately NOT done: guarding the backend's data endpoints — that's the
    real remaining gap, called out under Known limitations rather than papered over.
-5. Replaced the static `TEAMS`/`EMPLOYEES` org directory in `lib/data.ts` with real backend data:
+6. Replaced the static `TEAMS`/`EMPLOYEES` org directory in `lib/data.ts` with real backend data:
    a new `context/OrgContext.tsx` fetches `GET /employees` once and every consumer
    (`AppShell.tsx`, `ProjectDetail.tsx`, `ProjectForm.tsx`, `common.tsx`'s `EmployeeAvatar` /
    `OrgSelect`) now calls `useOrgContext()` instead of importing a static constant.
@@ -482,7 +550,7 @@ changed several APIs from what older MUI docs/examples show:
    the org directory is available on the very first render. Removed `lib/businessLogic.ts`'s
    `aggregateTeamPerformance`, which had become dead code once team-performance aggregation
    moved server-side (see next entry) but still imported the now-deleted `EMPLOYEES` constant.
-6. Replaced the entire mock in-memory data layer with a real backend: `../converge_backend`, a
+7. Replaced the entire mock in-memory data layer with a real backend: `../converge_backend`, a
    new sibling NestJS + TypeORM + PostgreSQL project (see "Backend & data" above for the full
    picture). `app/api/**` and `lib/mockDb.ts` are gone; `lib/api.ts` now calls the backend
    directly. Business-day date math and delay/achievement detection were ported line-for-line
@@ -495,7 +563,7 @@ changed several APIs from what older MUI docs/examples show:
    carried over unchanged — the backend just treats it as a full sync (upsert + delete-missing)
    instead of a partial merge, which happened to already be exactly what the frontend was
    sending.
-7. Added a light/dark theme toggle (see "Light/dark theme" above) — navbar sun/moon button,
+8. Added a light/dark theme toggle (see "Light/dark theme" above) — navbar sun/moon button,
    `AppContext.mode` persisted to localStorage, `createAppTheme(mode)` in `lib/theme.ts`. Required
    splitting status colors into `STATUS_HEX_DARK`/`STATUS_HEX_LIGHT` (the dark-tuned bright hues
    had bad contrast as text on white) and reworking every component that renders a status color to
@@ -503,7 +571,7 @@ changed several APIs from what older MUI docs/examples show:
    reliably repaint `<body>`'s background on a live client-side theme swap — worked around with an
    explicit `bgcolor` on `AppShell`'s root `Box` plus a `data-theme`-keyed CSS variable in
    `app/globals.css`, not something to re-break by reverting to relying on `CssBaseline` alone.
-8. Reworked the 12-phase task template's day-offsets to close a real scheduling gap: Phase 01's
+9. Reworked the 12-phase task template's day-offsets to close a real scheduling gap: Phase 01's
    tasks were bunched onto day 0–1 while Phase 02 didn't start until day 7, leaving days 2–6
    reserved-but-empty on the Gantt chart. Re-sequenced with explicit parallel/sequential modeling
    (kickoff → requirement-gathering ‖ site-survey in parallel → planning → scope-freeze, each
@@ -516,7 +584,7 @@ changed several APIs from what older MUI docs/examples show:
    cadence crowding into unreadable overlapping marks, phases are collapsible, the header row and
    phase names are sticky while scrolling, the view auto-scrolls to "today" on load, and clicking
    any task bar jumps to that task in Phases view.
-9. Enriched the seed data (`lib/mockDb.ts`) for demo/screenshot purposes: a second project
+10. Enriched the seed data (`lib/mockDb.ts`) for demo/screenshot purposes: a second project
    ("Vertex Robotics", Solution type, well underway with real delays and achievements — contrast
    against the original early-stage "TE Connectivity" project) and a `simulateProgress` helper
    that stamps realistic status/owner/achievement data across both without hand-authoring every
@@ -525,44 +593,44 @@ changed several APIs from what older MUI docs/examples show:
    function's signed "a minus b" convention turns negative — on-time multi-day task completions
    were incorrectly earning "Outstanding Performance" badges. Args are swapped now
    (`actualFinish, actualStart`).
-10. Added a per-project week-off calendar (see "Business-day calendar" above) — a day-of-week
+11. Added a per-project week-off calendar (see "Business-day calendar" above) — a day-of-week
    picker on the New Project / Project Settings form, max 2 days, defaulting to Saturday+Sunday.
    Every business-day calculation in `lib/dateUtils.ts`/`lib/businessLogic.ts` now takes the
    project's `weekOff` instead of hardcoding Sat/Sun. Also removed the seed project's
    auto-assigned task owners — every task (seeded or newly created) now starts unassigned.
-11. Migrated the entire app from JavaScript/JSX to TypeScript (`strict` mode, no `.js`/`.jsx`
+12. Migrated the entire app from JavaScript/JSX to TypeScript (`strict` mode, no `.js`/`.jsx`
    remaining under `app/`, `components/`, `lib/`, `context/`) — see "TypeScript" above. Surfaced
    one real latent bug in the process: `OrgSelect` (`components/common.tsx`) never accepted or
    forwarded a `disabled` prop, so `TaskCard`'s owner dropdown wasn't actually being locked for
    Pending-Approval tasks; fixed as part of the migration.
-12. Team Performance page decluttered: KPI summary row added (`StatCard`, extracted from
+13. Team Performance page decluttered: KPI summary row added (`StatCard`, extracted from
    `Dashboard.tsx` into `common.tsx` for reuse), Total/Completed/Pending columns merged into one
    "Tasks" cell, zero-task rows show muted "—"/"No tasks" instead of repeated literal zeros, and
    the name/role cell's line-height bug (MUI DataGrid forces cell `line-height` to match row
    height, which was pushing two-line cell content up into the row above) was fixed.
-13. Project detail header compacted: back button is icon-only (no "Portfolio" label), and the
+14. Project detail header compacted: back button is icon-only (no "Portfolio" label), and the
    separate "Product"/status-chip row above the title was merged onto the title's own line to
    save vertical space.
-14. Added a global dark-themed scrollbar (`app/globals.css`) — the browser-default light/white
+15. Added a global dark-themed scrollbar (`app/globals.css`) — the browser-default light/white
    scrollbar thumb read as a bug against this app's dark ground, especially in the always-visible
    phase nav list and task panel scroll regions.
-15. Replaced the hand-vectorized SVG logo approximation with the real uploaded asset
+16. Replaced the hand-vectorized SVG logo approximation with the real uploaded asset
    (`public/ApplicationIcon.png`), used via `next/image` for both the navbar mark and the
    browser favicon (`app/layout.tsx` metadata).
-16. Removed the "On Track Projects" dashboard accordion — folded into "In Progress".
-17. Simplified `ROLES` from a 5-role simulation (Admin/PM/Team Lead/Team Member/Viewer) down to
+17. Removed the "On Track Projects" dashboard accordion — folded into "In Progress".
+18. Simplified `ROLES` from a 5-role simulation (Admin/PM/Team Lead/Team Member/Viewer) down to
    Admin + Developer, both full access, per user request — see "Roles" above.
-18. Redesigned `TaskCard` to match a supplied reference screenshot: inline always-editable
+19. Redesigned `TaskCard` to match a supplied reference screenshot: inline always-editable
    Owner/Day-from-start/Planned-start/Duration fields (commit on blur) instead of a side Drawer.
    `TaskEditorDrawer.jsx` was deleted and replaced by `TaskDetailsDialog.tsx` (a centered modal,
    consistent with every other editor in the app) for name/priority/dependencies only.
    description/owner/scheduling moved to the inline card fields.
-19. `TicketsPanel` reorganized into three accordions (Raised/In Progress/Completed) matching the
+20. `TicketsPanel` reorganized into three accordions (Raised/In Progress/Completed) matching the
     dashboard's project-accordion pattern.
-20. Converted the whole app from a single-file MUI artifact (built earlier, still published as a
+21. Converted the whole app from a single-file MUI artifact (built earlier, still published as a
     Claude.ai Artifact) into this proper Next.js project with real API routes + mock DB + React
     state, sidebar removed in favor of top nav only.
-21. Fixed a real timezone bug in the original date math: mixing local-time `Date` parsing with
+22. Fixed a real timezone bug in the original date math: mixing local-time `Date` parsing with
     UTC serialization silently shifted every computed date back a day (and the shift compounded
     between planned-start and planned-finish, occasionally putting finish before start). All
     date arithmetic in `lib/dateUtils.ts` is now UTC-consistent except `todayISO()`, which

@@ -233,7 +233,7 @@ export function TeamPerformance({ refreshKey }: { refreshKey: number }) {
           <DataGrid
             rows={filteredRows} columns={columns} columnGroupingModel={columnGroupingModel}
             getRowId={(r) => r.id} rowHeight={62} columnHeaderHeight={40} columnGroupHeaderHeight={30}
-            initialState={{ sorting: { sortModel: [{ field: "total", sort: "desc" }] } }}
+            initialState={{ sorting: { sortModel: [{ field: "name", sort: "asc" }] } }}
             disableRowSelectionOnClick
             showColumnVerticalBorder
             slotProps={{ noRowsOverlay: { sx: { color: "text.secondary" } } }}

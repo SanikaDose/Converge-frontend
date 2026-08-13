@@ -67,6 +67,26 @@ export interface AuthedUser {
   team: string;
 }
 
+/**
+ * What POST /auth/login returns: the profile plus the bearer token every
+ * later request carries. The token is stored separately from the profile
+ * (see lib/authToken.ts) rather than kept on this object in localStorage.
+ */
+export interface LoginResponse extends AuthedUser {
+  accessToken: string;
+}
+
+/** Body of PATCH /auth/profile. Name is the only self-editable field. */
+export interface UpdateProfileInput {
+  name: string;
+}
+
+/** Body of POST /auth/change-password. */
+export interface ChangePasswordInput {
+  currentPassword: string;
+  newPassword: string;
+}
+
 export interface Actor {
   role: AppRole;
   id: string | null;

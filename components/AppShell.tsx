@@ -26,6 +26,7 @@ import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import NotificationsNoneIcon from "@mui/icons-material/NotificationsNone";
 import LogoutIcon from "@mui/icons-material/Logout";
+import PersonOutlineIcon from "@mui/icons-material/PersonOutlineOutlined";
 import AddIcon from "@mui/icons-material/Add";
 import FlagCircleIcon from "@mui/icons-material/FlagCircle";
 import { ConvergeNavbarLogo } from "./Logo";
@@ -106,6 +107,7 @@ function NotificationsMenu() {
 /** Avatar → account summary + sign out. */
 function AccountMenu() {
   const { user, signOut } = useAuth();
+  const router = useRouter();
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const displayName = user?.name ?? "Account";
 
@@ -130,6 +132,10 @@ function AccountMenu() {
           </Typography>
         </Box>
         <Divider />
+        <MenuItem onClick={() => { setAnchorEl(null); router.push("/profile"); }}>
+          <ListItemIcon><PersonOutlineIcon fontSize="small" /></ListItemIcon>
+          My profile
+        </MenuItem>
         <MenuItem onClick={() => { setAnchorEl(null); signOut(); }}>
           <ListItemIcon><LogoutIcon fontSize="small" /></ListItemIcon>
           Sign out

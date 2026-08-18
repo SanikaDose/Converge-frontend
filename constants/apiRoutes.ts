@@ -36,6 +36,14 @@ export const apiRoutes = {
     updateById: (id: string) => id,
   },
 
+  projectTemplates: {
+    root: 'project-templates',
+    get: '',
+    addTask: (phaseId: string) => `phases/${phaseId}/tasks`,
+    updateTask: (taskId: string) => `tasks/${taskId}`,
+    deleteTask: (taskId: string) => `tasks/${taskId}`,
+  },
+
   employees: {
     root: 'employees',
     getList: '',

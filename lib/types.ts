@@ -118,6 +118,24 @@ export interface TemplatePhase {
   discipline?: PhaseDiscipline;
 }
 
+/* The DB-backed master template (GET /project-templates) — admins edit its
+   tasks; new projects are generated from it. */
+export interface TaskTemplateItem {
+  id: string;
+  name: string;
+  dayOffset: number;
+  duration: number;
+  order: number;
+}
+export interface PhaseTemplateItem {
+  id: string;
+  name: string;
+  order: number;
+  critical: boolean;
+  discipline: PhaseDiscipline | null;
+  tasks: TaskTemplateItem[];
+}
+
 export interface HistoryEntry {
   ts: string;
   field: string;

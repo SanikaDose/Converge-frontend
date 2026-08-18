@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
@@ -16,18 +16,24 @@ import Stack from "./Stack";
 import Typography from "@mui/material/Typography";
 import CircularProgress from "@mui/material/CircularProgress";
 import AddIcon from "@mui/icons-material/Add";
+import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import { OrgSelect } from "./common";
+import { TemplatePreviewDialog } from "./TemplatePreviewDialog";
 import { TEMPLATE, WEEKDAY_SHORT, WEEKDAY_LABELS, MAX_WEEK_OFF_DAYS, PHASE_DISCIPLINE_OPTIONS } from "@/lib/data";
 import { suggestedEndDate, guessEmployeeIdFromFreeText } from "@/lib/businessLogic";
-import { todayISO, DEFAULT_WEEK_OFF } from "@/lib/dateUtils";
+import { todayISO, DEFAULT_WEEK_OFF, addWorkingDays } from "@/lib/dateUtils";
 import { useOrgContext } from "@/context/OrgContext";
+import { useGetProjectTemplateQuery } from "@/store/api/projectTemplatesApi";
 import type { PhaseDiscipline, ProjectMeta, ProjectType, WeekDay } from "@/lib/types";
+
+/** A phase reduced to what the count preview needs, from either source. */
+interface PhaseCount { discipline: PhaseDiscipline | null; taskCount: number }
 
 /** Phases + tasks the chosen disciplines generate — mirrors the backend filter.
  * An empty selection means the full plan (every phase). */
-function planCounts(disciplines: PhaseDiscipline[]) {
-  const phases = disciplines.length === 0 ? TEMPLATE : TEMPLATE.filter(p => !p.discipline || disciplines.includes(p.discipline));
-  return { phases: phases.length, tasks: phases.reduce((a, p) => a + p.tasks.length, 0) };
+function planCounts(phases: PhaseCount[], disciplines: PhaseDiscipline[]) {
+  const included = disciplines.length === 0 ? phases : phases.filter(p => !p.discipline || disciplines.includes(p.discipline));
+  return { phases: included.length, tasks: included.reduce((a, p) => a + p.taskCount, 0) };
 }
 
 // Displayed Monday → Sunday rather than the Date#getUTCDay() order (Sun=0
@@ -84,6 +90,27 @@ export function ProjectForm({ title, initial, defaults, onClose, onSubmit, busy,
   const [weekOff, setWeekOff] = useState<WeekDay[]>(initial?.weekOff?.length ? initial.weekOff : DEFAULT_WEEK_OFF);
   const [endDate, setEndDate] = useState(initial?.endDate || suggestedEndDate(initial?.startDate || todayISO(), weekOff));
   const [endTouched, setEndTouched] = useState(!!initial?.endDate);
+  const [showPreview, setShowPreview] = useState(false);
+
+  // The live master template (admins may have edited it). Only needed when
+  // creating — Project Settings doesn't show the count/discipline preview.
+  // Falls back to the in-code TEMPLATE until the request resolves so the
+  // preview never flashes empty.
+  const { data: templatePhases } = useGetProjectTemplateQuery(undefined, { skip: !!initial });
+  const phaseCounts = useMemo<PhaseCount[]>(() => (
+    templatePhases?.length
+      ? templatePhases.map(p => ({ discipline: p.discipline, taskCount: p.tasks.length }))
+      : TEMPLATE.map(p => ({ discipline: p.discipline ?? null, taskCount: p.tasks.length }))
+  ), [templatePhases]);
+  // Latest planned finish across the template, for the default end date.
+  const templateMaxSpan = useMemo<number | null>(() => {
+    if (!templatePhases?.length) return null;
+    let m = 0;
+    templatePhases.forEach(p => p.tasks.forEach(t => { m = Math.max(m, t.dayOffset + t.duration); }));
+    return m;
+  }, [templatePhases]);
+  const suggestEnd = (start: string, wo: WeekDay[]) =>
+    templateMaxSpan != null ? addWorkingDays(start, templateMaxSpan, wo) : suggestedEndDate(start, wo);
 
   // Projects created before the org directory existed stored `owner` as
   // a free-text name (e.g. "Bharat") instead of a real employee id. The
@@ -100,9 +127,9 @@ export function ProjectForm({ title, initial, defaults, onClose, onSubmit, busy,
   }, [initial?.owner, employeeById, employees]);
 
   useEffect(() => {
-    if (!endTouched) setEndDate(suggestedEndDate(startDate, weekOff));
+    if (!endTouched) setEndDate(suggestEnd(startDate, weekOff));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startDate, endTouched, weekOff]);
+  }, [startDate, endTouched, weekOff, templateMaxSpan]);
 
   const canSubmit = name.trim() && customer.trim() && startDate && endDate;
 
@@ -204,10 +231,23 @@ export function ProjectForm({ title, initial, defaults, onClose, onSubmit, busy,
 
         <Typography variant="caption" color="text.secondary">
           {!initial
-            ? `Creates a ${planCounts(disciplines).phases}-phase, ${planCounts(disciplines).tasks}-task plan automatically (business-day scheduled)${disciplines.length && disciplines.length < PHASE_DISCIPLINE_OPTIONS.length ? ` — only the common and ${disciplines.join(" / ")} phases` : ""}. Phases and tasks can be edited afterwards.`
+            ? `Creates a ${planCounts(phaseCounts, disciplines).phases}-phase, ${planCounts(phaseCounts, disciplines).tasks}-task plan automatically (business-day scheduled)${disciplines.length && disciplines.length < PHASE_DISCIPLINE_OPTIONS.length ? ` — only the common and ${disciplines.join(" / ")} phases` : ""}. Phases and tasks can be edited afterwards.`
             : "Changing the start date or week off will re-calculate every task's planned dates using its current day-offset and duration."}
         </Typography>
+
+        {!initial && (
+          <Button
+            variant="text" size="small" startIcon={<VisibilityOutlinedIcon fontSize="small" />}
+            onClick={() => setShowPreview(true)} sx={{ alignSelf: "flex-start", mt: -0.5 }}
+          >
+            Preview phases &amp; tasks
+          </Button>
+        )}
       </DialogContent>
+
+      {showPreview && (
+        <TemplatePreviewDialog open onClose={() => setShowPreview(false)} phases={templatePhases} disciplines={disciplines} />
+      )}
       <DialogActions sx={{ p: 2 }}>
         <Button onClick={onClose}>Cancel</Button>
         <Button variant="contained" disabled={!canSubmit || busy} startIcon={busy ? <CircularProgress size={16} /> : <AddIcon />}

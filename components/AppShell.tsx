@@ -27,6 +27,7 @@ import DarkModeIcon from "@mui/icons-material/DarkMode";
 import NotificationsNoneIcon from "@mui/icons-material/NotificationsNone";
 import LogoutIcon from "@mui/icons-material/Logout";
 import PersonOutlineIcon from "@mui/icons-material/PersonOutlineOutlined";
+import TuneIcon from "@mui/icons-material/Tune";
 import AddIcon from "@mui/icons-material/Add";
 import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 import FlagCircleIcon from "@mui/icons-material/FlagCircle";
@@ -137,6 +138,12 @@ function AccountMenu() {
           <ListItemIcon><PersonOutlineIcon fontSize="small" /></ListItemIcon>
           My profile
         </MenuItem>
+        {user?.appRole === "Admin" && (
+          <MenuItem onClick={() => { setAnchorEl(null); router.push("/template"); }}>
+            <ListItemIcon><TuneIcon fontSize="small" /></ListItemIcon>
+            Project template
+          </MenuItem>
+        )}
         <MenuItem onClick={() => { setAnchorEl(null); signOut(); }}>
           <ListItemIcon><LogoutIcon fontSize="small" /></ListItemIcon>
           Sign out

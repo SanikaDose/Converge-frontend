@@ -28,10 +28,11 @@ import type { HistoryEntry, ProjectDetailData, ProjectIndexRow, Task, TaskStatus
 const ALL_USERS = "__all_users__";
 const ALL_PROJECTS = "__all_projects__";
 
-// Delayed is excluded by default — it's a derived/warning state, not
-// somewhere work is expected to sit, so the board opens focused on the
-// statuses someone would actually triage day to day.
-const DEFAULT_STATUSES: TaskStatus[] = STATUS_OPTIONS.filter(s => s !== "Delayed") as TaskStatus[];
+// Delayed and Not Required are excluded by default — Delayed is a
+// derived/warning state, and Not Required is out-of-scope work; neither is
+// somewhere active work sits, so the board opens focused on the statuses
+// someone would actually triage day to day. Both are still tickable on.
+const DEFAULT_STATUSES: TaskStatus[] = STATUS_OPTIONS.filter(s => s !== "Delayed" && s !== "Not Required") as TaskStatus[];
 
 export default function GlobalKanbanPage() {
   const router = useRouter();
@@ -75,7 +76,7 @@ export default function GlobalKanbanPage() {
 
   const filteredTasks = useMemo(() => {
     return allTasks.filter(t => {
-      if (selectedUserIds.length > 0 && !(t.assignedTo && selectedUserIds.includes(t.assignedTo))) return false;
+      if (selectedUserIds.length > 0 && !t.assignees.some(a => selectedUserIds.includes(a))) return false;
       if (!selectedStatuses.includes(t.status)) return false;
       if (projectFilter.length > 0) {
         const matches = projectFilter.includes(`type:${t.projectType}`) || projectFilter.includes(`proj:${t.projectId}`);
@@ -102,7 +103,7 @@ export default function GlobalKanbanPage() {
     const updatedTasks = pd.tasks.map(t => {
       if (t.id !== task.id) return t;
       const updates: Partial<Task> = { status };
-      if (status === "Not Started") { updates.actualStart = null; updates.actualFinish = null; }
+      if (status === "Not Started" || status === "Not Required") { updates.actualStart = null; updates.actualFinish = null; }
       else {
         if (!t.actualStart) updates.actualStart = today;
         updates.actualFinish = status === "Completed" ? (t.actualFinish || today) : null;

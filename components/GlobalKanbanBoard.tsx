@@ -11,7 +11,7 @@ import { alpha } from "@mui/material/styles";
 import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 import InboxOutlinedIcon from "@mui/icons-material/InboxOutlined";
 import { STATUS_OPTIONS, STATUS_COLOR, PRIORITY_COLOR } from "@/lib/data";
-import { AchievementBadge, EmployeeAvatar } from "./common";
+import { AchievementBadge, EmployeeAvatarStack } from "./common";
 import { isOverdue, overdueWorkingDays, openChecklistCount } from "@/lib/businessLogic";
 import { fmt } from "@/lib/dateUtils";
 import { useStatusHex } from "@/lib/theme";
@@ -52,7 +52,7 @@ export function GlobalKanbanBoard({
   const [blockedMsg, setBlockedMsg] = useState<string | null>(null);
 
   const columns: Record<TaskStatus, GlobalKanbanTask[]> = {
-    "Not Started": [], "In Progress": [], "Pending Approval": [], "Delayed": [], "Blocked": [], "Completed": [],
+    "Not Started": [], "In Progress": [], "Pending Approval": [], "Delayed": [], "Blocked": [], "Completed": [], "Not Required": [],
   };
   tasks.forEach(t => { (columns[t.status] || columns["Not Started"]).push(t); });
 
@@ -162,9 +162,9 @@ export function GlobalKanbanBoard({
                           {overdue ? `${overdueDays}d overdue` : fmt(t.plannedStart)}
                         </Typography>
                       </Stack>
-                      {t.assignedTo && (
-                        <Tooltip title="Assignee">
-                          <Box><EmployeeAvatar employeeId={t.assignedTo} size={22} /></Box>
+                      {t.assignees.length > 0 && (
+                        <Tooltip title={t.assignees.length > 1 ? `${t.assignees.length} owners` : "Owner"}>
+                          <Box><EmployeeAvatarStack employeeIds={t.assignees} size={22} /></Box>
                         </Tooltip>
                       )}
                     </Stack>

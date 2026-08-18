@@ -9,18 +9,27 @@ import Button from "@mui/material/Button";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Tooltip from "@mui/material/Tooltip";
+import MenuItem from "@mui/material/MenuItem";
+import Checkbox from "@mui/material/Checkbox";
+import ListItemText from "@mui/material/ListItemText";
 import Stack from "./Stack";
 import Typography from "@mui/material/Typography";
 import CircularProgress from "@mui/material/CircularProgress";
 import AddIcon from "@mui/icons-material/Add";
 import { OrgSelect } from "./common";
-import { TEMPLATE, WEEKDAY_SHORT, WEEKDAY_LABELS, MAX_WEEK_OFF_DAYS } from "@/lib/data";
+import { TEMPLATE, WEEKDAY_SHORT, WEEKDAY_LABELS, MAX_WEEK_OFF_DAYS, PHASE_DISCIPLINE_OPTIONS } from "@/lib/data";
 import { suggestedEndDate, guessEmployeeIdFromFreeText } from "@/lib/businessLogic";
 import { todayISO, DEFAULT_WEEK_OFF } from "@/lib/dateUtils";
 import { useOrgContext } from "@/context/OrgContext";
-import type { ProjectMeta, ProjectType, WeekDay } from "@/lib/types";
+import type { PhaseDiscipline, ProjectMeta, ProjectType, WeekDay } from "@/lib/types";
 
-const TASK_COUNT = TEMPLATE.reduce((a, p) => a + p.tasks.length, 0);
+/** Phases + tasks the chosen disciplines generate — mirrors the backend filter.
+ * An empty selection means the full plan (every phase). */
+function planCounts(disciplines: PhaseDiscipline[]) {
+  const phases = disciplines.length === 0 ? TEMPLATE : TEMPLATE.filter(p => !p.discipline || disciplines.includes(p.discipline));
+  return { phases: phases.length, tasks: phases.reduce((a, p) => a + p.tasks.length, 0) };
+}
+
 // Displayed Monday → Sunday rather than the Date#getUTCDay() order (Sun=0
 // first) that WEEKDAY_SHORT/WEEKDAY_LABELS are keyed by — this is purely a
 // display-order change, the underlying WeekDay values are unchanged.
@@ -29,6 +38,7 @@ const ALL_WEEKDAYS: WeekDay[] = [1, 2, 3, 4, 5, 6, 0];
 export interface ProjectFormPayload {
   name: string;
   type: ProjectType;
+  disciplines: PhaseDiscipline[];
   customer: string;
   location: string;
   owner: string | null;
@@ -37,10 +47,22 @@ export interface ProjectFormPayload {
   weekOff: WeekDay[];
 }
 
+/**
+ * Prefill for a NEW project form — distinct from `initial` (which puts the
+ * form in edit mode). Used by the "New product" button to seed the
+ * Elansol/Pune/Product defaults without triggering any edit-mode behaviour.
+ */
+export interface ProjectFormDefaults {
+  type?: ProjectType;
+  customer?: string;
+  location?: string;
+}
+
 /** Shared dialog for both "New project" and "Project settings" (edit). */
-export function ProjectForm({ title, initial, onClose, onSubmit, busy, submitLabel }: {
+export function ProjectForm({ title, initial, defaults, onClose, onSubmit, busy, submitLabel }: {
   title: string;
   initial?: ProjectMeta | null;
+  defaults?: ProjectFormDefaults;
   onClose: () => void;
   onSubmit: (payload: ProjectFormPayload) => void;
   busy: boolean;
@@ -48,9 +70,13 @@ export function ProjectForm({ title, initial, onClose, onSubmit, busy, submitLab
 }) {
   const { employeeById, employees } = useOrgContext();
   const [name, setName] = useState(initial?.name || "");
-  const [type, setType] = useState<ProjectType>(initial?.type || "Product");
-  const [customer, setCustomer] = useState(initial?.customer || "");
-  const [location, setLocation] = useState(initial?.location || "");
+  const [type, setType] = useState<ProjectType>(initial?.type || defaults?.type || "Product");
+  // Disciplines drive which phases are generated — only meaningful when
+  // creating (an existing project's phases already exist). Defaults to all
+  // selected, i.e. the full plan.
+  const [disciplines, setDisciplines] = useState<PhaseDiscipline[]>([...PHASE_DISCIPLINE_OPTIONS]);
+  const [customer, setCustomer] = useState(initial?.customer || defaults?.customer || "");
+  const [location, setLocation] = useState(initial?.location || defaults?.location || "");
   const [owner, setOwner] = useState<string | null>(
     initial?.owner && employeeById[initial.owner] ? initial.owner : null,
   );
@@ -92,10 +118,47 @@ export function ProjectForm({ title, initial, onClose, onSubmit, busy, submitLab
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>{title}</DialogTitle>
       <DialogContent dividers sx={{ display: "flex", flexDirection: "column", gap: 2.25 }}>
-        <ToggleButtonGroup exclusive value={type} onChange={(_e, v: ProjectType | null) => v && setType(v)} size="small">
-          <ToggleButton value="Product">Product</ToggleButton>
-          <ToggleButton value="Solution">Solution</ToggleButton>
-        </ToggleButtonGroup>
+        {/* Product/Solution toggle only when editing an existing project —
+            on creation the type comes from which button was clicked (New
+            Product vs New Project), so the toggle would just be redundant. */}
+        {initial && (
+          <ToggleButtonGroup exclusive value={type} onChange={(_e, v: ProjectType | null) => v && setType(v)} size="small">
+            <ToggleButton value="Product">Product</ToggleButton>
+            <ToggleButton value="Solution">Solution</ToggleButton>
+          </ToggleButtonGroup>
+        )}
+
+        {/* Discipline multi-picker — creation only. Filters which phases get
+            built: e.g. selecting only Software excludes the Vision and
+            Automation phases. Pick several to include several. An existing
+            project's phases already exist, so it's hidden on edit. */}
+        {!initial && (
+          <TextField
+            select label="Disciplines" fullWidth value={disciplines}
+            onChange={(e) => {
+              const v = e.target.value as unknown as string[] | string;
+              setDisciplines((typeof v === "string" ? v.split(",") : v) as PhaseDiscipline[]);
+            }}
+            slotProps={{
+              select: {
+                multiple: true,
+                renderValue: (sel) => {
+                  const arr = sel as PhaseDiscipline[];
+                  return arr.length === 0 || arr.length === PHASE_DISCIPLINE_OPTIONS.length
+                    ? "All disciplines" : arr.join(", ");
+                },
+              },
+            }}
+            helperText="Which teams' phases to include. Select several, or leave all selected for the full plan."
+          >
+            {PHASE_DISCIPLINE_OPTIONS.map(d => (
+              <MenuItem key={d} value={d}>
+                <Checkbox size="small" checked={disciplines.includes(d)} />
+                <ListItemText primary={d} />
+              </MenuItem>
+            ))}
+          </TextField>
+        )}
 
         <TextField label="Project name" fullWidth value={name} onChange={(e) => setName(e.target.value)}
           placeholder="e.g. TE Connectivity — Robotic Connector Inspection Cell" />
@@ -141,14 +204,14 @@ export function ProjectForm({ title, initial, onClose, onSubmit, busy, submitLab
 
         <Typography variant="caption" color="text.secondary">
           {!initial
-            ? `Creates the full 12-phase, ${TASK_COUNT}-task plan automatically (business-day scheduled). Phases and tasks can be edited afterwards.`
+            ? `Creates a ${planCounts(disciplines).phases}-phase, ${planCounts(disciplines).tasks}-task plan automatically (business-day scheduled)${disciplines.length && disciplines.length < PHASE_DISCIPLINE_OPTIONS.length ? ` — only the common and ${disciplines.join(" / ")} phases` : ""}. Phases and tasks can be edited afterwards.`
             : "Changing the start date or week off will re-calculate every task's planned dates using its current day-offset and duration."}
         </Typography>
       </DialogContent>
       <DialogActions sx={{ p: 2 }}>
         <Button onClick={onClose}>Cancel</Button>
         <Button variant="contained" disabled={!canSubmit || busy} startIcon={busy ? <CircularProgress size={16} /> : <AddIcon />}
-          onClick={() => onSubmit({ name: name.trim(), type, customer: customer.trim(), location: location.trim(), owner, startDate, endDate, weekOff })}>
+          onClick={() => onSubmit({ name: name.trim(), type, disciplines, customer: customer.trim(), location: location.trim(), owner, startDate, endDate, weekOff })}>
           {busy ? "Saving…" : submitLabel}
         </Button>
       </DialogActions>

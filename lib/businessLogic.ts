@@ -49,6 +49,7 @@ export function buildTasks(startDate: string, phases: Phase[], weekOff: WeekDay[
         name,
         description: "",
         assignedTo: null,
+        assignees: [],
         priority: "Medium",
         dependencies: [],
         dayOffset: offset,
@@ -117,6 +118,9 @@ export function ensureProjectShape(detail: LegacyProjectDetail | null | undefine
       // come back with the key missing *or* null, and both must normalize to
       // an array before any `.map`/`.length` in the UI touches it.
       checklist: Array.isArray(t.checklist) ? t.checklist : [],
+      // Same for multi-owner: legacy tasks have no `assignees` — seed it from
+      // the single assignedTo so their owner still shows.
+      assignees: Array.isArray(t.assignees) && t.assignees.length ? t.assignees : (t.assignedTo ? [t.assignedTo] : []),
     } as Task;
   });
   // Projects created before the week-off picker existed have no
@@ -138,7 +142,8 @@ export function guessEmployeeIdFromFreeText(name: string | null | undefined, emp
 /* ------------------------------ delay detection ------------------------------ */
 
 export function isOverdue(task: { status: TaskStatus; plannedFinish: string }, today: string): boolean {
-  return task.status !== "Completed" && today > task.plannedFinish;
+  // "Not Required" work is out of scope, so it can never be overdue.
+  return task.status !== "Completed" && task.status !== "Not Required" && today > task.plannedFinish;
 }
 
 export function overdueWorkingDays(task: { status: TaskStatus; plannedFinish: string }, today: string, weekOff: WeekDay[] = DEFAULT_WEEK_OFF): number {
@@ -155,10 +160,14 @@ export function openChecklistCount(task: { checklist: ChecklistItem[] }): number
 }
 
 export function summarize(tasks: Task[], today: string): Summary {
-  const total = tasks.length;
-  const completed = tasks.filter(t => t.status === "Completed").length;
-  const delayed = tasks.filter(t => isOverdue(t, today)).length;
-  const plannedEnd = tasks.reduce((max, t) => t.plannedFinish > max ? t.plannedFinish : max, tasks[0]?.plannedFinish || today);
+  // "Not Required" tasks drop out of both numerator and denominator — they
+  // don't count as done or pending and don't move the completion %. Mirrors
+  // the backend summarize exactly.
+  const counted = tasks.filter(t => t.status !== "Not Required");
+  const total = counted.length;
+  const completed = counted.filter(t => t.status === "Completed").length;
+  const delayed = counted.filter(t => isOverdue(t, today)).length;
+  const plannedEnd = counted.reduce((max, t) => t.plannedFinish > max ? t.plannedFinish : max, counted[0]?.plannedFinish || today);
   return { total, completed, delayed, plannedEnd, pct: total ? Math.round((completed / total) * 100) : 0 };
 }
 
@@ -167,17 +176,23 @@ export function summarize(tasks: Task[], today: string): Summary {
 export function phaseSummaries(phases: Phase[], tasks: Task[], today: string, projectStartDate: string): PhaseSummary[] {
   return phases.slice().sort((a, b) => a.order - b.order).map((phase) => {
     const pts = tasks.filter(t => t.phaseId === phase.id);
-    const s = summarize(pts, today);
+    // A not-required phase is neutral: its tasks don't count and it never
+    // colours the project delayed/in-progress (total 0 makes the project
+    // cascade skip it). Its planned window still renders on the timeline.
+    const s = phase.notRequired
+      ? { total: 0, completed: 0, delayed: 0, plannedEnd: today, pct: 0 }
+      : summarize(pts, today);
     let color: StatusColorKey = "slate";
-    if (s.total && s.completed === s.total) color = "green";
+    if (phase.notRequired) color = "slate";
+    else if (s.total && s.completed === s.total) color = "green";
     else if (s.delayed > 0) color = "red";
-    else if (pts.some(t => t.status !== "Not Started")) color = "amber";
+    else if (pts.some(t => t.status !== "Not Started" && t.status !== "Not Required")) color = "amber";
 
     const phaseStart = pts.length ? pts.reduce((min, t) => t.plannedStart < min ? t.plannedStart : min, pts[0].plannedStart) : null;
     const phaseEnd = pts.length ? pts.reduce((max, t) => t.plannedFinish > max ? t.plannedFinish : max, pts[0].plannedFinish) : null;
 
     return {
-      id: phase.id, name: phase.name, critical: phase.critical, order: phase.order,
+      id: phase.id, name: phase.name, critical: phase.critical, order: phase.order, notRequired: !!phase.notRequired,
       ...s, color, phaseStart, phaseEnd,
       weekStart: phaseStart ? Math.floor((new Date(phaseStart).getTime() - new Date(projectStartDate).getTime()) / 86400000 / 7) + 1 : null,
       weekEnd: phaseEnd ? Math.floor((new Date(phaseEnd).getTime() - new Date(projectStartDate).getTime()) / 86400000 / 7) + 1 : null,
@@ -299,7 +314,7 @@ export function toTaskLite(tasks: Task[]): TaskLite[] {
   return tasks.map(t => ({ phaseId: t.phaseId, name: t.name, plannedFinish: t.plannedFinish, actualFinish: t.actualFinish, status: t.status }));
 }
 export function toPhasesLite(phases: Phase[]): PhaseLite[] {
-  return phases.map(p => ({ id: p.id, critical: p.critical, name: p.name }));
+  return phases.map(p => ({ id: p.id, critical: p.critical, name: p.name, notRequired: p.notRequired }));
 }
 
 export function liveProjectStats(taskLite: TaskLite[], phasesLite: PhaseLite[], today: string): { delayed: number; phases: LivePhaseRow[]; bucket: ProjectBucket } {
@@ -307,18 +322,23 @@ export function liveProjectStats(taskLite: TaskLite[], phasesLite: PhaseLite[], 
   taskLite.forEach(t => {
     const row = byPhase.get(t.phaseId);
     if (!row) return;
+    // Exclude Not-Required tasks, and every task in a Not-Required phase.
+    if (t.status === "Not Required" || row.notRequired) return;
     row.total += 1;
     if (t.status === "Completed") row.completed += 1;
     else if (isOverdue(t, today)) row.delayed += 1;
   });
   const phaseRows: LivePhaseRow[] = Array.from(byPhase.values()).map(row => {
     let color: StatusColorKey = "slate";
-    if (row.total && row.completed === row.total) color = "green";
+    if (row.notRequired) color = "slate";
+    else if (row.total && row.completed === row.total) color = "green";
     else if (row.delayed > 0) color = "red";
     else if (row.completed > 0 || row.total > row.completed) color = row.completed > 0 ? "amber" : "slate";
     return { ...row, color };
   });
-  const delayed = taskLite.filter(t => isOverdue(t, today)).length;
+  // Project delayed count ignores tasks in not-required phases and NR tasks.
+  const notRequiredPhaseIds = new Set(phasesLite.filter(p => p.notRequired).map(p => p.id));
+  const delayed = taskLite.filter(t => !notRequiredPhaseIds.has(t.phaseId) && isOverdue(t, today)).length;
   const bucket = projectStatusFromPhases(phaseRows);
   return { delayed, phases: phaseRows, bucket };
 }

@@ -28,6 +28,7 @@ import NotificationsNoneIcon from "@mui/icons-material/NotificationsNone";
 import LogoutIcon from "@mui/icons-material/Logout";
 import PersonOutlineIcon from "@mui/icons-material/PersonOutlineOutlined";
 import AddIcon from "@mui/icons-material/Add";
+import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
 import FlagCircleIcon from "@mui/icons-material/FlagCircle";
 import { ConvergeNavbarLogo } from "./Logo";
 import { ProjectForm, type ProjectFormPayload } from "./ProjectForm";
@@ -157,6 +158,7 @@ function ProjectQuickActions() {
   const router = useRouter();
   const { role } = useAppContext();
   const [showNewProject, setShowNewProject] = useState(false);
+  const [showNewProduct, setShowNewProduct] = useState(false);
   const [showTicketForm, setShowTicketForm] = useState(false);
 
   const { data: projectsData } = useGetProjectsQuery();
@@ -178,6 +180,7 @@ function ProjectQuickActions() {
       // replaced only refreshed this one component's copy.
       const project = await createProjectMutation(payload).unwrap();
       setShowNewProject(false);
+      setShowNewProduct(false);
       router.push(`/projects/${project.id}`);
     } catch (e) {
       console.error(e);
@@ -219,6 +222,20 @@ function ProjectQuickActions() {
       <Tooltip title={canCreateProject ? "" : VIEW_ONLY_HINT}>
         <span>
           <Button
+            size="small" variant="outlined" startIcon={<Inventory2OutlinedIcon fontSize="small" />}
+            onClick={() => setShowNewProduct(true)} disabled={!canCreateProject}
+            sx={{
+              color: DASHBOARD_COLORS.blue, borderColor: DASHBOARD_COLORS.blue,
+              "&:hover": { borderColor: DASHBOARD_COLORS.blue, bgcolor: alpha(DASHBOARD_COLORS.blue, 0.08) },
+            }}
+          >
+            New Product
+          </Button>
+        </span>
+      </Tooltip>
+      <Tooltip title={canCreateProject ? "" : VIEW_ONLY_HINT}>
+        <span>
+          <Button
             size="small" variant="contained" startIcon={<AddIcon fontSize="small" />}
             onClick={() => setShowNewProject(true)} disabled={!canCreateProject}
             sx={{
@@ -234,7 +251,15 @@ function ProjectQuickActions() {
       {showNewProject && roleCan(role, "createProject") && (
         <ProjectForm
           title="New project" initial={null} submitLabel="Create project" busy={projectBusy}
+          defaults={{ type: "Solution" }}
           onClose={() => setShowNewProject(false)} onSubmit={createProject}
+        />
+      )}
+      {showNewProduct && roleCan(role, "createProject") && (
+        <ProjectForm
+          title="New product" initial={null} submitLabel="Create product" busy={projectBusy}
+          defaults={{ type: "Product", customer: "Elansol Technologies", location: "Pune, Maharashtra, India" }}
+          onClose={() => setShowNewProduct(false)} onSubmit={createProject}
         />
       )}
       {showTicketForm && roleCan(role, "raiseTicket") && (

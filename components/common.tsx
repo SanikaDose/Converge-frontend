@@ -8,6 +8,13 @@ import Tooltip from "@mui/material/Tooltip";
 import MenuItem from "@mui/material/MenuItem";
 import ListSubheader from "@mui/material/ListSubheader";
 import TextField, { type TextFieldProps } from "@mui/material/TextField";
+import AvatarGroup from "@mui/material/AvatarGroup";
+import FormControl from "@mui/material/FormControl";
+import InputLabel from "@mui/material/InputLabel";
+import Select from "@mui/material/Select";
+import Checkbox from "@mui/material/Checkbox";
+import ListItemText from "@mui/material/ListItemText";
+import FormControlLabel from "@mui/material/FormControlLabel";
 import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
 import HourglassTopIcon from "@mui/icons-material/HourglassTop";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
@@ -15,10 +22,10 @@ import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
 import RemoveIcon from "@mui/icons-material/Remove";
 import { alpha, useTheme } from "@mui/material/styles";
 import Stack from "./Stack";
-import { initials, avatarColor } from "@/lib/data";
+import { initials, avatarColor, STATUS_OPTIONS, STATUS_COLOR } from "@/lib/data";
 import { useStatusHex } from "@/lib/theme";
 import { useOrgContext } from "@/context/OrgContext";
-import type { Achievement, StatusColorKey } from "@/lib/types";
+import type { Achievement, StatusColorKey, TaskStatus } from "@/lib/types";
 
 /** Small colored status pill, used for task/project/ticket status everywhere. */
 export function StatusChip({ label, color = "slate", size = "small", variant = "filled" }: {
@@ -56,6 +63,27 @@ export function EmployeeAvatar({ employeeId, size = 28 }: { employeeId?: string 
         {initials(emp.name)}
       </Avatar>
     </Tooltip>
+  );
+}
+
+/**
+ * Compact stack of assignee avatars (AvatarGroup) for a task with one or
+ * more owners. Falls back to a single "?" avatar when empty so a task with
+ * no owner still reads as an assignee slot rather than blank space.
+ */
+export function EmployeeAvatarStack({ employeeIds, size = 26, max = 4 }: { employeeIds: string[]; size?: number; max?: number }) {
+  if (!employeeIds || employeeIds.length === 0) {
+    return <EmployeeAvatar employeeId={null} size={size} />;
+  }
+  if (employeeIds.length === 1) return <EmployeeAvatar employeeId={employeeIds[0]} size={size} />;
+  return (
+    <AvatarGroup
+      max={max}
+      spacing="small"
+      sx={{ "& .MuiAvatar-root": { width: size, height: size, fontSize: size * 0.38, border: "2px solid", borderColor: "background.paper" } }}
+    >
+      {employeeIds.map(id => <EmployeeAvatar key={id} employeeId={id} size={size} />)}
+    </AvatarGroup>
   );
 }
 
@@ -125,6 +153,98 @@ export function OrgSelect({ label, value, onChange, allowUnassigned = true, erro
         )),
       ])}
     </TextField>
+  );
+}
+
+/**
+ * Multi-owner variant of OrgSelect — the same grouped-by-team list, but with
+ * checkboxes and a string[] value, for tasks that can have several owners.
+ * renderValue shows the chosen members' names (or a placeholder).
+ */
+export function OrgMultiSelect({ label, value, onChange, size = "small", fullWidth = true, disabled }: {
+  label: string;
+  value: string[];
+  onChange: (value: string[]) => void;
+  size?: "small" | "medium";
+  fullWidth?: boolean;
+  disabled?: boolean;
+}) {
+  const { teams, employeeById } = useOrgContext();
+  const selected = value || [];
+  return (
+    <FormControl fullWidth={fullWidth} size={size} disabled={disabled}>
+      {label && <InputLabel>{label}</InputLabel>}
+      <Select
+        multiple
+        value={selected}
+        label={label || undefined}
+        onChange={(e) => {
+          const v = e.target.value;
+          onChange(typeof v === "string" ? v.split(",") : v);
+        }}
+        renderValue={(ids) => {
+          const arr = ids as string[];
+          if (!arr.length) return <Typography variant="body2" color="text.secondary">Unassigned</Typography>;
+          return arr.map(id => employeeById[id]?.name ?? "—").join(", ");
+        }}
+        displayEmpty
+      >
+        {teams.flatMap(team => [
+          <ListSubheader key={`h-${team.id}`} sx={{ bgcolor: "transparent", lineHeight: "28px", color: "primary.light" }}>
+            {team.name}
+          </ListSubheader>,
+          ...team.members.map(m => (
+            <MenuItem key={m.id} value={m.id} sx={{ pl: 2 }}>
+              <Checkbox size="small" checked={selected.includes(m.id)} sx={{ py: 0.25 }} />
+              <ListItemText primary={`${m.name}${m.role === "Admin" ? " (Admin)" : ""}`} />
+            </MenuItem>
+          )),
+        ])}
+      </Select>
+    </FormControl>
+  );
+}
+
+/**
+ * Statuses hidden by default on the Kanban boards. Delayed is a
+ * derived/warning state and Not Required is out-of-scope work — neither is
+ * somewhere active work sits, so both columns start collapsed until ticked.
+ */
+export const DEFAULT_HIDDEN_KANBAN_STATUSES: readonly TaskStatus[] = ["Delayed", "Not Required"];
+
+/** The initial visible-status set for a Kanban board (everything but the defaults above). */
+export function defaultKanbanVisible(): Set<TaskStatus> {
+  return new Set(STATUS_OPTIONS.filter(s => !DEFAULT_HIDDEN_KANBAN_STATUSES.includes(s)));
+}
+
+/**
+ * Compact row of status checkboxes for a Kanban board — sized to sit inline
+ * next to the view toggle. Toggling one shows/hides that status column.
+ * Delayed and Not Required start unticked (see above), same control as every
+ * other status, just off by default.
+ */
+export function KanbanStatusFilter({ visible, onToggle }: { visible: Set<TaskStatus>; onToggle: (status: TaskStatus) => void }) {
+  const STATUS_HEX = useStatusHex();
+  return (
+    <Stack direction="row" flexWrap="wrap" alignItems="center" sx={{ rowGap: 0 }}>
+      {STATUS_OPTIONS.map(status => {
+        const hex = STATUS_HEX[STATUS_COLOR[status]];
+        return (
+          <Tooltip key={status} title={status}>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  size="small" checked={visible.has(status)} onChange={() => onToggle(status)}
+                  sx={{ p: 0.375, color: hex, "&.Mui-checked": { color: hex }, "& .MuiSvgIcon-root": { fontSize: 17 } }}
+                />
+              }
+              label={<Typography variant="caption" sx={{ fontWeight: 600, fontSize: 11, lineHeight: 1 }}>{status}</Typography>}
+              sx={{ mr: 0.75, ml: 0 }}
+            />
+          </Tooltip>
+        );
+      })}
+    </Stack>
   );
 }
 

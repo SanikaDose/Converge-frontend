@@ -10,9 +10,12 @@ import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
 import DialogActions from "@mui/material/DialogActions";
 import TextField from "@mui/material/TextField";
+import Chip from "@mui/material/Chip";
 import Stack from "./Stack";
 import AddIcon from "@mui/icons-material/Add";
-import { OrgSelect } from "./common";
+import BlockIcon from "@mui/icons-material/Block";
+import UndoIcon from "@mui/icons-material/Undo";
+import { OrgMultiSelect } from "./common";
 import { CompletionRing } from "./CompletionRing";
 import { TaskCard } from "./TaskCard";
 import { fmt } from "@/lib/dateUtils";
@@ -88,7 +91,7 @@ export function PhaseNavList({ phases, activeId, onSelect }: {
 
 export interface NewTaskPayload {
   name: string;
-  assignedTo: string | null;
+  assignees: string[];
   dayOffset: number;
   duration: number;
 }
@@ -100,7 +103,7 @@ export function AddTaskDialog({ projectStartDate, projectWeekOff, onClose, onCre
   onCreate: (payload: NewTaskPayload) => void;
 }) {
   const [name, setName] = useState("");
-  const [assignedTo, setAssignedTo] = useState<string | null>(null);
+  const [assignees, setAssignees] = useState<string[]>([]);
   const [dayOffset, setDayOffset] = useState<string | number>(0);
   const [duration, setDuration] = useState<string | number>(1);
   const canSubmit = name.trim() && Number(duration) >= 1;
@@ -110,7 +113,7 @@ export function AddTaskDialog({ projectStartDate, projectWeekOff, onClose, onCre
       <DialogTitle>Add task</DialogTitle>
       <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1 }}>
         <TextField label="Task name" value={name} onChange={(e) => setName(e.target.value)} fullWidth autoFocus />
-        <OrgSelect label="Assigned to" value={assignedTo} onChange={setAssignedTo} />
+        <OrgMultiSelect label="Assigned to" value={assignees} onChange={setAssignees} />
         <Stack direction="row" spacing={2}>
           <TextField label="Day from project start" type="number" fullWidth slotProps={{ htmlInput: { min: 0 } }}
             value={dayOffset} onChange={(e) => setDayOffset(e.target.value)} />
@@ -124,7 +127,7 @@ export function AddTaskDialog({ projectStartDate, projectWeekOff, onClose, onCre
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
         <Button variant="contained" disabled={!canSubmit} startIcon={<AddIcon />}
-          onClick={() => onCreate({ name: name.trim(), assignedTo, dayOffset: Number(dayOffset), duration: Number(duration) })}>
+          onClick={() => onCreate({ name: name.trim(), assignees, dayOffset: Number(dayOffset), duration: Number(duration) })}>
           Add task
         </Button>
       </DialogActions>
@@ -144,8 +147,8 @@ export function AddTaskDialog({ projectStartDate, projectWeekOff, onClose, onCre
 export function PhaseTaskPanel({
   phase, tasks, today, weekOff, canEdit, canManage, canApprove,
   onUpdateTask, onOpenEditor, onOpenHistory, onDeleteTask, onApprove, onReject,
-  onAddTask,
-  onCommitOwner, onCommitOffset, onCommitDates, onCommitDescription,
+  onAddTask, onToggleNotRequired,
+  onCommitAssignees, onCommitOffset, onCommitDates, onCommitDescription,
   onChecklistChange, focusTask,
 }: {
   phase: PhaseSummary;
@@ -163,7 +166,8 @@ export function PhaseTaskPanel({
   onApprove: (taskId: string) => void;
   onReject: (taskId: string, comment: string) => void;
   onAddTask: () => void;
-  onCommitOwner: (taskId: string, ownerId: string | null) => void;
+  onToggleNotRequired: (phaseId: string) => void;
+  onCommitAssignees: (taskId: string, assignees: string[]) => void;
   onCommitOffset: (taskId: string, offset: string | number, reason: string) => void;
   onCommitDates: (taskId: string, plannedStart: string, plannedFinish: string, reason: string) => void;
   onCommitDescription: (taskId: string, description: string) => void;
@@ -229,7 +233,10 @@ export function PhaseTaskPanel({
           <Typography variant="caption" sx={{ fontWeight: 700, letterSpacing: 0.5, lineHeight: 1.2, color: "primary.light", display: "block" }}>
             PHASE {phaseNumber}
           </Typography>
-          <Typography variant="h6" noWrap sx={{ fontWeight: 700, fontSize: 17, lineHeight: 1.2, mt: 0.1 }}>{phaseTitle}</Typography>
+          <Stack direction="row" alignItems="center" gap={1}>
+            <Typography variant="h6" noWrap sx={{ fontWeight: 700, fontSize: 17, lineHeight: 1.2, mt: 0.1 }}>{phaseTitle}</Typography>
+            {phase.notRequired && <Chip label="Not required" size="small" sx={{ height: 20, fontSize: 10.5, fontWeight: 700 }} />}
+          </Stack>
           <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.2, display: "block", mt: 0.1 }}>
             {fmt(phase.phaseStart)} → {fmt(phase.phaseEnd)}{wStart ? ` · Week ${wStart}${wEnd !== wStart ? `–${wEnd}` : ""}` : ""}
           </Typography>
@@ -245,6 +252,17 @@ export function PhaseTaskPanel({
               </Typography>
             )}
           </Box>
+          <Tooltip title={canManage ? (phase.notRequired ? "Mark this phase as required again" : "Exclude this phase from progress") : VIEW_ONLY_HINT}>
+            <span>
+              <Button
+                size="small" variant={phase.notRequired ? "contained" : "outlined"} color="inherit"
+                startIcon={phase.notRequired ? <UndoIcon /> : <BlockIcon />}
+                disabled={!canManage} onClick={() => onToggleNotRequired(phase.id)}
+              >
+                {phase.notRequired ? "Required" : "Not required"}
+              </Button>
+            </span>
+          </Tooltip>
           <Tooltip title={canManage ? "" : VIEW_ONLY_HINT}>
             <span>
               <Button size="small" variant="outlined" startIcon={<AddIcon />} disabled={!canManage} onClick={onAddTask}>
@@ -267,7 +285,7 @@ export function PhaseTaskPanel({
               onDelete={() => onDeleteTask(t.id)}
               onApprove={() => onApprove(t.id)}
               onReject={(comment) => onReject(t.id, comment)}
-              onCommitOwner={(ownerId) => onCommitOwner(t.id, ownerId)}
+              onCommitAssignees={(assignees) => onCommitAssignees(t.id, assignees)}
               onCommitOffset={(offset, reason) => onCommitOffset(t.id, offset, reason)}
               onCommitDates={(startDate, finishDate, reason) => onCommitDates(t.id, startDate, finishDate, reason)}
               onCommitDescription={(desc) => onCommitDescription(t.id, desc)}

@@ -9,7 +9,8 @@ import BusinessIcon from "@mui/icons-material/Business";
 import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import { CompletionRing } from "./CompletionRing";
-import { fmt } from "@/lib/dateUtils";
+import HistoryIcon from "@mui/icons-material/History";
+import { fmt, fmtDateTime } from "@/lib/dateUtils";
 import { DASHBOARD_COLORS } from "@/lib/theme";
 import type { ProjectWithLiveStats } from "@/lib/types";
 
@@ -66,6 +67,13 @@ export function ProjectCard({ project, onOpen }: { project: ProjectWithLiveStats
           ? <Chip label={`${project.delayed} delayed`} size="small" sx={{ bgcolor: DASHBOARD_COLORS.red, color: "#fff", fontWeight: 700 }} />
           : <Chip label="On track" size="small" sx={{ bgcolor: DASHBOARD_COLORS.green, color: "#fff", fontWeight: 700 }} />}
       </Stack>
+
+      {project.updatedAt && (
+        <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mt: 1, color: "text.disabled" }}>
+          <HistoryIcon sx={{ fontSize: 12 }} />
+          <Typography variant="caption" sx={{ fontSize: 10.5 }}>Last updated {fmtDateTime(project.updatedAt)}</Typography>
+        </Stack>
+      )}
     </Box>
   );
 }

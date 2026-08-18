@@ -55,7 +55,7 @@ export const TEMPLATE: TemplatePhase[] = [
     ["Integration Utility Installations", 10, 1],
     ["Remote Access Utilities", 10, 1],
   ]},
-  { phase: "04 · Software", critical: true, tasks: [
+  { phase: "04 · Software", critical: true, discipline: "Software", tasks: [
     ["Database Creation", 11, 1],
     ["Backend Module Finalization", 11, 1],
     ["Frontend UX/UI Design", 12, 1],
@@ -66,7 +66,7 @@ export const TEMPLATE: TemplatePhase[] = [
     ["Complete Application Testing", 19, 1],
     ["Software Deployment", 20, 1],
   ]},
-  { phase: "05 · Vision Software", critical: true, tasks: [
+  { phase: "05 · Vision Software", critical: true, discipline: "Vision", tasks: [
     ["Inspection Requirement Definition", 7, 2],
     ["Vision Hardware Selection (Camera, Lens, Lighting)", 7, 1],
     ["Camera Installation & Calibration", 12, 1],
@@ -77,7 +77,7 @@ export const TEMPLATE: TemplatePhase[] = [
     ["Machine Integration", 19, 1],
     ["Performance Validation", 20, 1],
   ]},
-  { phase: "06 · Automation", critical: true, tasks: [
+  { phase: "06 · Automation", critical: true, discipline: "Automation", tasks: [
     ["PLC IO Mapping & Tag List", 11, 1],
     ["PLC Program Development", 12, 3],
     ["HMI Development (if applicable)", 15, 2],
@@ -116,7 +116,7 @@ export const TEMPLATE: TemplatePhase[] = [
   ]},
 ];
 
-export const STATUS_OPTIONS = ["Not Started", "In Progress", "Pending Approval", "Delayed", "Blocked", "Completed"] as const;
+export const STATUS_OPTIONS = ["Not Started", "In Progress", "Pending Approval", "Delayed", "Blocked", "Completed", "Not Required"] as const;
 export const STATUS_COLOR = {
   "Not Started": "slate",
   "In Progress": "amber",
@@ -124,7 +124,13 @@ export const STATUS_COLOR = {
   "Delayed": "red",
   "Blocked": "orange",
   "Completed": "green",
+  // Neutral grey — a Not-Required task is out of scope, not an active state.
+  "Not Required": "slate",
 } as const;
+
+// Discipline-specific phases; a project includes any subset of these (plus
+// common phases). Selecting all — or none — means the full plan.
+export const PHASE_DISCIPLINE_OPTIONS = ["Software", "Vision", "Automation"] as const;
 
 export const PRIORITY_OPTIONS = ["Low", "Medium", "High", "Critical"] as const;
 export const PRIORITY_COLOR = { Low: "slate", Medium: "amber", High: "red", Critical: "red" } as const;

@@ -97,16 +97,25 @@ export interface Actor {
 /* ---------------------------------------------------------------------
    TASK / PHASE / PROJECT TEMPLATE
 ------------------------------------------------------------------------ */
-export type TaskStatus = "Not Started" | "In Progress" | "Pending Approval" | "Delayed" | "Blocked" | "Completed";
+// "Not Required" is excluded from progress math entirely (see businessLogic
+// summarize/isOverdue). Kept last so existing status ordering is unchanged.
+export type TaskStatus = "Not Started" | "In Progress" | "Pending Approval" | "Delayed" | "Blocked" | "Completed" | "Not Required";
 export type StatusColorKey = "green" | "amber" | "red" | "slate" | "violet" | "orange";
 export type Priority = "Low" | "Medium" | "High" | "Critical";
 
 export type TemplateTaskTuple = [name: string, dayOffset: number, duration: number];
 
+/** A discipline-specific phase belongs to exactly one team's workstream. */
+export type PhaseDiscipline = "Software" | "Vision" | "Automation";
+/** Chosen at creation: "All" keeps every phase; a specific one drops the other disciplines' phases. */
+export type ProjectDiscipline = "All" | PhaseDiscipline;
+
 export interface TemplatePhase {
   phase: string;
   critical: boolean;
   tasks: TemplateTaskTuple[];
+  /** Omitted for common phases (always generated); set for Software/Vision/Automation phases. */
+  discipline?: PhaseDiscipline;
 }
 
 export interface HistoryEntry {
@@ -155,7 +164,10 @@ export interface Task {
   order: number;
   name: string;
   description: string;
+  /** Primary owner — mirrors assignees[0], kept for existing single-avatar display. */
   assignedTo: string | null;
+  /** All owners. ensureProjectShape backfills this from assignedTo for legacy tasks. */
+  assignees: string[];
   priority: Priority;
   dependencies: string[];
   dayOffset: number;
@@ -179,6 +191,8 @@ export interface Phase {
   name: string;
   critical: boolean;
   order: number;
+  /** When true the whole phase is excluded from progress math (its tasks don't count). */
+  notRequired?: boolean;
 }
 
 export interface Summary {
@@ -212,6 +226,8 @@ export interface ProjectMeta {
   startDate: string;
   endDate: string;
   createdAt: string;
+  /** ISO timestamp of the last change to the project or any of its phases/tasks; null for pre-feature rows. */
+  updatedAt?: string | null;
   /** Non-working days for this project's business-day calendar — at most 2, defaults to Sat+Sun. */
   weekOff: WeekDay[];
 }
@@ -235,6 +251,7 @@ export interface PhaseLite {
   id: string;
   critical: boolean;
   name: string;
+  notRequired?: boolean;
 }
 
 export interface LivePhaseRow extends PhaseLite {
@@ -252,6 +269,7 @@ export interface ProjectIndexRow {
   owner: string | null;
   startDate: string;
   endDate: string;
+  updatedAt?: string | null;
   pct: number;
   completed: number;
   total: number;
@@ -269,6 +287,8 @@ export interface ProjectWithLiveStats extends ProjectIndexRow {
 export interface CreateProjectInput {
   name: string;
   type: ProjectType;
+  /** Which disciplines' phases to generate; empty means every phase. */
+  disciplines: PhaseDiscipline[];
   customer: string;
   location: string;
   owner: string | null;

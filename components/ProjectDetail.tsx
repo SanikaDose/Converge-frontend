@@ -29,7 +29,7 @@ import { TimelineView } from "./TimelineView";
 import { KanbanView } from "./KanbanView";
 import { ProjectForm, type ProjectFormPayload } from "./ProjectForm";
 import { DeleteProjectDialog } from "./DeleteProjectDialog";
-import { EmployeeAvatar } from "./common";
+import { EmployeeAvatar, KanbanStatusFilter, defaultKanbanVisible } from "./common";
 
 import { useGetProjectQuery, useUpdateProjectMutation } from "@/store/api/projectsApi";
 import {
@@ -64,6 +64,15 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
   // Which task PhaseTaskPanel should open expanded, set when arriving from a
   // Kanban card, a Timeline bar, or a ?task= link off the portfolio Kanban.
   const [focusTask, setFocusTask] = useState<{ id: string; seq: number } | null>(null);
+  // Which Kanban status columns are shown — Delayed + Not Required start off
+  // (see defaultKanbanVisible). Lives here so the checkbox row can sit inline
+  // in the view-toggle toolbar rather than adding a second row.
+  const [kanbanVisible, setKanbanVisible] = useState<Set<TaskStatus>>(defaultKanbanVisible);
+  const toggleKanbanStatus = (s: TaskStatus) => setKanbanVisible(prev => {
+    const next = new Set(prev);
+    if (next.has(s)) next.delete(s); else next.add(s);
+    return next;
+  });
   const today = todayISO();
 
   /** Switch to Phases view with `taskId`'s card open and scrolled to. */
@@ -150,11 +159,20 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
     persist({ ...detail, tasks: fn(detail.tasks) });
   };
 
+  // Mark a whole phase not-required (or back). The phase's tasks then drop
+  // out of every progress calculation (see businessLogic phaseSummaries).
+  const handleTogglePhaseNotRequired = (phaseId: string) => {
+    if (!detail) return;
+    persist({ ...detail, phases: detail.phases.map(p => p.id === phaseId ? { ...p, notRequired: !p.notRequired } : p) });
+  };
+
   const handleStatusChange = (taskId: string, status: TaskStatus) => {
     mutateTasks(tasks => tasks.map(t => {
       if (t.id !== taskId) return t;
       const updates: Partial<Task> = { status };
-      if (status === "Not Started") { updates.actualStart = null; updates.actualFinish = null; }
+      // "Not Required" is out-of-scope work, like Not Started it carries no
+      // actual start/finish.
+      if (status === "Not Started" || status === "Not Required") { updates.actualStart = null; updates.actualFinish = null; }
       else {
         if (!t.actualStart) updates.actualStart = today;
         updates.actualFinish = status === "Completed" ? (t.actualFinish || today) : null;
@@ -189,7 +207,18 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
       return { ...t, [field]: value, history };
     }));
   };
-  const handleCommitOwner = (taskId: string, ownerId: string | null) => commitField(taskId, "assignedTo", ownerId);
+  // Owners: assignees is the source of truth; assignedTo mirrors the first
+  // so single-avatar display and the backend FK stay valid. One history
+  // entry records the whole owner set changing, not one per person.
+  const handleCommitAssignees = (taskId: string, assignees: string[]) => {
+    mutateTasks(tasks => tasks.map(t => {
+      if (t.id !== taskId) return t;
+      const current = t.assignees ?? [];
+      if (current.length === assignees.length && current.every((v, i) => v === assignees[i])) return t;
+      const history: HistoryEntry[] = [...(t.history || []), { ts: new Date().toISOString(), field: "Owners", from: current, to: assignees, editedBy: actor.name || actor.role, reason: "" }];
+      return { ...t, assignees, assignedTo: assignees[0] ?? null, history };
+    }));
+  };
   const handleCommitDescription = (taskId: string, description: string) => commitField(taskId, "description", description);
 
   // Checklist edits deliberately bypass commitField: they'd push an entry
@@ -285,13 +314,13 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
     const duration = Math.max(1, businessDaysBetween(plannedFinish, plannedStart, detail.meta.weekOff) + 1);
     commitSchedule(taskId, { dayOffset, duration, plannedStart, plannedFinish }, reason);
   };
-  const handleAddTask = ({ name, assignedTo, dayOffset, duration }: NewTaskPayload) => {
+  const handleAddTask = ({ name, assignees, dayOffset, duration }: NewTaskPayload) => {
     if (!addTaskPhaseId || !detail) return;
     const { plannedStart, plannedFinish } = computePlanned(detail.meta.startDate, dayOffset, duration, detail.meta.weekOff);
     const siblingOrders = detail.tasks.filter(t => t.phaseId === addTaskPhaseId).map(t => t.order);
     const newTask: Task = {
       id: newId(), phaseId: addTaskPhaseId, order: siblingOrders.length ? Math.max(...siblingOrders) + 1 : 0,
-      name, description: "", assignedTo, priority: "Medium", dependencies: [],
+      name, description: "", assignedTo: assignees[0] ?? null, assignees, priority: "Medium", dependencies: [],
       dayOffset, duration, plannedStart, plannedFinish, actualStart: null, actualFinish: null,
       status: "Not Started", pendingChange: null, achievement: null, checklist: [],
       history: [{ ts: new Date().toISOString(), field: "Task Created", from: null, to: name, editedBy: actor.name || actor.role, reason: "" }],
@@ -378,7 +407,10 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
           </Stack>
         </Stack>
 
-        <Stack direction="row" justifyContent="flex-end" sx={{ my: 1 }}>
+        <Stack direction="row" justifyContent={viewMode === "kanban" ? "space-between" : "flex-end"} alignItems="center" flexWrap="wrap" gap={1} sx={{ my: 1 }}>
+          {/* Kanban's status checkboxes ride in this row (not a second one) to
+              save vertical space — see kanbanVisible. */}
+          {viewMode === "kanban" && <KanbanStatusFilter visible={kanbanVisible} onToggle={toggleKanbanStatus} />}
           <ToggleButtonGroup size="small" exclusive value={viewMode} onChange={(_e, v: ViewMode | null) => v && setViewMode(v)}>
             <ToggleButton value="phases"><GridViewIcon sx={{ fontSize: 16, mr: 0.75 }} />Phases</ToggleButton>
             <ToggleButton value="timeline"><TimelineIcon sx={{ fontSize: 16, mr: 0.75 }} />Timeline</ToggleButton>
@@ -404,7 +436,8 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
                   onOpenEditor={setEditingTask} onOpenHistory={setHistoryTask}
                   onDeleteTask={handleDeleteTask} onApprove={handleApprove} onReject={handleReject}
                   onAddTask={() => setAddTaskPhaseId(activePhaseRow.id)}
-                  onCommitOwner={handleCommitOwner} onCommitOffset={handleCommitOffset}
+                  onToggleNotRequired={handleTogglePhaseNotRequired}
+                  onCommitAssignees={handleCommitAssignees} onCommitOffset={handleCommitOffset}
                   onCommitDates={handleCommitDates}
                   onCommitDescription={handleCommitDescription}
                   onChecklistChange={handleChecklistChange}
@@ -423,7 +456,7 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
         ) : (
           <KanbanView
             tasks={detail.tasks} phases={detail.phases} today={today} weekOff={detail.meta.weekOff}
-            canEdit={canEditTask}
+            canEdit={canEditTask} visibleStatuses={kanbanVisible}
             onStatusChange={handleStatusChange}
             onOpenPhase={openTask}
           />

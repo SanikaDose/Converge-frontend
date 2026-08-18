@@ -11,7 +11,7 @@ import { alpha } from "@mui/material/styles";
 import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 import InboxOutlinedIcon from "@mui/icons-material/InboxOutlined";
 import { STATUS_OPTIONS, STATUS_COLOR, PRIORITY_COLOR } from "@/lib/data";
-import { AchievementBadge, EmployeeAvatar } from "./common";
+import { AchievementBadge, EmployeeAvatarStack } from "./common";
 import { isOverdue, overdueWorkingDays, openChecklistCount } from "@/lib/businessLogic";
 import { fmt } from "@/lib/dateUtils";
 import { useStatusHex } from "@/lib/theme";
@@ -28,13 +28,15 @@ import type { Phase, Task, TaskStatus, WeekDay } from "@/lib/types";
  * task already sitting in it is locked until approved/rejected.
  */
 export function KanbanView({
-  tasks, phases, today, weekOff, canEdit, onStatusChange, onOpenPhase,
+  tasks, phases, today, weekOff, canEdit, visibleStatuses, onStatusChange, onOpenPhase,
 }: {
   tasks: Task[];
   phases: Phase[];
   today: string;
   weekOff: WeekDay[];
   canEdit: boolean;
+  /** Which status columns to render — the toolbar checkbox filter owns this set. */
+  visibleStatuses: Set<TaskStatus>;
   onStatusChange: (taskId: string, status: TaskStatus) => void;
   /** Jump to a card's task in Phases view — the task id opens that card expanded. */
   onOpenPhase: (phaseId: string, taskId: string) => void;
@@ -52,7 +54,7 @@ export function KanbanView({
 
   const columns = useMemo(() => {
     const byStatus: Record<TaskStatus, Task[]> = {
-      "Not Started": [], "In Progress": [], "Pending Approval": [], "Delayed": [], "Blocked": [], "Completed": [],
+      "Not Started": [], "In Progress": [], "Pending Approval": [], "Delayed": [], "Blocked": [], "Completed": [], "Not Required": [],
     };
     tasks.forEach(t => { (byStatus[t.status] || byStatus["Not Started"]).push(t); });
     return byStatus;
@@ -74,7 +76,7 @@ export function KanbanView({
 
   return (
     <Stack direction="row" spacing={2} sx={{ height: "100%", overflowX: "auto", pb: 1 }}>
-      {STATUS_OPTIONS.map(status => {
+      {STATUS_OPTIONS.filter(status => visibleStatuses.has(status)).map(status => {
         const color = STATUS_HEX[STATUS_COLOR[status]];
         const colTasks = columns[status];
         const dropAllowed = canEdit && status !== "Pending Approval";
@@ -162,9 +164,9 @@ export function KanbanView({
                           {overdue ? `${overdueDays}d overdue` : fmt(t.plannedStart)}
                         </Typography>
                       </Stack>
-                      {t.assignedTo && (
-                        <Tooltip title="Assignee">
-                          <Box><EmployeeAvatar employeeId={t.assignedTo} size={22} /></Box>
+                      {t.assignees.length > 0 && (
+                        <Tooltip title={t.assignees.length > 1 ? `${t.assignees.length} owners` : "Owner"}>
+                          <Box><EmployeeAvatarStack employeeIds={t.assignees} size={22} /></Box>
                         </Tooltip>
                       )}
                     </Stack>

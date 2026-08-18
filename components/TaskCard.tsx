@@ -32,8 +32,8 @@ import CloseIcon from "@mui/icons-material/Close";
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutlineOutlined";
 import ChecklistIcon from "@mui/icons-material/Checklist";
 import { STATUS_OPTIONS, STATUS_COLOR, PRIORITY_COLOR, genId, VIEW_ONLY_HINT } from "@/lib/data";
-import { StatusChip, AchievementBadge, PendingApprovalChip, EmployeeAvatar } from "./common";
-import { OrgSelect } from "./common";
+import { StatusChip, AchievementBadge, PendingApprovalChip, EmployeeAvatar, EmployeeAvatarStack } from "./common";
+import { OrgMultiSelect } from "./common";
 import { isOverdue, overdueWorkingDays } from "@/lib/businessLogic";
 import { fmt, businessDaysBetween } from "@/lib/dateUtils";
 import { useStatusHex } from "@/lib/theme";
@@ -80,7 +80,7 @@ function fmtStamp(iso: string): string {
 export function TaskCard({
   task, canEdit, canApprove, today, weekOff, expanded, onToggleExpand,
   onStatusChange, onOpenEditor, onOpenHistory, onDelete, onApprove, onReject,
-  onCommitOwner, onCommitOffset, onCommitDates, onCommitDescription,
+  onCommitAssignees, onCommitOffset, onCommitDates, onCommitDescription,
   onChecklistChange, phaseBounds,
 }: {
   task: Task;
@@ -96,7 +96,7 @@ export function TaskCard({
   onDelete: () => void;
   onApprove: () => void;
   onReject: (comment: string) => void;
-  onCommitOwner: (ownerId: string | null) => void;
+  onCommitAssignees: (assignees: string[]) => void;
   // Scheduling commits carry the reason captured by ScheduleReasonDialog.
   onCommitOffset: (offset: string | number, reason: string) => void;
   /** Start and finish move together now — duration is derived from the pair. */
@@ -110,7 +110,7 @@ export function TaskCard({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectComment, setRejectComment] = useState("");
-  const [owner, setOwner] = useState(task.assignedTo);
+  const [assignees, setAssignees] = useState<string[]>(task.assignees ?? []);
   const [dayOffset, setDayOffset] = useState<string | number>(task.dayOffset);
   const [startDateLocal, setStartDateLocal] = useState(task.plannedStart);
   const [finishDateLocal, setFinishDateLocal] = useState(task.plannedFinish);
@@ -122,7 +122,7 @@ export function TaskCard({
   const [pendingEdit, setPendingEdit] = useState<PendingScheduleEdit | null>(null);
   const [blockedMsg, setBlockedMsg] = useState<string | null>(null);
 
-  useEffect(() => { setOwner(task.assignedTo); }, [task.assignedTo]);
+  useEffect(() => { setAssignees(task.assignees ?? []); }, [task.assignees]);
   useEffect(() => { setDayOffset(task.dayOffset); }, [task.dayOffset]);
   useEffect(() => { setStartDateLocal(task.plannedStart); }, [task.plannedStart]);
   useEffect(() => { setFinishDateLocal(task.plannedFinish); }, [task.plannedFinish]);
@@ -288,7 +288,7 @@ export function TaskCard({
           </Box>
 
           <Stack direction="row" spacing={1.25} alignItems="center" sx={{ flexShrink: 0, mr: 0.5 }}>
-            {task.assignedTo && <EmployeeAvatar employeeId={task.assignedTo} size={26} />}
+            {task.assignees.length > 0 && <EmployeeAvatarStack employeeIds={task.assignees} size={26} />}
             {canEdit ? (
               <Box onClick={(e) => e.stopPropagation()}>
                 <Select
@@ -341,8 +341,9 @@ export function TaskCard({
           <Paper variant="outlined" sx={{ ...sectionPaperSx, mb: 1.5 }}>
           <Stack direction="row" spacing={2.5} rowGap={2} alignItems="flex-end" flexWrap="wrap">
             <Box sx={{ flex: "1 1 200px", minWidth: 160 }}>
-              <Typography sx={fieldLabelSx}>Owner</Typography>
-              <OrgSelect label="" value={owner} onChange={(v) => { setOwner(v); canEdit && !locked && onCommitOwner(v); }}
+              <Typography sx={fieldLabelSx}>Owners</Typography>
+              <OrgMultiSelect label="" value={assignees}
+                onChange={(v) => { setAssignees(v); if (canEdit && !locked) onCommitAssignees(v); }}
                 size="small" fullWidth disabled={!canEdit || locked} />
             </Box>
 

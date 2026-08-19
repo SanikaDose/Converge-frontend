@@ -125,6 +125,7 @@ export function KanbanView({
               {colTasks.map(t => {
                 const overdue = isOverdue(t, today);
                 const overdueDays = overdueWorkingDays(t, today, weekOff);
+                const lateDays = lateWorkingDays(t, weekOff);
                 const locked = t.status === "Pending Approval";
                 return (
                   <Box
@@ -154,8 +155,9 @@ export function KanbanView({
                           color: STATUS_HEX[PRIORITY_COLOR[t.priority]], borderColor: STATUS_HEX[PRIORITY_COLOR[t.priority]],
                         }} />
                       )}
-                      <AchievementBadge achievement={t.achievement} size="small" />
-                      <LateBadge days={lateWorkingDays(t, weekOff)} size="small" />
+                      {lateDays > 0
+                        ? <LateBadge days={lateDays} size="small" />
+                        : <AchievementBadge achievement={t.achievement} size="small" />}
                     </Stack>
 
                     <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 1 }}>

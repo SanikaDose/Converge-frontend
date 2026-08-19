@@ -132,6 +132,10 @@ export function TaskCard({
   const overdue = isOverdue(task, today);
   const color = STATUS_COLOR[task.status] || "slate";
   const overdueDays = overdueWorkingDays(task, today, weekOff);
+  // Live lateness. A task that finished late shows the "late" badge and NOT
+  // an achievement — even if a stale achievement was stored on it by the old
+  // (pre-fix) logic. The two are mutually exclusive.
+  const lateDays = lateWorkingDays(task, weekOff);
   const locked = task.status === "Pending Approval";
 
   // Tasks created before the checklist existed have no array at all.
@@ -278,8 +282,9 @@ export function TaskCard({
               {task.priority && task.priority !== "Medium" && (
                 <Chip label={task.priority} size="small" sx={{ height: 18, fontSize: 10, fontWeight: 700, color: STATUS_HEX[PRIORITY_COLOR[task.priority]], borderColor: STATUS_HEX[PRIORITY_COLOR[task.priority]] }} variant="outlined" />
               )}
-              <AchievementBadge achievement={task.achievement} />
-              <LateBadge days={lateWorkingDays(task, weekOff)} />
+              {lateDays > 0
+                ? <LateBadge days={lateDays} />
+                : <AchievementBadge achievement={task.achievement} />}
               {task.status === "Pending Approval" && <PendingApprovalChip />}
             </Stack>
             <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.25 }} noWrap>

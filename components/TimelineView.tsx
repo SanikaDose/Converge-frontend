@@ -10,7 +10,7 @@ import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { useTheme } from "@mui/material/styles";
 import { STATUS_COLOR } from "@/lib/data";
-import { isOverdue } from "@/lib/businessLogic";
+import { isOverdue, lateWorkingDays } from "@/lib/businessLogic";
 import { fmt, addDays, diffDays, isWeekend } from "@/lib/dateUtils";
 import { useStatusHex } from "@/lib/theme";
 import type { Phase, Task, WeekDay } from "@/lib/types";
@@ -182,7 +182,7 @@ export function TimelineView({ phases, tasks, projectStartDate, projectEndDate, 
             >
               <Box sx={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, bgcolor: isOverdue(r.task, today) ? STATUS_HEX.red : STATUS_HEX[STATUS_COLOR[r.task.status]] }} />
               <Typography variant="caption" noWrap title={r.task.name}>{r.task.name}</Typography>
-              {r.task.achievement && <EmojiEventsIcon sx={{ fontSize: 12, color: STATUS_HEX.green, flexShrink: 0 }} />}
+              {r.task.achievement && lateWorkingDays(r.task, weekOff) === 0 && <EmojiEventsIcon sx={{ fontSize: 12, color: STATUS_HEX.green, flexShrink: 0 }} />}
             </Box>
           ))}
         </Box>
@@ -238,7 +238,7 @@ export function TimelineView({ phases, tasks, projectStartDate, projectEndDate, 
                             boxShadow: "0 1px 2px rgba(0,0,0,0.35)", cursor: onOpenPhase ? "pointer" : "default",
                             display: "flex", alignItems: "center", justifyContent: "flex-end", pr: 0.25,
                           }}>
-                          {t.achievement && <EmojiEventsIcon sx={{ fontSize: 11, color: achievementIconColor }} />}
+                          {t.achievement && lateWorkingDays(t, weekOff) === 0 && <EmojiEventsIcon sx={{ fontSize: 11, color: achievementIconColor }} />}
                         </Box>
                       </Tooltip>
                     </React.Fragment>

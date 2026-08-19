@@ -123,6 +123,7 @@ export function GlobalKanbanBoard({
               {colTasks.map(t => {
                 const overdue = isOverdue(t, today);
                 const overdueDays = overdueWorkingDays(t, today, t.weekOff);
+                const lateDays = lateWorkingDays(t, t.weekOff);
                 const locked = t.status === "Pending Approval";
                 return (
                   <Box
@@ -152,8 +153,9 @@ export function GlobalKanbanBoard({
                           color: STATUS_HEX[PRIORITY_COLOR[t.priority]], borderColor: STATUS_HEX[PRIORITY_COLOR[t.priority]],
                         }} />
                       )}
-                      <AchievementBadge achievement={t.achievement} size="small" />
-                      <LateBadge days={lateWorkingDays(t, t.weekOff)} size="small" />
+                      {lateDays > 0
+                        ? <LateBadge days={lateDays} size="small" />
+                        : <AchievementBadge achievement={t.achievement} size="small" />}
                     </Stack>
 
                     <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 1 }}>

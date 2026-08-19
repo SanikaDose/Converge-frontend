@@ -133,6 +133,10 @@ export function ProjectForm({ title, initial, defaults, onClose, onSubmit, busy,
 
   const canSubmit = name.trim() && customer.trim() && startDate && endDate;
 
+  // Field labels follow what's being created: a Product form reads "Product
+  // name / lead / start", a Solution ("New project") reads "Project …".
+  const noun = type === "Product" ? "Product" : "Project";
+
   const toggleWeekOffDay = (day: WeekDay) => {
     setWeekOff(prev => {
       if (prev.includes(day)) return prev.filter(d => d !== day);
@@ -155,8 +159,8 @@ export function ProjectForm({ title, initial, defaults, onClose, onSubmit, busy,
           </ToggleButtonGroup>
         )}
 
-        <TextField label="Project name" fullWidth value={name} onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. TE Connectivity — Robotic Connector Inspection Cell" />
+        <TextField label={`${noun} name`} fullWidth value={name} onChange={(e) => setName(e.target.value)}
+          placeholder={type === "Product" ? "e.g. Bin Inspection AI Vision System" : "e.g. TE Connectivity — Robotic Connector Inspection Cell"} />
 
         <TextField label="Customer" fullWidth value={customer} onChange={(e) => setCustomer(e.target.value)}
           placeholder="e.g. TE Connectivity" />
@@ -164,7 +168,7 @@ export function ProjectForm({ title, initial, defaults, onClose, onSubmit, busy,
         <TextField label="Location" fullWidth value={location} onChange={(e) => setLocation(e.target.value)}
           placeholder="e.g. Pune, India" />
 
-        <OrgSelect label="Project lead / owner" value={owner} onChange={setOwner} />
+        <OrgSelect label={`${noun} lead / owner`} value={owner} onChange={setOwner} />
 
         {/* Discipline multi-picker — creation only. Filters which phases get
             built: e.g. selecting only Software excludes the Vision and
@@ -199,9 +203,9 @@ export function ProjectForm({ title, initial, defaults, onClose, onSubmit, busy,
         )}
 
         <Stack direction="row" spacing={2}>
-          <TextField label="Project start" type="date" fullWidth slotProps={{ inputLabel: { shrink: true } }}
+          <TextField label={`${noun} start`} type="date" fullWidth slotProps={{ inputLabel: { shrink: true } }}
             value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-          <TextField label="Project end" type="date" fullWidth slotProps={{ inputLabel: { shrink: true } }}
+          <TextField label={`${noun} end`} type="date" fullWidth slotProps={{ inputLabel: { shrink: true } }}
             value={endDate} onChange={(e) => { setEndDate(e.target.value); setEndTouched(true); }} />
         </Stack>
 

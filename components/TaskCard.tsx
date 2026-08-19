@@ -32,9 +32,9 @@ import CloseIcon from "@mui/icons-material/Close";
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutlineOutlined";
 import ChecklistIcon from "@mui/icons-material/Checklist";
 import { STATUS_OPTIONS, STATUS_COLOR, PRIORITY_COLOR, genId, VIEW_ONLY_HINT } from "@/lib/data";
-import { StatusChip, AchievementBadge, PendingApprovalChip, EmployeeAvatar, EmployeeAvatarStack } from "./common";
+import { StatusChip, AchievementBadge, LateBadge, PendingApprovalChip, EmployeeAvatar, EmployeeAvatarStack } from "./common";
 import { OrgMultiSelect } from "./common";
-import { isOverdue, overdueWorkingDays } from "@/lib/businessLogic";
+import { isOverdue, overdueWorkingDays, lateWorkingDays } from "@/lib/businessLogic";
 import { fmt, businessDaysBetween } from "@/lib/dateUtils";
 import { useStatusHex } from "@/lib/theme";
 import { ScheduleReasonDialog, type PendingScheduleEdit } from "./ScheduleReasonDialog";
@@ -279,6 +279,7 @@ export function TaskCard({
                 <Chip label={task.priority} size="small" sx={{ height: 18, fontSize: 10, fontWeight: 700, color: STATUS_HEX[PRIORITY_COLOR[task.priority]], borderColor: STATUS_HEX[PRIORITY_COLOR[task.priority]] }} variant="outlined" />
               )}
               <AchievementBadge achievement={task.achievement} />
+              <LateBadge days={lateWorkingDays(task, weekOff)} />
               {task.status === "Pending Approval" && <PendingApprovalChip />}
             </Stack>
             <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.25 }} noWrap>

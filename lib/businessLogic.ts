@@ -151,6 +151,19 @@ export function overdueWorkingDays(task: { status: TaskStatus; plannedFinish: st
   return businessDaysBetween(today, task.plannedFinish, weekOff);
 }
 
+// How many working days a *completed* task finished past its planned finish —
+// the mirror of computeAchievement. 0 when the task isn't done or landed on
+// time / early. businessDaysBetween(a, b) is signed "a minus b", so
+// actualFinish (the later date) comes first to get a positive lateness.
+export function lateWorkingDays(
+  task: { status: TaskStatus; plannedFinish: string; actualFinish: string | null },
+  weekOff: WeekDay[] = DEFAULT_WEEK_OFF,
+): number {
+  if (task.status !== "Completed" || !task.actualFinish) return 0;
+  const late = businessDaysBetween(task.actualFinish, task.plannedFinish, weekOff);
+  return late > 0 ? late : 0;
+}
+
 // Shared with TaskCard's own status Select (see requestStatusChange there) —
 // a task can't be marked Completed while its critical points are still
 // open. Kanban drag-and-drop is a second entry point to the same status

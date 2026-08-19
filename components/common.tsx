@@ -16,6 +16,7 @@ import Checkbox from "@mui/material/Checkbox";
 import ListItemText from "@mui/material/ListItemText";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
+import ScheduleIcon from "@mui/icons-material/Schedule";
 import HourglassTopIcon from "@mui/icons-material/HourglassTop";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
@@ -98,6 +99,27 @@ export function AchievementBadge({ achievement, size = "small" }: { achievement?
         label={achievement.label}
         size={size}
         sx={{ bgcolor: "rgba(76,174,125,0.16)", color: STATUS_HEX.green, border: `1px solid ${STATUS_HEX.green}`, fontWeight: 700 }}
+      />
+    </Tooltip>
+  );
+}
+
+/**
+ * Red counterpart to AchievementBadge — shown on a task that was completed
+ * AFTER its planned finish date. `days` is the working-days lateness
+ * (lateWorkingDays); 0 renders nothing.
+ */
+export function LateBadge({ days, size = "small" }: { days: number; size?: ChipProps["size"] }) {
+  const STATUS_HEX = useStatusHex();
+  if (!days || days <= 0) return null;
+  const label = `Finished ${days} Day${days === 1 ? "" : "s"} Late`;
+  return (
+    <Tooltip title={label}>
+      <Chip
+        icon={<ScheduleIcon sx={{ fontSize: 14 }} />}
+        label={label}
+        size={size}
+        sx={{ bgcolor: alpha(STATUS_HEX.red, 0.14), color: STATUS_HEX.red, border: `1px solid ${STATUS_HEX.red}`, fontWeight: 700 }}
       />
     </Tooltip>
   );

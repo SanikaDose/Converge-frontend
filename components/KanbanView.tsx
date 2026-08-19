@@ -11,8 +11,8 @@ import { alpha } from "@mui/material/styles";
 import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 import InboxOutlinedIcon from "@mui/icons-material/InboxOutlined";
 import { STATUS_OPTIONS, STATUS_COLOR, PRIORITY_COLOR } from "@/lib/data";
-import { AchievementBadge, EmployeeAvatarStack } from "./common";
-import { isOverdue, overdueWorkingDays, openChecklistCount } from "@/lib/businessLogic";
+import { AchievementBadge, LateBadge, EmployeeAvatarStack } from "./common";
+import { isOverdue, overdueWorkingDays, openChecklistCount, lateWorkingDays } from "@/lib/businessLogic";
 import { fmt } from "@/lib/dateUtils";
 import { useStatusHex } from "@/lib/theme";
 import type { Phase, Task, TaskStatus, WeekDay } from "@/lib/types";
@@ -155,6 +155,7 @@ export function KanbanView({
                         }} />
                       )}
                       <AchievementBadge achievement={t.achievement} size="small" />
+                      <LateBadge days={lateWorkingDays(t, weekOff)} size="small" />
                     </Stack>
 
                     <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 1 }}>

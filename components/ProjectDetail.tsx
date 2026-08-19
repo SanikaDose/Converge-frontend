@@ -159,11 +159,37 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
     persist({ ...detail, tasks: fn(detail.tasks) });
   };
 
-  // Mark a whole phase not-required (or back). The phase's tasks then drop
-  // out of every progress calculation (see businessLogic phaseSummaries).
+  // Mark a whole phase not-required (or back), and cascade to its tasks:
+  // turning a phase off marks every task in it "Not Required" (actuals
+  // cleared); turning it back on reactivates those tasks to "Not Started".
   const handleTogglePhaseNotRequired = (phaseId: string) => {
     if (!detail) return;
-    persist({ ...detail, phases: detail.phases.map(p => p.id === phaseId ? { ...p, notRequired: !p.notRequired } : p) });
+    const phase = detail.phases.find(p => p.id === phaseId);
+    if (!phase) return;
+    const next = !phase.notRequired;
+    const ts = new Date().toISOString();
+    const editedBy = actor.name || actor.role;
+    persist({
+      ...detail,
+      phases: detail.phases.map(p => p.id === phaseId ? { ...p, notRequired: next } : p),
+      tasks: detail.tasks.map(t => {
+        if (t.phaseId !== phaseId) return t;
+        if (next) {
+          if (t.status === "Not Required") return t;
+          return {
+            ...t, status: "Not Required", actualStart: null, actualFinish: null, achievement: null,
+            history: [...(t.history || []), { ts, field: "Status", from: t.status, to: "Not Required", editedBy, reason: "Phase marked not required" }],
+          };
+        }
+        // Reactivating the phase: only tasks the phase-off had set to
+        // Not Required come back (as Not Started).
+        if (t.status !== "Not Required") return t;
+        return {
+          ...t, status: "Not Started",
+          history: [...(t.history || []), { ts, field: "Status", from: "Not Required", to: "Not Started", editedBy, reason: "Phase marked required" }],
+        };
+      }),
+    });
   };
 
   const handleStatusChange = (taskId: string, status: TaskStatus) => {

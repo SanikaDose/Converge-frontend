@@ -218,14 +218,21 @@ export function projectStatusFromPhases(phaseRows: { critical: boolean; color: S
 // planned finish date, or under its own estimated duration.
 export function computeAchievement(task: Task, weekOff: WeekDay[] = DEFAULT_WEEK_OFF): Achievement | null {
   if (task.status !== "Completed" || !task.actualFinish) return null;
+  // businessDaysBetween(a, b) is signed "a minus b", so daysEarly is
+  // positive when actualFinish is before plannedFinish, and NEGATIVE when
+  // the task finished after its planned end date.
   const daysEarly = businessDaysBetween(task.plannedFinish, task.actualFinish, weekOff);
+  // An achievement is only for work completed within its timeline — i.e. on
+  // or before the planned finish date. A task that finished late earns
+  // nothing, even if it was worked quickly (this guard is what "Outstanding
+  // Performance" was missing, so a late-but-fast task used to misfire it).
+  if (daysEarly < 0) return null;
   if (daysEarly >= 2) return { label: `Completed ${daysEarly} Days Early`, days: daysEarly };
   if (daysEarly === 1) return { label: "Finished Before Deadline", days: 1 };
+  // Finished exactly on the deadline (daysEarly === 0): reward only if it
+  // was also done in fewer working days than planned. actualFinish is the
+  // later date so it comes first (see the signed convention above).
   if (task.actualStart) {
-    // businessDaysBetween(a, b) is signed "a minus b" — actualFinish is
-    // the later date, so it must come first or a same-duration (or even
-    // early-but-longer-than-planned) completion comes out negative and
-    // misfires "Outstanding Performance" on ordinary on-time work.
     const actualDuration = businessDaysBetween(task.actualFinish, task.actualStart, weekOff) + 1;
     if (actualDuration < task.duration) return { label: "Outstanding Performance", days: task.duration - actualDuration };
   }

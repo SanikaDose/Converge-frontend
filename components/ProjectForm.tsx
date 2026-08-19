@@ -155,6 +155,17 @@ export function ProjectForm({ title, initial, defaults, onClose, onSubmit, busy,
           </ToggleButtonGroup>
         )}
 
+        <TextField label="Project name" fullWidth value={name} onChange={(e) => setName(e.target.value)}
+          placeholder="e.g. TE Connectivity — Robotic Connector Inspection Cell" />
+
+        <TextField label="Customer" fullWidth value={customer} onChange={(e) => setCustomer(e.target.value)}
+          placeholder="e.g. TE Connectivity" />
+
+        <TextField label="Location" fullWidth value={location} onChange={(e) => setLocation(e.target.value)}
+          placeholder="e.g. Pune, India" />
+
+        <OrgSelect label="Project lead / owner" value={owner} onChange={setOwner} />
+
         {/* Discipline multi-picker — creation only. Filters which phases get
             built: e.g. selecting only Software excludes the Vision and
             Automation phases. Pick several to include several. An existing
@@ -186,17 +197,6 @@ export function ProjectForm({ title, initial, defaults, onClose, onSubmit, busy,
             ))}
           </TextField>
         )}
-
-        <TextField label="Project name" fullWidth value={name} onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. TE Connectivity — Robotic Connector Inspection Cell" />
-
-        <TextField label="Customer" fullWidth value={customer} onChange={(e) => setCustomer(e.target.value)}
-          placeholder="e.g. TE Connectivity" />
-
-        <TextField label="Location" fullWidth value={location} onChange={(e) => setLocation(e.target.value)}
-          placeholder="e.g. Pune, India" />
-
-        <OrgSelect label="Project lead / owner" value={owner} onChange={setOwner} />
 
         <Stack direction="row" spacing={2}>
           <TextField label="Project start" type="date" fullWidth slotProps={{ inputLabel: { shrink: true } }}

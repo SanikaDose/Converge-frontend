@@ -19,7 +19,7 @@ import AddIcon from "@mui/icons-material/Add";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import { OrgSelect } from "./common";
 import { TemplatePreviewDialog } from "./TemplatePreviewDialog";
-import { TEMPLATE, WEEKDAY_SHORT, WEEKDAY_LABELS, MAX_WEEK_OFF_DAYS, PHASE_DISCIPLINE_OPTIONS } from "@/lib/data";
+import { TEMPLATE, WEEKDAY_SHORT, WEEKDAY_LABELS, MAX_WEEK_OFF_DAYS, PHASE_DISCIPLINE_OPTIONS, FINANCIAL_YEAR_OPTIONS } from "@/lib/data";
 import { suggestedEndDate, guessEmployeeIdFromFreeText } from "@/lib/businessLogic";
 import { todayISO, DEFAULT_WEEK_OFF, addWorkingDays } from "@/lib/dateUtils";
 import { useOrgContext } from "@/context/OrgContext";
@@ -45,6 +45,7 @@ export interface ProjectFormPayload {
   name: string;
   type: ProjectType;
   disciplines: PhaseDiscipline[];
+  financialYear: string;
   customer: string;
   location: string;
   owner: string | null;
@@ -81,6 +82,7 @@ export function ProjectForm({ title, initial, defaults, onClose, onSubmit, busy,
   // creating (an existing project's phases already exist). Defaults to all
   // selected, i.e. the full plan.
   const [disciplines, setDisciplines] = useState<PhaseDiscipline[]>([...PHASE_DISCIPLINE_OPTIONS]);
+  const [financialYear, setFinancialYear] = useState<string>(initial?.financialYear || FINANCIAL_YEAR_OPTIONS[0]);
   const [customer, setCustomer] = useState(initial?.customer || defaults?.customer || "");
   const [location, setLocation] = useState(initial?.location || defaults?.location || "");
   const [owner, setOwner] = useState<string | null>(
@@ -161,6 +163,11 @@ export function ProjectForm({ title, initial, defaults, onClose, onSubmit, busy,
 
         <TextField label={`${noun} name`} fullWidth value={name} onChange={(e) => setName(e.target.value)}
           placeholder={type === "Product" ? "e.g. Bin Inspection AI Vision System" : "e.g. TE Connectivity — Robotic Connector Inspection Cell"} />
+
+        <TextField select label="Financial year" fullWidth value={financialYear}
+          onChange={(e) => setFinancialYear(e.target.value)}>
+          {FINANCIAL_YEAR_OPTIONS.map(fy => <MenuItem key={fy} value={fy}>{fy}</MenuItem>)}
+        </TextField>
 
         <TextField label="Customer" fullWidth value={customer} onChange={(e) => setCustomer(e.target.value)}
           placeholder="e.g. TE Connectivity" />
@@ -255,7 +262,7 @@ export function ProjectForm({ title, initial, defaults, onClose, onSubmit, busy,
       <DialogActions sx={{ p: 2 }}>
         <Button onClick={onClose}>Cancel</Button>
         <Button variant="contained" disabled={!canSubmit || busy} startIcon={busy ? <CircularProgress size={16} /> : <AddIcon />}
-          onClick={() => onSubmit({ name: name.trim(), type, disciplines, customer: customer.trim(), location: location.trim(), owner, startDate, endDate, weekOff })}>
+          onClick={() => onSubmit({ name: name.trim(), type, disciplines, financialYear, customer: customer.trim(), location: location.trim(), owner, startDate, endDate, weekOff })}>
           {busy ? "Saving…" : submitLabel}
         </Button>
       </DialogActions>

@@ -8,14 +8,17 @@ import IconButton from "@mui/material/IconButton";
 import BusinessIcon from "@mui/icons-material/Business";
 import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
+import PersonOutlineIcon from "@mui/icons-material/PersonOutlineOutlined";
 import { CompletionRing } from "./CompletionRing";
 import HistoryIcon from "@mui/icons-material/History";
 import { fmt, fmtDateTime } from "@/lib/dateUtils";
 import { DASHBOARD_COLORS } from "@/lib/theme";
+import { useOrgContext } from "@/context/OrgContext";
 import type { ProjectWithLiveStats } from "@/lib/types";
 
 /** Unchanged card content from the original build — now an MUI Paper-ish Box, inside the status accordions. */
 export function ProjectCard({ project, onOpen }: { project: ProjectWithLiveStats; onOpen: (id: string) => void }) {
+  const { employeeLabel } = useOrgContext();
   const delayed = project.delayed > 0;
   return (
     <Box onClick={() => onOpen(project.id)} sx={{
@@ -40,6 +43,13 @@ export function ProjectCard({ project, onOpen }: { project: ProjectWithLiveStats
           </Typography>
           <Stack direction="row" spacing={0.6} alignItems="center" sx={{ mt: 0.5, color: "text.secondary" }}>
             <BusinessIcon sx={{ fontSize: 13 }} /><Typography variant="caption">{project.customer}</Typography>
+          </Stack>
+          {/* Project lead / team manager. */}
+          <Stack direction="row" spacing={0.6} alignItems="center" sx={{ mt: 0.35, color: "text.secondary" }}>
+            <PersonOutlineIcon sx={{ fontSize: 13 }} />
+            <Typography variant="caption" noWrap sx={{ pr: 3 }}>
+              {project.owner ? employeeLabel(project.owner) : "No lead assigned"}
+            </Typography>
           </Stack>
         </Box>
         {/* Nudged below the absolutely-positioned arrow button (top:8, ~34px tall) so its top-right edge doesn't sit under it. */}

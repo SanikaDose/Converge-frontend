@@ -246,6 +246,8 @@ export interface ProjectMeta {
   createdAt: string;
   /** ISO timestamp of the last change to the project or any of its phases/tasks; null for pre-feature rows. */
   updatedAt?: string | null;
+  /** Financial year, e.g. "FY26-27". */
+  financialYear?: string | null;
   /** Non-working days for this project's business-day calendar — at most 2, defaults to Sat+Sun. */
   weekOff: WeekDay[];
 }
@@ -288,6 +290,8 @@ export interface ProjectIndexRow {
   startDate: string;
   endDate: string;
   updatedAt?: string | null;
+  /** Financial year, e.g. "FY26-27". */
+  financialYear?: string | null;
   pct: number;
   completed: number;
   total: number;
@@ -307,6 +311,8 @@ export interface CreateProjectInput {
   type: ProjectType;
   /** Which disciplines' phases to generate; empty means every phase. */
   disciplines: PhaseDiscipline[];
+  /** Financial year, e.g. "FY26-27". */
+  financialYear: string;
   customer: string;
   location: string;
   owner: string | null;

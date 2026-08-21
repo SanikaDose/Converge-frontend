@@ -132,6 +132,9 @@ export const STATUS_COLOR = {
 // common phases). Selecting all — or none — means the full plan.
 export const PHASE_DISCIPLINE_OPTIONS = ["Software", "Vision", "Automation"] as const;
 
+// Financial years selectable at creation (Apr–Mar). First = current, the default.
+export const FINANCIAL_YEAR_OPTIONS = ["FY26-27", "FY25-26", "FY24-25"] as const;
+
 export const PRIORITY_OPTIONS = ["Low", "Medium", "High", "Critical"] as const;
 export const PRIORITY_COLOR = { Low: "slate", Medium: "amber", High: "red", Critical: "red" } as const;
 

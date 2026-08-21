@@ -14,6 +14,7 @@ import Chip from "@mui/material/Chip";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import SettingsIcon from "@mui/icons-material/Settings";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
+import VerifiedOutlinedIcon from "@mui/icons-material/VerifiedOutlined";
 import GridViewIcon from "@mui/icons-material/GridView";
 import TimelineIcon from "@mui/icons-material/Timeline";
 import ViewKanbanIcon from "@mui/icons-material/ViewKanban";
@@ -29,6 +30,7 @@ import { TimelineView } from "./TimelineView";
 import { KanbanView } from "./KanbanView";
 import { ProjectForm, type ProjectFormPayload } from "./ProjectForm";
 import { DeleteProjectDialog } from "./DeleteProjectDialog";
+import { WarrantyDialog } from "./WarrantyDialog";
 import { EmployeeAvatar, KanbanStatusFilter, defaultKanbanVisible } from "./common";
 
 import { useGetProjectQuery, useUpdateProjectMutation } from "@/store/api/projectsApi";
@@ -39,7 +41,7 @@ import {
 import { newId, roleCan, VIEW_ONLY_HINT } from "@/lib/data";
 import { useOrgContext } from "@/context/OrgContext";
 import { fmt, todayISO, diffDays, businessDaysBetween } from "@/lib/dateUtils";
-import type { Actor, ChecklistItem, HistoryEntry, ProjectDetailData, Task, TaskStatus } from "@/lib/types";
+import type { Actor, ChecklistItem, HistoryEntry, ProjectDetailData, Task, TaskStatus, Warranty } from "@/lib/types";
 
 type ViewMode = "phases" | "timeline" | "kanban";
 
@@ -57,6 +59,8 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
   const [viewMode, setViewMode] = useState<ViewMode>("phases");
   const [showSettings, setShowSettings] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
+  const [showWarranty, setShowWarranty] = useState(false);
+  const [savingWarranty, setSavingWarranty] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [historyTask, setHistoryTask] = useState<Task | null>(null);
@@ -129,6 +133,22 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
     appliedInitialTask.current = initialTaskId;
     openTask(task.phaseId, task.id);
   }, [detail, initialTaskId, openTask]);
+
+  // When a project first reaches 100% (every countable task Completed), pop the
+  // warranty form so its contact details get recorded. Fires once per
+  // completion (the ref resets if the project drops back to incomplete), and
+  // only for someone who can edit — a read-only viewer isn't prompted.
+  const warrantyPrompted = useRef(false);
+  useEffect(() => {
+    if (!detail) return;
+    const counted = detail.tasks.filter(t => t.status !== "Not Required");
+    const complete = counted.length > 0 && counted.every(t => t.status === "Completed");
+    if (!complete) { warrantyPrompted.current = false; return; }
+    if (complete && canEditProjectSettings && !detail.meta.warranty && !warrantyPrompted.current) {
+      warrantyPrompted.current = true;
+      setShowWarranty(true);
+    }
+  }, [detail, canEditProjectSettings]);
 
   // Full project detail (meta + phases + tasks) is PATCHed to the mock
   // API as one document; the API recomputes the dashboard's lightweight
@@ -369,10 +389,20 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
     setShowSettings(false);
   };
 
+  const saveWarranty = async (warranty: Warranty) => {
+    if (!canEditProjectSettings || !detail) return;
+    setSavingWarranty(true);
+    await persist({ ...detail, meta: { ...detail.meta, warranty } });
+    setSavingWarranty(false);
+    setShowWarranty(false);
+  };
+
   if (loading) return <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}><CircularProgress /></Box>;
   if (!detail) return <Typography color="text.secondary">Project not found.</Typography>;
 
   const s = summarize(detail.tasks, today);
+  const projectComplete = s.total > 0 && s.completed === s.total;
+  const warranty = detail.meta.warranty ?? null;
   const phaseRows = phaseSummaries(detail.phases, detail.tasks, today, detail.meta.startDate);
   const activePhaseRow = phaseRows.find(p => p.id === activePhaseId) || phaseRows[0];
   const activeTasks = detail.tasks.filter(t => t.phaseId === activePhaseRow?.id);
@@ -413,6 +443,23 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
               label={s.delayed > 0 ? `${s.delayed} delayed` : "On track"} size="small"
               color={s.delayed > 0 ? "error" : "success"} variant={s.delayed > 0 ? "filled" : "outlined"}
             />
+            {/* Warranty — shown once the project is complete (or already
+                recorded). Green when captured, amber-outline when still to fill. */}
+            {(projectComplete || warranty) && (
+              <Tooltip title={canEditProjectSettings ? (warranty ? "View / edit warranty" : "Add warranty details") : VIEW_ONLY_HINT}>
+                <span>
+                  <Chip
+                    icon={<VerifiedOutlinedIcon />}
+                    label={warranty ? "Warranty" : "Add warranty"}
+                    size="small"
+                    color={warranty ? "success" : "warning"}
+                    variant={warranty ? "filled" : "outlined"}
+                    onClick={canEditProjectSettings ? () => setShowWarranty(true) : undefined}
+                    sx={{ fontWeight: 700, cursor: canEditProjectSettings ? "pointer" : "default" }}
+                  />
+                </span>
+              </Tooltip>
+            )}
             {/* Both stay visible and go disabled for a read-only User. */}
             <Tooltip title={canEditProjectSettings ? "Project settings" : VIEW_ONLY_HINT}>
               <span>
@@ -498,6 +545,10 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
       {showSettings && (
         <ProjectForm title="Project settings" initial={detail.meta} submitLabel="Save changes" busy={savingSettings}
           onClose={() => setShowSettings(false)} onSubmit={saveSettings} />
+      )}
+      {showWarranty && (
+        <WarrantyDialog initial={warranty} busy={savingWarranty}
+          onClose={() => setShowWarranty(false)} onSave={saveWarranty} />
       )}
       {editingTask && (
         <TaskDetailsDialog

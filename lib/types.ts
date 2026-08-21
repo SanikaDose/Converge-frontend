@@ -161,6 +161,15 @@ export interface Achievement {
   days: number;
 }
 
+/** Warranty details captured when a project is completed. */
+export interface Warranty {
+  /** ISO date the project was completed / warranty starts. */
+  completionDate: string;
+  contactPerson: string;
+  phone: string;
+  email: string;
+}
+
 /**
  * One "critical point" on a task's checklist. `createdAt`/`updatedAt` are
  * optional only because items added before timestamping existed don't carry
@@ -248,6 +257,8 @@ export interface ProjectMeta {
   updatedAt?: string | null;
   /** Financial year, e.g. "FY26-27". */
   financialYear?: string | null;
+  /** Warranty details, filled once the project is completed; null until then. */
+  warranty?: Warranty | null;
   /** Non-working days for this project's business-day calendar — at most 2, defaults to Sat+Sun. */
   weekOff: WeekDay[];
 }

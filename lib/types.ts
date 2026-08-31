@@ -351,7 +351,10 @@ export interface Ticket {
   projectId: string;
   projectName: string;
   phase: string | null;
+  /** Primary assignee — mirrors assignees[0], kept for single-avatar display. */
   assignedTo: string | null;
+  /** All assignees (multi-select). */
+  assignees: string[];
   priority: Priority;
   status: TicketStatus;
   createdAt: string;
@@ -369,7 +372,7 @@ export interface CreateTicketInput {
   description: string;
   projectId: string;
   phase: string | null;
-  assignedTo: string | null;
+  assignees: string[];
   priority: Priority;
 }
 

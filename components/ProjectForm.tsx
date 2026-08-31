@@ -12,6 +12,7 @@ import Tooltip from "@mui/material/Tooltip";
 import MenuItem from "@mui/material/MenuItem";
 import Checkbox from "@mui/material/Checkbox";
 import ListItemText from "@mui/material/ListItemText";
+import Alert from "@mui/material/Alert";
 import Stack from "./Stack";
 import Typography from "@mui/material/Typography";
 import CircularProgress from "@mui/material/CircularProgress";
@@ -66,10 +67,12 @@ export interface ProjectFormDefaults {
 }
 
 /** Shared dialog for both "New project" and "Project settings" (edit). */
-export function ProjectForm({ title, initial, defaults, onClose, onSubmit, busy, submitLabel }: {
+export function ProjectForm({ title, initial, defaults, error, onClose, onSubmit, busy, submitLabel }: {
   title: string;
   initial?: ProjectMeta | null;
   defaults?: ProjectFormDefaults;
+  /** Server-side error to surface (e.g. duplicate name). */
+  error?: string;
   onClose: () => void;
   onSubmit: (payload: ProjectFormPayload) => void;
   busy: boolean;
@@ -133,7 +136,14 @@ export function ProjectForm({ title, initial, defaults, onClose, onSubmit, busy,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startDate, endTouched, weekOff, templateMaxSpan]);
 
-  const canSubmit = name.trim() && customer.trim() && startDate && endDate;
+  // End date may not be before the start date.
+  const endBeforeStart = !!startDate && !!endDate && endDate < startDate;
+  // On creation, require the full set: name, customer, location, project lead,
+  // and valid dates. Editing an existing project keeps its looser rules (a
+  // legacy project may have no owner/location yet).
+  const canSubmit =
+    !!name.trim() && !!customer.trim() && !!startDate && !!endDate && !endBeforeStart &&
+    (!!initial || (!!location.trim() && !!owner));
 
   // Field labels follow what's being created: a Product form reads "Product
   // name / lead / start", a Solution ("New project") reads "Project …".
@@ -151,6 +161,7 @@ export function ProjectForm({ title, initial, defaults, onClose, onSubmit, busy,
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>{title}</DialogTitle>
       <DialogContent dividers sx={{ display: "flex", flexDirection: "column", gap: 2.25 }}>
+        {error && <Alert severity="error">{error}</Alert>}
         {/* Product/Solution toggle only when editing an existing project —
             on creation the type comes from which button was clicked (New
             Product vs New Project), so the toggle would just be redundant. */}
@@ -212,8 +223,9 @@ export function ProjectForm({ title, initial, defaults, onClose, onSubmit, busy,
         <Stack direction="row" spacing={2}>
           <TextField label={`${noun} start`} type="date" fullWidth slotProps={{ inputLabel: { shrink: true } }}
             value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-          <TextField label={`${noun} end`} type="date" fullWidth slotProps={{ inputLabel: { shrink: true } }}
-            value={endDate} onChange={(e) => { setEndDate(e.target.value); setEndTouched(true); }} />
+          <TextField label={`${noun} end`} type="date" fullWidth slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: startDate } }}
+            value={endDate} onChange={(e) => { setEndDate(e.target.value); setEndTouched(true); }}
+            error={endBeforeStart} helperText={endBeforeStart ? "End date can't be before the start date" : " "} />
         </Stack>
 
         <Stack spacing={0.75}>

@@ -166,6 +166,7 @@ function ProjectQuickActions() {
   const { role } = useAppContext();
   const [showNewProject, setShowNewProject] = useState(false);
   const [showNewProduct, setShowNewProduct] = useState(false);
+  const [createError, setCreateError] = useState("");
   const [showTicketForm, setShowTicketForm] = useState(false);
 
   const { data: projectsData } = useGetProjectsQuery();
@@ -181,6 +182,7 @@ function ProjectQuickActions() {
 
   const createProject = async (payload: ProjectFormPayload) => {
     if (!roleCan(role, "createProject")) return;
+    setCreateError("");
     try {
       // The mutation invalidates "Projects", so the list here and every
       // other view of it refetch — the explicit loadProjects() call this
@@ -190,7 +192,9 @@ function ProjectQuickActions() {
       setShowNewProduct(false);
       router.push(`/projects/${project.id}`);
     } catch (e) {
-      console.error(e);
+      // Surface the server message (e.g. duplicate name / 409) in the form.
+      const msg = (e as { data?: { message?: string | string[] } })?.data?.message;
+      setCreateError((Array.isArray(msg) ? msg[0] : msg) || "Could not create. Please try again.");
     }
   };
 
@@ -230,7 +234,7 @@ function ProjectQuickActions() {
         <span>
           <Button
             size="small" variant="outlined" startIcon={<Inventory2OutlinedIcon fontSize="small" />}
-            onClick={() => setShowNewProduct(true)} disabled={!canCreateProject}
+            onClick={() => { setCreateError(""); setShowNewProduct(true); }} disabled={!canCreateProject}
             sx={{
               color: DASHBOARD_COLORS.blue, borderColor: DASHBOARD_COLORS.blue,
               "&:hover": { borderColor: DASHBOARD_COLORS.blue, bgcolor: alpha(DASHBOARD_COLORS.blue, 0.08) },
@@ -244,7 +248,7 @@ function ProjectQuickActions() {
         <span>
           <Button
             size="small" variant="contained" startIcon={<AddIcon fontSize="small" />}
-            onClick={() => setShowNewProject(true)} disabled={!canCreateProject}
+            onClick={() => { setCreateError(""); setShowNewProject(true); }} disabled={!canCreateProject}
             sx={{
               bgcolor: DASHBOARD_COLORS.blue, color: "#fff",
               "&:hover": { bgcolor: darken(DASHBOARD_COLORS.blue, 0.15) },
@@ -258,15 +262,15 @@ function ProjectQuickActions() {
       {showNewProject && roleCan(role, "createProject") && (
         <ProjectForm
           title="New project" initial={null} submitLabel="Create project" busy={projectBusy}
-          defaults={{ type: "Solution" }}
-          onClose={() => setShowNewProject(false)} onSubmit={createProject}
+          defaults={{ type: "Solution" }} error={createError}
+          onClose={() => { setShowNewProject(false); setCreateError(""); }} onSubmit={createProject}
         />
       )}
       {showNewProduct && roleCan(role, "createProject") && (
         <ProjectForm
           title="New product" initial={null} submitLabel="Create product" busy={projectBusy}
-          defaults={{ type: "Product", customer: "Elansol Technologies", location: "Pune, Maharashtra, India" }}
-          onClose={() => setShowNewProduct(false)} onSubmit={createProject}
+          defaults={{ type: "Product", customer: "Elansol Technologies", location: "Pune, Maharashtra, India" }} error={createError}
+          onClose={() => { setShowNewProduct(false); setCreateError(""); }} onSubmit={createProject}
         />
       )}
       {showTicketForm && roleCan(role, "raiseTicket") && (

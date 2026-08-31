@@ -33,7 +33,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutlineOutlined";
 import ChecklistIcon from "@mui/icons-material/Checklist";
 import ConfirmationNumberIcon from "@mui/icons-material/ConfirmationNumberOutlined";
-import { OrgSelect, StatusChip, EmployeeAvatar } from "./common";
+import { OrgSelect, OrgMultiSelect, StatusChip, EmployeeAvatar, EmployeeAvatarStack } from "./common";
 import { TEMPLATE, roleCan, genId, VIEW_ONLY_HINT } from "@/lib/data";
 import { fmt } from "@/lib/dateUtils";
 import { useGetTicketsQuery, useCreateTicketMutation, useUpdateTicketMutation } from "@/store/api/ticketsApi";
@@ -80,7 +80,7 @@ export function TicketForm({ projects, onClose, onSubmit, busy }: {
   const [description, setDescription] = useState("");
   const [projectId, setProjectId] = useState(projects[0]?.id || "");
   const [phase, setPhase] = useState("");
-  const [assignedTo, setAssignedTo] = useState<string | null>(null);
+  const [assignees, setAssignees] = useState<string[]>([]);
   const [priority, setPriority] = useState<Priority>("Medium");
   const canSubmit = title.trim() && projectId;
 
@@ -100,7 +100,7 @@ export function TicketForm({ projects, onClose, onSubmit, busy }: {
           {TEMPLATE.map(p => <MenuItem key={p.phase} value={p.phase}>{p.phase}</MenuItem>)}
         </TextField>
         <Stack direction="row" spacing={2}>
-          <OrgSelect label="Assign to" value={assignedTo} onChange={setAssignedTo} />
+          <OrgMultiSelect label="Assign to" value={assignees} onChange={setAssignees} />
           <TextField select label="Priority" value={priority} onChange={(e) => setPriority(e.target.value as Priority)} fullWidth>
             <MenuItem value="Low">Low</MenuItem><MenuItem value="Medium">Medium</MenuItem><MenuItem value="High">High</MenuItem>
           </TextField>
@@ -109,7 +109,7 @@ export function TicketForm({ projects, onClose, onSubmit, busy }: {
       <DialogActions sx={{ p: 2 }}>
         <Button onClick={onClose}>Cancel</Button>
         <Button variant="contained" disabled={!canSubmit || busy} startIcon={busy ? <CircularProgress size={16} /> : <AddIcon />}
-          onClick={() => onSubmit({ title: title.trim(), description: description.trim(), projectId, phase: phase || null, assignedTo, priority })}>
+          onClick={() => onSubmit({ title: title.trim(), description: description.trim(), projectId, phase: phase || null, assignees, priority })}>
           {busy ? "Raising…" : "Raise ticket"}
         </Button>
       </DialogActions>
@@ -223,7 +223,9 @@ function TicketRow({ ticket, canUpdate, onUpdate }: {
                   "& .MuiChip-icon": { color: "inherit" },
                 }} />
             )}
-            <EmployeeAvatar employeeId={ticket.assignedTo} size={20} />
+            {(ticket.assignees?.length ? ticket.assignees : (ticket.assignedTo ? [ticket.assignedTo] : [])).length > 0
+              ? <EmployeeAvatarStack employeeIds={ticket.assignees?.length ? ticket.assignees : [ticket.assignedTo as string]} size={20} />
+              : <EmployeeAvatar employeeId={null} size={20} />}
           </Stack>
           <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.4 }}>
             {ticket.projectName}{ticket.phase ? ` · ${ticket.phase}` : ""} · Raised {fmt(ticket.createdAt)}

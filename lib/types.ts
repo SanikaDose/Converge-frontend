@@ -103,7 +103,7 @@ export type TaskStatus = "Not Started" | "In Progress" | "Pending Approval" | "D
 export type StatusColorKey = "green" | "amber" | "red" | "slate" | "violet" | "orange";
 export type Priority = "Low" | "Medium" | "High" | "Critical";
 
-export type TemplateTaskTuple = [name: string, dayOffset: number, duration: number];
+export type TemplateTaskTuple = [name: string, dayOffset: number, duration: number, description?: string];
 
 /** A discipline-specific phase belongs to exactly one team's workstream. */
 export type PhaseDiscipline = "Software" | "Vision" | "Automation";
@@ -123,6 +123,7 @@ export interface TemplatePhase {
 export interface TaskTemplateItem {
   id: string;
   name: string;
+  description: string;
   dayOffset: number;
   duration: number;
   order: number;
@@ -134,6 +135,17 @@ export interface PhaseTemplateItem {
   critical: boolean;
   discipline: PhaseDiscipline | null;
   tasks: TaskTemplateItem[];
+}
+
+/** One item in the signed-in user's bell feed (GET /notifications). */
+export type NotificationKind = "task" | "project" | "ticket";
+export interface NotificationItem {
+  id: string;
+  kind: NotificationKind;
+  title: string;
+  context: string;
+  projectId: string;
+  createdAt: string | null;
 }
 
 export interface HistoryEntry {

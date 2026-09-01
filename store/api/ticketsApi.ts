@@ -22,7 +22,7 @@ export const ticketsApi = baseApi.injectEndpoints({
         method: 'POST',
         body,
       }),
-      invalidatesTags: ['Tickets', 'DashboardBaseline'],
+      invalidatesTags: ['Tickets', 'DashboardBaseline', 'Notifications'],
     }),
 
     updateTicket: builder.mutation<Ticket, { id: string; patch: Partial<Ticket> }>({
@@ -65,7 +65,7 @@ export const ticketsApi = baseApi.injectEndpoints({
           optimistic.undo();
         }
       },
-      invalidatesTags: ['DashboardBaseline'],
+      invalidatesTags: ['DashboardBaseline', 'Notifications'],
     }),
   }),
 });

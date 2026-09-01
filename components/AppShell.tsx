@@ -37,10 +37,11 @@ import { TicketForm } from "./TicketsPanel";
 import { initials, avatarColor, roleCan, VIEW_ONLY_HINT } from "@/lib/data";
 import { recordNavigation } from "@/lib/navHistory";
 import { useGetProjectsQuery, useCreateProjectMutation } from "@/store/api/projectsApi";
-import { useGetTicketsQuery, useCreateTicketMutation } from "@/store/api/ticketsApi";
+import { useCreateTicketMutation } from "@/store/api/ticketsApi";
+import { useGetNotificationsQuery } from "@/store/api/notificationsApi";
 import { useAppContext } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
-import type { CreateTicketInput, ProjectIndexRow, Ticket } from "@/lib/types";
+import type { CreateTicketInput, NotificationItem, ProjectIndexRow } from "@/lib/types";
 
 const WINE_RED = "#A4243B";
 
@@ -51,51 +52,64 @@ const NAV_ITEMS = [
   { href: "/kanban", label: "Kanban", icon: ViewKanbanIcon },
 ];
 
-/** Bell icon fed by real open/in-progress tickets — no fake unread count. */
+/** Small dot icon per notification kind, keyed to the dashboard palette. */
+function KindDot({ kind }: { kind: NotificationItem["kind"] }) {
+  const color = kind === "task" ? DASHBOARD_COLORS.blue : kind === "project" ? DASHBOARD_COLORS.violet : DASHBOARD_COLORS.orange;
+  return <Box sx={{ mt: 0.65, width: 8, height: 8, borderRadius: "50%", bgcolor: color, flexShrink: 0 }} />;
+}
+
+/**
+ * Bell icon fed by the signed-in user's own assignments — tasks assigned to
+ * them, projects they lead, and tickets assigned to them (GET /notifications,
+ * scoped server-side to the token). No fake unread count: the badge is the
+ * live number of things assigned to this user.
+ */
 function NotificationsMenu() {
   const router = useRouter();
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
 
-  // Opening the bell still refetches, as it did before; the cache means
-  // this shares one request with the Tickets page rather than duplicating it.
-  const { data, refetch } = useGetTicketsQuery();
-  const tickets: Ticket[] = useMemo(() => data ?? [], [data]);
-  const load = refetch;
+  // Opening the bell refetches so a freshly assigned task/ticket shows up
+  // without a full page reload.
+  const { data, refetch } = useGetNotificationsQuery();
+  const items: NotificationItem[] = useMemo(() => data ?? [], [data]);
 
-  const open = tickets.filter(t => t.status === "Open" || t.status === "In Progress");
+  const go = (item: NotificationItem) => {
+    setAnchorEl(null);
+    if (item.kind === "ticket") router.push("/tickets");
+    else router.push(`/projects/${item.projectId}`);
+  };
 
   return (
     <>
       <Tooltip title="Notifications">
-        <IconButton size="small" onClick={(e) => { setAnchorEl(e.currentTarget); load(); }} sx={{ color: "text.secondary" }}>
-          <Badge badgeContent={open.length} color="error" max={99}>
+        <IconButton size="small" onClick={(e) => { setAnchorEl(e.currentTarget); refetch(); }} sx={{ color: "text.secondary" }}>
+          <Badge badgeContent={items.length} color="error" max={99}>
             <NotificationsNoneIcon fontSize="small" />
           </Badge>
         </IconButton>
       </Tooltip>
       <Menu anchorEl={anchorEl} open={!!anchorEl} onClose={() => setAnchorEl(null)}
-        slotProps={{ paper: { sx: { width: 320, maxHeight: 400 } } }}>
+        slotProps={{ paper: { sx: { width: 340, maxHeight: 440 } } }}>
         <Box sx={{ px: 2, py: 1 }}>
-          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Open tickets</Typography>
-          <Typography variant="caption" color="text.secondary">{open.length} need attention</Typography>
+          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Assigned to you</Typography>
+          <Typography variant="caption" color="text.secondary">
+            {items.length === 0 ? "Nothing assigned right now" : `${items.length} item${items.length === 1 ? "" : "s"}`}
+          </Typography>
         </Box>
         <Divider />
-        {open.length === 0 ? (
-          <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 2 }}>Nothing open — you're all caught up.</Typography>
+        {items.length === 0 ? (
+          <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 2 }}>You&apos;re all caught up.</Typography>
         ) : (
-          open.slice(0, 5).map(t => (
-            <MenuItem key={t.id} onClick={() => { setAnchorEl(null); router.push("/tickets"); }} sx={{ whiteSpace: "normal", alignItems: "flex-start", py: 1 }}>
+          items.slice(0, 8).map(item => (
+            <MenuItem key={item.id} onClick={() => go(item)} sx={{ whiteSpace: "normal", alignItems: "flex-start", gap: 1, py: 1 }}>
+              <KindDot kind={item.kind} />
               <Box sx={{ minWidth: 0 }}>
-                <Typography variant="body2" sx={{ fontWeight: 600 }}>#{t.seq} {t.title}</Typography>
-                <Typography variant="caption" color="text.secondary">{t.projectName}</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>{item.title}</Typography>
+                <Typography variant="caption" color="text.secondary">{item.context}</Typography>
               </Box>
             </MenuItem>
           ))
         )}
-        <Divider />
-        <MenuItem onClick={() => { setAnchorEl(null); router.push("/tickets"); }} sx={{ justifyContent: "center", color: "primary.main", fontWeight: 600 }}>
-          View all tickets
-        </MenuItem>
       </Menu>
     </>
   );

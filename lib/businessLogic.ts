@@ -40,14 +40,14 @@ export function buildTasks(startDate: string, phases: Phase[], weekOff: WeekDay[
   const tasks: Task[] = [];
   TEMPLATE.forEach((p, pi) => {
     const phase = phases[pi];
-    p.tasks.forEach(([name, offset, duration], ti) => {
+    p.tasks.forEach(([name, offset, duration, description], ti) => {
       const { plannedStart, plannedFinish } = computePlanned(startDate, offset, duration, weekOff);
       tasks.push({
         id: newId(),
         phaseId: phase.id,
         order: ti,
         name,
-        description: "",
+        description: description ?? "",
         assignedTo: null,
         assignees: [],
         priority: "Medium",

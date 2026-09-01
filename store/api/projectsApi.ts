@@ -57,7 +57,7 @@ export const projectsApi = baseApi.injectEndpoints({
         method: 'POST',
         body,
       }),
-      invalidatesTags: ['Projects', 'DashboardBaseline'],
+      invalidatesTags: ['Projects', 'DashboardBaseline', 'Notifications'],
     }),
 
     updateProject: builder.mutation<ProjectDetailData, { id: string; patch: UpdateProjectPatch }>({
@@ -66,7 +66,7 @@ export const projectsApi = baseApi.injectEndpoints({
         method: 'PATCH',
         body: patch,
       }),
-      invalidatesTags: (_result, _error, { id }) => ['Projects', 'DashboardBaseline', { type: 'Project' as const, id }],
+      invalidatesTags: (_result, _error, { id }) => ['Projects', 'DashboardBaseline', 'Notifications', { type: 'Project' as const, id }],
     }),
 
     deleteProject: builder.mutation<{ id: string }, string>({

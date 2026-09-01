@@ -181,8 +181,7 @@ function TicketRow({ ticket, canUpdate, onUpdate }: {
       expanded={expanded} onChange={() => setExpanded(v => !v)} disableGutters
       sx={{
         bgcolor: "background.paper", border: "1px solid", borderColor: "divider",
-        // Priority reads as a left edge bar; the faint wash off it keeps the
-        // cue legible without shouting on a list of a dozen rows.
+        // Priority reads as a solid left edge bar — no colour wash across the row.
         borderLeft: `3px solid ${priorityFill}`,
         borderRadius: "10px !important", overflow: "hidden",
         "&:before": { display: "none" },
@@ -197,7 +196,6 @@ function TicketRow({ ticket, canUpdate, onUpdate }: {
         expandIcon={<ExpandMoreIcon fontSize="small" />}
         sx={{
           px: 1.75, minHeight: 58,
-          background: `linear-gradient(90deg, ${tint(priorityFill, 7)}, transparent 45%)`,
           "& .MuiAccordionSummary-content": { display: "flex", alignItems: "center", gap: 1.5, minWidth: 0, my: 1, flexWrap: "wrap" },
         }}
       >
@@ -233,7 +231,9 @@ function TicketRow({ ticket, canUpdate, onUpdate }: {
           </Typography>
         </Box>
         <Box onClick={(e) => e.stopPropagation()} sx={{ flexShrink: 0 }}>
-          {canUpdate ? (
+          {/* A Closed ticket is final — show a read-only chip, never the
+              editable dropdown, so it can't be reopened. */}
+          {canUpdate && ticket.status !== "Closed" ? (
             <Select size="small" value={ticket.status} onChange={(e: SelectChangeEvent) => onUpdate(ticket.id, { status: e.target.value as TicketStatus })}
               MenuProps={{ onClick: (e) => e.stopPropagation() }}
               sx={{
@@ -466,13 +466,13 @@ export function TicketsPanel({ actor, projects, refreshKey, onChanged }: {
       bgcolor: "background.paper", border: "1px solid", borderColor: "divider",
       borderRadius: 3, mb: 2.5, overflow: "hidden",
     }}>
-      {/* Titled header band — a tinted strip and an icon tile give the panel a
-          top edge to sit under, instead of a heading floating on flat paper. */}
+      {/* Titled header band — a flat tinted strip and an icon tile give the panel
+          a top edge to sit under, instead of a heading floating on flat paper. */}
       <Stack
         direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1.5}
         sx={{
           px: 2.25, py: 1.75, borderBottom: "1px solid", borderColor: "divider",
-          background: `linear-gradient(135deg, ${tint(STATUS_HEX.red, 9)}, ${tint(STATUS_HEX.violet, 6)} 55%, transparent)`,
+          bgcolor: tint(STATUS_HEX.red, 6),
         }}
       >
         <Stack direction="row" alignItems="center" gap={1.5} sx={{ minWidth: 0 }}>
@@ -539,7 +539,7 @@ export function TicketsPanel({ actor, projects, refreshKey, onChanged }: {
                 }}>
                 <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{
                   px: 2, minHeight: 56,
-                  background: `linear-gradient(90deg, ${tint(hex, count ? 11 : 0)}, transparent 55%)`,
+                  bgcolor: count ? tint(hex, 8) : "transparent",
                   "& .MuiAccordionSummary-content": { alignItems: "center", my: 1 },
                 }}>
                   <Stack direction="row" spacing={1.25} alignItems="center">

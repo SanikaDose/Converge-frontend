@@ -16,6 +16,7 @@ import Collapse from "@mui/material/Collapse";
 import { alpha } from "@mui/material/styles";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
+import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import UnfoldMoreIcon from "@mui/icons-material/UnfoldMore";
 import UnfoldLessIcon from "@mui/icons-material/UnfoldLess";
@@ -26,6 +27,7 @@ import { DASHBOARD_COLORS } from "@/lib/theme";
 import {
   useGetProjectTemplateQuery,
   useAddTemplateTaskMutation,
+  useReorderTemplateTasksMutation,
   useUpdateTemplateTaskMutation,
   useDeleteTemplateTaskMutation,
 } from "@/store/api/projectTemplatesApi";
@@ -52,35 +54,85 @@ function splitPhaseName(name: string) {
 }
 
 /** One editable task row — commits a field on blur only if it changed. */
-function TaskRow({ task, canEdit, accent, onSave, onDelete }: {
+function TaskRow({ task, canEdit, accent, onSave, onDelete, drag }: {
   task: TaskTemplateItem;
   canEdit: boolean;
   accent: string;
-  onSave: (patch: { name?: string; dayOffset?: number; duration?: number }) => void;
+  onSave: (patch: { name?: string; description?: string; dayOffset?: number; duration?: number }) => void;
   onDelete: () => void;
+  drag?: {
+    dragging: boolean;
+    dropEdge: "top" | "bottom" | null;
+    onDragStart: () => void;
+    onDragEnter: () => void;
+    onDragEnd: () => void;
+    onDrop: () => void;
+  };
 }) {
   const [name, setName] = useState(task.name);
+  const [description, setDescription] = useState(task.description ?? "");
   const [dayOffset, setDayOffset] = useState(String(task.dayOffset));
   const [duration, setDuration] = useState(String(task.duration));
 
   useEffect(() => { setName(task.name); }, [task.name]);
+  useEffect(() => { setDescription(task.description ?? ""); }, [task.description]);
   useEffect(() => { setDayOffset(String(task.dayOffset)); }, [task.dayOffset]);
   useEffect(() => { setDuration(String(task.duration)); }, [task.duration]);
 
   const numSx = { width: 84, "& input": { textAlign: "center" as const } };
+  const dropLine = { content: '""', position: "absolute" as const, left: 8, right: 8, height: 2, borderRadius: 2, bgcolor: accent };
   return (
-    <Stack direction="row" gap={1} alignItems="center" sx={{
-      py: 0.75, px: 1, borderRadius: 1.5,
-      "&:hover": { bgcolor: "action.hover" },
-      transition: "background-color .12s ease",
-    }}>
-      <Box sx={{ width: 4, alignSelf: "stretch", borderRadius: 2, bgcolor: alpha(accent, 0.5), flexShrink: 0, my: 0.25 }} />
-      <TextField
-        size="small" value={name} disabled={!canEdit} fullWidth variant="standard"
-        onChange={(e) => setName(e.target.value)}
-        onBlur={() => { const v = name.trim(); if (v && v !== task.name) onSave({ name: v }); else setName(task.name); }}
-        slotProps={{ input: { disableUnderline: !canEdit }, htmlInput: { style: { fontSize: 13, fontWeight: 500 } } }}
-      />
+    <Stack direction="row" gap={1} alignItems="flex-start"
+      onDragOver={drag ? (e) => { e.preventDefault(); drag.onDragEnter(); } : undefined}
+      onDrop={drag ? (e) => { e.preventDefault(); drag.onDrop(); } : undefined}
+      sx={{
+        position: "relative",
+        py: 0.75, px: 1, borderRadius: 1.5,
+        opacity: drag?.dragging ? 0.4 : 1,
+        "&:hover": { bgcolor: "action.hover" },
+        transition: "background-color .12s ease, opacity .12s ease",
+        ...(drag?.dropEdge === "top" ? { "&::before": { ...dropLine, top: -1 } } : {}),
+        ...(drag?.dropEdge === "bottom" ? { "&::after": { ...dropLine, bottom: -1 } } : {}),
+      }}>
+      {canEdit ? (
+        <Tooltip title="Drag to reorder">
+          <Box
+            draggable
+            onDragStart={(e) => {
+              // Firefox won't start a drag unless dataTransfer carries something.
+              e.dataTransfer.effectAllowed = "move";
+              e.dataTransfer.setData("text/plain", task.id);
+              drag?.onDragStart();
+            }}
+            onDragEnd={drag?.onDragEnd}
+            sx={{
+              display: "flex", alignItems: "center", alignSelf: "stretch", flexShrink: 0,
+              cursor: "grab", color: "text.disabled", "&:active": { cursor: "grabbing" },
+              "&:hover": { color: accent }, ml: "-4px", touchAction: "none",
+            }}
+          >
+            <DragIndicatorIcon sx={{ fontSize: 18 }} />
+          </Box>
+        </Tooltip>
+      ) : (
+        <Box sx={{ width: 4, alignSelf: "stretch", borderRadius: 2, bgcolor: alpha(accent, 0.5), flexShrink: 0, my: 0.25 }} />
+      )}
+      <Stack sx={{ flex: 1, minWidth: 0 }} gap={0.25}>
+        <TextField
+          size="small" value={name} disabled={!canEdit} fullWidth variant="standard"
+          onChange={(e) => setName(e.target.value)}
+          onBlur={() => { const v = name.trim(); if (v && v !== task.name) onSave({ name: v }); else setName(task.name); }}
+          slotProps={{ input: { disableUnderline: !canEdit }, htmlInput: { style: { fontSize: 13, fontWeight: 500 } } }}
+        />
+        <TextField
+          size="small" value={description} disabled={!canEdit} fullWidth multiline variant="standard"
+          placeholder={canEdit ? "Add a description…" : ""}
+          onChange={(e) => setDescription(e.target.value)}
+          onBlur={() => { const v = description.trim(); if (v !== (task.description ?? "")) onSave({ description: v }); else setDescription(task.description ?? ""); }}
+          slotProps={{ input: { disableUnderline: !canEdit }, htmlInput: { style: { fontSize: 12 } } }}
+          sx={{ "& textarea": { color: "text.secondary" } }}
+        />
+      </Stack>
       <TextField
         size="small" type="number" value={dayOffset} disabled={!canEdit} sx={numSx}
         slotProps={{ htmlInput: { min: 0, style: { fontSize: 13 } } }}
@@ -106,20 +158,26 @@ function TaskRow({ task, canEdit, accent, onSave, onDelete }: {
 }
 
 /** Inline "add task" form under each phase. */
-function AddTaskRow({ canEdit, onAdd }: { canEdit: boolean; onAdd: (t: { name: string; dayOffset: number; duration: number }) => void }) {
+function AddTaskRow({ canEdit, onAdd }: { canEdit: boolean; onAdd: (t: { name: string; description: string; dayOffset: number; duration: number }) => void }) {
   const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
   const [dayOffset, setDayOffset] = useState("0");
   const [duration, setDuration] = useState("1");
   const valid = name.trim() && Number(dayOffset) >= 0 && Number(duration) >= 1;
-  const submit = () => { if (!valid) return; onAdd({ name: name.trim(), dayOffset: Number(dayOffset), duration: Number(duration) }); setName(""); setDayOffset("0"); setDuration("1"); };
+  const submit = () => { if (!valid) return; onAdd({ name: name.trim(), description: description.trim(), dayOffset: Number(dayOffset), duration: Number(duration) }); setName(""); setDescription(""); setDayOffset("0"); setDuration("1"); };
   if (!canEdit) return null;
   const numSx = { width: 84, "& input": { textAlign: "center" as const } };
   return (
-    <Stack direction="row" gap={1} alignItems="center" sx={{ mt: 1, pt: 1.25, px: 1, borderTop: "1px dashed", borderColor: "divider" }}>
-      <AddIcon sx={{ fontSize: 16, color: "text.disabled", ml: "-2px" }} />
-      <TextField size="small" placeholder="Add a task…" value={name} fullWidth variant="standard"
-        onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
-        slotProps={{ htmlInput: { style: { fontSize: 13 } } }} />
+    <Stack direction="row" gap={1} alignItems="flex-start" sx={{ mt: 1, pt: 1.25, px: 1, borderTop: "1px dashed", borderColor: "divider" }}>
+      <AddIcon sx={{ fontSize: 16, color: "text.disabled", ml: "-2px", mt: 0.5 }} />
+      <Stack sx={{ flex: 1, minWidth: 0 }} gap={0.25}>
+        <TextField size="small" placeholder="Add a task…" value={name} fullWidth variant="standard"
+          onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
+          slotProps={{ htmlInput: { style: { fontSize: 13 } } }} />
+        <TextField size="small" placeholder="Description (optional)" value={description} fullWidth multiline variant="standard"
+          onChange={(e) => setDescription(e.target.value)}
+          slotProps={{ htmlInput: { style: { fontSize: 12 } } }} sx={{ "& textarea": { color: "text.secondary" } }} />
+      </Stack>
       <TextField size="small" type="number" value={dayOffset} sx={numSx}
         slotProps={{ htmlInput: { min: 0, style: { fontSize: 13 } } }} onChange={(e) => setDayOffset(e.target.value)} />
       <TextField size="small" type="number" value={duration} sx={numSx}
@@ -130,17 +188,37 @@ function AddTaskRow({ canEdit, onAdd }: { canEdit: boolean; onAdd: (t: { name: s
 }
 
 /** A collapsible phase card. */
-function PhaseCard({ phase, canEdit, expanded, onToggle, onAdd, onSave, onDelete }: {
+function PhaseCard({ phase, canEdit, expanded, onToggle, onAdd, onSave, onDelete, onReorder }: {
   phase: PhaseTemplateItem;
   canEdit: boolean;
   expanded: boolean;
   onToggle: () => void;
-  onAdd: (t: { name: string; dayOffset: number; duration: number }) => void;
-  onSave: (taskId: string, patch: { name?: string; dayOffset?: number; duration?: number }) => void;
+  onAdd: (t: { name: string; description: string; dayOffset: number; duration: number }) => void;
+  onSave: (taskId: string, patch: { name?: string; description?: string; dayOffset?: number; duration?: number }) => void;
   onDelete: (taskId: string) => void;
+  onReorder: (taskIds: string[]) => void;
 }) {
   const accent = accentFor(phase.discipline);
   const { num, title } = splitPhaseName(phase.name);
+
+  // Drag-to-reorder state, scoped to this phase's task list.
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [overIndex, setOverIndex] = useState<number | null>(null);
+
+  const commitReorder = (targetIndex: number) => {
+    const from = dragIndex;
+    setDragIndex(null);
+    setOverIndex(null);
+    if (from === null || from === targetIndex) return;
+    const ids = phase.tasks.map((t) => t.id);
+    const moved = ids[from];
+    // Drop after the target when moving down, before it when moving up — the
+    // insertion point the drop-line already showed the user.
+    const rest = ids.filter((id) => id !== moved);
+    const insertAt = rest.indexOf(ids[targetIndex]) + (from < targetIndex ? 1 : 0);
+    rest.splice(insertAt, 0, moved);
+    onReorder(rest);
+  };
   return (
     <Paper variant="outlined" sx={{ borderRadius: 2, overflow: "hidden", borderLeft: "3px solid", borderLeftColor: accent }}>
       <Stack direction="row" alignItems="center" gap={1.5} onClick={onToggle}
@@ -162,15 +240,25 @@ function PhaseCard({ phase, canEdit, expanded, onToggle, onAdd, onSave, onDelete
       <Collapse in={expanded} unmountOnExit>
         <Box sx={{ px: 2, pb: 1.75, pt: 0.5 }}>
           <Stack direction="row" gap={1} sx={{ px: 1, pb: 0.5, color: "text.secondary" }}>
-            <Box sx={{ width: 4, flexShrink: 0 }} />
+            <Box sx={{ width: canEdit ? 18 : 4, flexShrink: 0 }} />
             <Typography variant="caption" sx={{ flex: 1, fontWeight: 700, textTransform: "uppercase", fontSize: 10, letterSpacing: 0.4 }}>Task</Typography>
             <Typography variant="caption" sx={{ width: 84, textAlign: "center", fontWeight: 700, textTransform: "uppercase", fontSize: 10, letterSpacing: 0.4 }}>Day</Typography>
             <Typography variant="caption" sx={{ width: 84, textAlign: "center", fontWeight: 700, textTransform: "uppercase", fontSize: 10, letterSpacing: 0.4 }}>Days</Typography>
             <Box sx={{ width: 34, flexShrink: 0 }} />
           </Stack>
-          {phase.tasks.map((task) => (
+          {phase.tasks.map((task, index) => (
             <TaskRow key={task.id} task={task} canEdit={canEdit} accent={accent}
-              onSave={(patch) => onSave(task.id, patch)} onDelete={() => onDelete(task.id)} />
+              onSave={(patch) => onSave(task.id, patch)} onDelete={() => onDelete(task.id)}
+              drag={canEdit && phase.tasks.length > 1 ? {
+                dragging: dragIndex === index,
+                dropEdge: overIndex === index && dragIndex !== null && dragIndex !== index
+                  ? (dragIndex < index ? "bottom" : "top")
+                  : null,
+                onDragStart: () => setDragIndex(index),
+                onDragEnter: () => setOverIndex(index),
+                onDragEnd: () => { setDragIndex(null); setOverIndex(null); },
+                onDrop: () => commitReorder(index),
+              } : undefined} />
           ))}
           <AddTaskRow canEdit={canEdit} onAdd={onAdd} />
         </Box>
@@ -192,6 +280,7 @@ export function TemplateManager() {
   const [addTask] = useAddTemplateTaskMutation();
   const [updateTask] = useUpdateTemplateTaskMutation();
   const [deleteTask] = useDeleteTemplateTaskMutation();
+  const [reorderTasks] = useReorderTemplateTasksMutation();
   const [error, setError] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
@@ -249,6 +338,7 @@ export function TemplateManager() {
               onAdd={(t) => run(addTask({ phaseId: phase.id, ...t }).unwrap())}
               onSave={(taskId, patch) => run(updateTask({ taskId, ...patch }).unwrap())}
               onDelete={(taskId) => run(deleteTask({ taskId }).unwrap())}
+              onReorder={(taskIds) => run(reorderTasks({ phaseId: phase.id, taskIds }).unwrap())}
             />
           ))}
         </Stack>

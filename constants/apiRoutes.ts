@@ -40,6 +40,7 @@ export const apiRoutes = {
     root: 'project-templates',
     get: '',
     addTask: (phaseId: string) => `phases/${phaseId}/tasks`,
+    reorderTasks: (phaseId: string) => `phases/${phaseId}/tasks/reorder`,
     updateTask: (taskId: string) => `tasks/${taskId}`,
     deleteTask: (taskId: string) => `tasks/${taskId}`,
   },
@@ -57,6 +58,11 @@ export const apiRoutes = {
   dashboard: {
     root: 'dashboard-summary',
     getSummary: '',
+  },
+
+  notifications: {
+    root: 'notifications',
+    getList: '',
   },
 } as const;
 

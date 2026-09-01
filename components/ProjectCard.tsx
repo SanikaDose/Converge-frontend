@@ -42,7 +42,10 @@ export function ProjectCard({ project, onOpen }: { project: ProjectWithLiveStats
             {project.name}
           </Typography>
           <Stack direction="row" spacing={0.6} alignItems="center" sx={{ mt: 0.5, color: "text.secondary" }}>
-            <BusinessIcon sx={{ fontSize: 13 }} /><Typography variant="caption">{project.customer}</Typography>
+            <BusinessIcon sx={{ fontSize: 13 }} />
+            <Typography variant="caption" noWrap sx={{ pr: 3 }}>
+              {project.customer}{project.location ? ` · ${project.location}` : ""}
+            </Typography>
           </Stack>
           {/* Project lead / team manager. */}
           <Stack direction="row" spacing={0.6} alignItems="center" sx={{ mt: 0.35, color: "text.secondary" }}>
@@ -54,7 +57,9 @@ export function ProjectCard({ project, onOpen }: { project: ProjectWithLiveStats
         </Box>
         {/* Nudged below the absolutely-positioned arrow button (top:8, ~34px tall) so its top-right edge doesn't sit under it. */}
         <Box sx={{ mt: 3.5, flexShrink: 0 }}>
-          <CompletionRing pct={project.pct} />
+          {/* Ring colour reflects status: green when fully complete, red when
+              the project has overdue work, otherwise the default amber. */}
+          <CompletionRing pct={project.pct} color={project.pct >= 100 ? "green" : delayed ? "red" : "amber"} />
         </Box>
       </Stack>
 

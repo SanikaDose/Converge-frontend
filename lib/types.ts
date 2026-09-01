@@ -297,6 +297,7 @@ export interface ProjectIndexRow {
   name: string;
   type: ProjectType;
   customer: string;
+  location: string | null;
   owner: string | null;
   startDate: string;
   endDate: string;

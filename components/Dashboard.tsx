@@ -232,15 +232,39 @@ export function Dashboard({ actor, onOpen }: {
   // that date. No fabricated numbers — derived entirely from stored task
   // completion dates.
   const trendPoints = useMemo(() => {
-    const cfg = TREND_RANGE_CONFIG[trendRange];
     const totalTasks = projects.reduce((a, p) => a + (p.taskLite?.length || 0), 0);
     if (!totalTasks) return [];
-    const out: { label: string; value: number }[] = [];
-    for (let i = cfg.points - 1; i >= 0; i--) {
-      const checkpoint = addDays(today, -cfg.stepDays * i);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const pctAt = (checkpoint: string) => {
       let done = 0;
       projects.forEach(p => (p.taskLite || []).forEach(t => { if (t.actualFinish && t.actualFinish <= checkpoint) done += 1; }));
-      out.push({ label: formatCheckpoint(checkpoint, cfg.fmt), value: Math.round((done / totalTasks) * 100) });
+      return Math.round((done / totalTasks) * 100);
+    };
+    const out: { label: string; value: number }[] = [];
+
+    // "This Year" = the current Indian financial year. The X-axis runs one
+    // point per month from April through the current month (future months
+    // would just be a flat line, so we stop at "now"). Each checkpoint is
+    // that month's end — today for the current month.
+    if (trendRange === "year") {
+      const [y, m] = today.split("-").map(Number);
+      const fyStartYear = m >= 4 ? y : y - 1;               // FY starts this Apr (or last Apr if Jan–Mar)
+      const monthsElapsed = (y - fyStartYear) * 12 + (m - 4); // 0 = April … up to current month
+      for (let k = 0; k <= monthsElapsed; k++) {
+        const cy = fyStartYear + Math.floor((3 + k) / 12);   // April is 0-based month 3
+        const cm = ((3 + k) % 12) + 1;
+        const monthEnd = `${cy}-${pad(cm)}-${pad(new Date(Date.UTC(cy, cm, 0)).getUTCDate())}`;
+        const checkpoint = monthEnd > today ? today : monthEnd;
+        out.push({ label: formatCheckpoint(`${cy}-${pad(cm)}-01`, { month: "short" }), value: pctAt(checkpoint) });
+      }
+      return out;
+    }
+
+    // Month / Quarter: rolling checkpoints back from today.
+    const cfg = TREND_RANGE_CONFIG[trendRange];
+    for (let i = cfg.points - 1; i >= 0; i--) {
+      const checkpoint = addDays(today, -cfg.stepDays * i);
+      out.push({ label: formatCheckpoint(checkpoint, cfg.fmt), value: pctAt(checkpoint) });
     }
     return out;
   }, [projects, today, trendRange]);

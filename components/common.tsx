@@ -12,6 +12,7 @@ import AvatarGroup from "@mui/material/AvatarGroup";
 import FormControl from "@mui/material/FormControl";
 import InputLabel from "@mui/material/InputLabel";
 import Select from "@mui/material/Select";
+import OutlinedInput from "@mui/material/OutlinedInput";
 import Checkbox from "@mui/material/Checkbox";
 import ListItemText from "@mui/material/ListItemText";
 import FormControlLabel from "@mui/material/FormControlLabel";
@@ -193,20 +194,24 @@ export function OrgMultiSelect({ label, value, onChange, size = "small", fullWid
 }) {
   const { teams, employeeById } = useOrgContext();
   const selected = value || [];
+  const labelId = React.useId();
   return (
     <FormControl fullWidth={fullWidth} size={size} disabled={disabled}>
-      {label && <InputLabel>{label}</InputLabel>}
+      {/* shrink + a notched OutlinedInput keeps the floating label from
+          overlapping the "Unassigned" placeholder that displayEmpty shows. */}
+      {label && <InputLabel id={labelId} shrink>{label}</InputLabel>}
       <Select
         multiple
+        labelId={label ? labelId : undefined}
         value={selected}
-        label={label || undefined}
+        input={<OutlinedInput label={label || undefined} notched={!!label} />}
         onChange={(e) => {
           const v = e.target.value;
           onChange(typeof v === "string" ? v.split(",") : v);
         }}
         renderValue={(ids) => {
           const arr = ids as string[];
-          if (!arr.length) return <Typography variant="body2" color="text.secondary">Unassigned</Typography>;
+          if (!arr.length) return <Box component="span" sx={{ color: "text.secondary" }}>Unassigned</Box>;
           return arr.map(id => employeeById[id]?.name ?? "—").join(", ");
         }}
         displayEmpty

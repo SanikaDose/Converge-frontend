@@ -34,7 +34,7 @@ import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutlineOutlined";
 import ChecklistIcon from "@mui/icons-material/Checklist";
 import ConfirmationNumberIcon from "@mui/icons-material/ConfirmationNumberOutlined";
 import { OrgSelect, OrgMultiSelect, StatusChip, EmployeeAvatar, EmployeeAvatarStack } from "./common";
-import { TEMPLATE, roleCan, genId, VIEW_ONLY_HINT } from "@/lib/data";
+import { roleCan, genId, VIEW_ONLY_HINT } from "@/lib/data";
 import { fmt } from "@/lib/dateUtils";
 import { useGetTicketsQuery, useCreateTicketMutation, useUpdateTicketMutation } from "@/store/api/ticketsApi";
 import { useStatusHex, DASHBOARD_COLORS } from "@/lib/theme";
@@ -79,7 +79,6 @@ export function TicketForm({ projects, onClose, onSubmit, busy }: {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [projectId, setProjectId] = useState(projects[0]?.id || "");
-  const [phase, setPhase] = useState("");
   const [assignees, setAssignees] = useState<string[]>([]);
   const [priority, setPriority] = useState<Priority>("Medium");
   const canSubmit = title.trim() && projectId;
@@ -95,10 +94,6 @@ export function TicketForm({ projects, onClose, onSubmit, busy }: {
         <TextField select label="Project" value={projectId} onChange={(e) => setProjectId(e.target.value)} fullWidth>
           {projects.map(p => <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>)}
         </TextField>
-        <TextField select label="Phase (optional)" value={phase} onChange={(e) => setPhase(e.target.value)} fullWidth>
-          <MenuItem value="">No specific phase — applies to whole project</MenuItem>
-          {TEMPLATE.map(p => <MenuItem key={p.phase} value={p.phase}>{p.phase}</MenuItem>)}
-        </TextField>
         <Stack direction="row" spacing={2}>
           <OrgMultiSelect label="Assign to" value={assignees} onChange={setAssignees} size="medium" />
           <TextField select label="Priority" value={priority} onChange={(e) => setPriority(e.target.value as Priority)} fullWidth>
@@ -109,8 +104,49 @@ export function TicketForm({ projects, onClose, onSubmit, busy }: {
       <DialogActions sx={{ p: 2 }}>
         <Button onClick={onClose}>Cancel</Button>
         <Button variant="contained" disabled={!canSubmit || busy} startIcon={busy ? <CircularProgress size={16} /> : <AddIcon />}
-          onClick={() => onSubmit({ title: title.trim(), description: description.trim(), projectId, phase: phase || null, assignees, priority })}>
+          onClick={() => onSubmit({ title: title.trim(), description: description.trim(), projectId, phase: null, assignees, priority })}>
           {busy ? "Raising…" : "Raise ticket"}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+/**
+ * Edit an already-raised ticket — mainly to re-assign it (add/remove people)
+ * later, but title, description and priority are editable too. The project
+ * isn't changeable here: a ticket belongs to the project it was raised against.
+ */
+function EditTicketDialog({ ticket, onClose, onSave }: {
+  ticket: Ticket;
+  onClose: () => void;
+  onSave: (patch: Partial<Ticket>) => void;
+}) {
+  const [title, setTitle] = useState(ticket.title);
+  const [description, setDescription] = useState(ticket.description || "");
+  const [assignees, setAssignees] = useState<string[]>(ticket.assignees ?? []);
+  const [priority, setPriority] = useState<Priority>(ticket.priority);
+  const canSave = title.trim().length > 0;
+
+  return (
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Edit ticket #{ticket.seq}</DialogTitle>
+      <DialogContent dividers sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <TextField label="Problem / title" value={title} onChange={(e) => setTitle(e.target.value)} fullWidth />
+        <TextField label="Description" value={description} onChange={(e) => setDescription(e.target.value)} fullWidth
+          multiline minRows={3} />
+        <Stack direction="row" spacing={2}>
+          <OrgMultiSelect label="Assign to" value={assignees} onChange={setAssignees} size="medium" />
+          <TextField select label="Priority" value={priority} onChange={(e) => setPriority(e.target.value as Priority)} fullWidth>
+            <MenuItem value="Low">Low</MenuItem><MenuItem value="Medium">Medium</MenuItem><MenuItem value="High">High</MenuItem>
+          </TextField>
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ p: 2 }}>
+        <Button onClick={onClose}>Cancel</Button>
+        <Button variant="contained" disabled={!canSave}
+          onClick={() => onSave({ title: title.trim(), description: description.trim(), assignees, priority })}>
+          Save changes
         </Button>
       </DialogActions>
     </Dialog>
@@ -135,6 +171,7 @@ function TicketRow({ ticket, canUpdate, onUpdate, focus }: {
   const color = TICKET_STATUS_COLOR[ticket.status];
   const [expanded, setExpanded] = useState(false);
   const [highlight, setHighlight] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
 
   // When this row is the deep-link target, expand it and pulse a ring that
   // fades after a couple of seconds so the eye lands on the right ticket.
@@ -244,11 +281,20 @@ function TicketRow({ ticket, canUpdate, onUpdate, focus }: {
               : <EmployeeAvatar employeeId={null} size={20} />}
           </Stack>
           <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.4 }}>
-            {ticket.projectName}{ticket.phase ? ` · ${ticket.phase}` : ""} · Raised {fmt(ticket.createdAt)}
+            {ticket.projectName} · Raised {fmt(ticket.createdAt)}
             {ticket.resolvedAt ? ` · ${ticket.status === "Closed" ? "Closed" : "Resolved"} ${fmt(ticket.resolvedAt)}` : ""}
           </Typography>
         </Box>
-        <Box onClick={(e) => e.stopPropagation()} sx={{ flexShrink: 0 }}>
+        <Box onClick={(e) => e.stopPropagation()} sx={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 0.5 }}>
+          {/* Edit (re-assign people, retitle, re-prioritise). A Closed ticket
+              is final, so no edits once closed. */}
+          {canUpdate && ticket.status !== "Closed" && (
+            <Tooltip title="Edit ticket">
+              <IconButton size="small" onClick={() => setEditOpen(true)} sx={{ color: "text.secondary" }}>
+                <EditIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
           {/* A Closed ticket is final — show a read-only chip, never the
               editable dropdown, so it can't be reopened. */}
           {canUpdate && ticket.status !== "Closed" ? (
@@ -265,6 +311,14 @@ function TicketRow({ ticket, canUpdate, onUpdate, focus }: {
           ) : <StatusChip label={ticket.status} color={color} />}
         </Box>
       </AccordionSummary>
+
+      {editOpen && (
+        <EditTicketDialog
+          ticket={ticket}
+          onClose={() => setEditOpen(false)}
+          onSave={(patch) => { onUpdate(ticket.id, patch); setEditOpen(false); }}
+        />
+      )}
 
       <AccordionDetails sx={{ px: 1.75, pt: 0, pb: 2 }}>
         <TextField

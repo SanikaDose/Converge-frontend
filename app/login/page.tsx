@@ -30,7 +30,7 @@ const NAVY_GRADIENT = "linear-gradient(150deg, #0F172A 0%, #1E3A5F 100%)";
 export default function LoginPage() {
   const router = useRouter();
   const { signIn } = useAuth();
-  const [employeeCode, setEmployeeCode] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,11 +38,11 @@ export default function LoginPage() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (busy || !employeeCode.trim() || !password) return;
+    if (busy || !email.trim() || !password) return;
     setBusy(true);
     setError(null);
     try {
-      await signIn(employeeCode, password);
+      await signIn(email, password);
       router.replace("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign in failed. Please try again.");
@@ -95,9 +95,9 @@ export default function LoginPage() {
           {error && <Alert severity="error" sx={{ mb: 2.5 }}>{error}</Alert>}
 
           <TextField
-            label="Employee ID" fullWidth required autoFocus autoComplete="username" size="medium"
-            value={employeeCode} onChange={(e) => setEmployeeCode(e.target.value)}
-            placeholder="e.g. SD003" disabled={busy} sx={{ mb: 3, "& .MuiInputBase-input": { py: 1.85 } }}
+            label="Email" type="email" fullWidth required autoFocus autoComplete="email" size="medium"
+            value={email} onChange={(e) => setEmail(e.target.value)}
+            placeholder="e.g. sanikad@elansoltech.com" disabled={busy} sx={{ mb: 3, "& .MuiInputBase-input": { py: 1.85 } }}
             slotProps={{
               inputLabel: { shrink: true },
               input: {
@@ -140,7 +140,7 @@ export default function LoginPage() {
 
           <Button
             type="submit" variant="contained" fullWidth size="large"
-            disabled={busy || !employeeCode.trim() || !password}
+            disabled={busy || !email.trim() || !password}
             startIcon={busy ? <CircularProgress size={16} color="inherit" /> : null}
             sx={{
               py: 1.7, letterSpacing: 1.2, textTransform: "uppercase", fontSize: 14.5,

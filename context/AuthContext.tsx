@@ -9,7 +9,7 @@ interface AuthContextValue {
   user: AuthedUser | null;
   /** False until the stored session has been read — guards must wait on this. */
   ready: boolean;
-  signIn: (employeeCode: string, password: string) => Promise<void>;
+  signIn: (email: string, password: string) => Promise<void>;
   signOut: () => void;
   /**
    * Replaces the cached profile after the user edits it (see the profile
@@ -73,8 +73,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // `.unwrap()` re-throws the rejection so the login form's existing
   // try/catch and error banner keep working unchanged — RTK Query
   // otherwise resolves with an { error } object rather than throwing.
-  const signIn = useCallback(async (employeeCode: string, password: string) => {
-    const { accessToken, ...profile } = await loginMutation({ employeeCode, password }).unwrap();
+  const signIn = useCallback(async (email: string, password: string) => {
+    const { accessToken, ...profile } = await loginMutation({ email, password }).unwrap();
     // Token first: a render triggered by setUser can fire a data query, and
     // that query needs the header already available.
     setToken(accessToken);

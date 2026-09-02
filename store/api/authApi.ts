@@ -17,7 +17,7 @@ import type {
  */
 export const authApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
-    login: builder.mutation<LoginResponse, { employeeCode: string; password: string }>({
+    login: builder.mutation<LoginResponse, { email: string; password: string }>({
       query: (body) => ({
         url: routePath(apiRoutes.auth.root, apiRoutes.auth.login),
         method: 'POST',

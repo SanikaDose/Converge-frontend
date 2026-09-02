@@ -68,7 +68,9 @@ export function ProjectCard({ project, onOpen }: { project: ProjectWithLiveStats
       </Stack>
 
       <Stack direction="row" spacing={0.4} sx={{ mt: 2 }}>
-        {(project.phases || []).map((p, i) => (
+        {/* Not-required phases are out of scope — they're already excluded from
+            pct/completed, so keep them out of this progress bar too. */}
+        {(project.phases || []).filter(p => !p.notRequired).map((p, i) => (
           <Box key={i} title={`${p.name} — ${p.completed}/${p.total} done`} sx={{
             flex: 1, height: 6, borderRadius: 0.5,
             bgcolor: p.color === "slate" ? "divider" : DASHBOARD_COLORS[p.color],

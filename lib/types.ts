@@ -59,6 +59,8 @@ export interface AuthedUser {
   id: string;
   name: string;
   employeeCode: string;
+  /** Login identifier now — the email the user signs in with. */
+  email: string;
   /** Org job title, e.g. "Admin". */
   role: OrgRole;
   /** Application access role — drives `roleCan()`. */

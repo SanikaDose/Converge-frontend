@@ -44,7 +44,7 @@ export function DeleteProjectDialog({ projectId, projectName, onClose, onDeleted
     setBusy(true);
     setError(null);
     try {
-      await loginMutation({ employeeCode: user.employeeCode, password }).unwrap();
+      await loginMutation({ email: user.email, password }).unwrap();
     } catch {
       setError("Incorrect password.");
       setBusy(false);

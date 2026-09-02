@@ -504,7 +504,7 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
               {activePhaseRow && (
                 <PhaseTaskPanel
                   phase={activePhaseRow} tasks={activeTasks} projectStartDate={detail.meta.startDate} today={today} weekOff={detail.meta.weekOff}
-                  canEdit={canEditTask} canManage={canManagePhases} canApprove={canApprove}
+                  canEdit={canEditTask} canManage={canManagePhases} canApprove={canApprove} selfId={actor.id}
                   onUpdateTask={handleStatusChange}
                   onOpenEditor={setEditingTask} onOpenHistory={setHistoryTask}
                   onDeleteTask={handleDeleteTask} onApprove={handleApprove} onReject={handleReject}

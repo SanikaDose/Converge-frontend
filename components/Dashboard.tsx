@@ -221,10 +221,12 @@ export function Dashboard({ actor, onOpen }: {
     return counts;
   }, [projects, today]);
 
+  // Match the project-card completion rings: On Track = amber (in-progress
+  // ring), Delayed = red, Completed = green (a finished card's ring).
   const healthLegend: { key: HealthKey; color: string }[] = [
-    { key: "On Track", color: DASHBOARD_COLORS.green },
+    { key: "On Track", color: DASHBOARD_COLORS.amber },
     { key: "Delayed", color: DASHBOARD_COLORS.red },
-    { key: "Completed", color: DASHBOARD_COLORS.slate },
+    { key: "Completed", color: DASHBOARD_COLORS.green },
   ];
 
   // Real historical trend: for each checkpoint date, what % of every

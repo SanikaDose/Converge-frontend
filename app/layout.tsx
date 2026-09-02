@@ -22,18 +22,20 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>
-        {/* Outermost: OrgProvider and AuthProvider now fetch through RTK
-            Query, so the store has to exist above them. */}
+        {/* Redux store outermost (providers fetch through RTK Query). AuthProvider
+            wraps OrgProvider so the org-directory fetch can wait for a session —
+            fetching it on the login screen (no token) 401s and RTK caches the
+            error, leaving every owner/assignee name unresolved after login. */}
         <GlobalReduxProvider>
-          <OrgProvider>
-            <AuthProvider>
+          <AuthProvider>
+            <OrgProvider>
               <AppProvider>
                 <ThemeRegistry>
                   <AuthGate>{children}</AuthGate>
                 </ThemeRegistry>
               </AppProvider>
-            </AuthProvider>
-          </OrgProvider>
+            </OrgProvider>
+          </AuthProvider>
         </GlobalReduxProvider>
       </body>
     </html>

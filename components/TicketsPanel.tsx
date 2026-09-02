@@ -100,7 +100,7 @@ export function TicketForm({ projects, onClose, onSubmit, busy }: {
           {TEMPLATE.map(p => <MenuItem key={p.phase} value={p.phase}>{p.phase}</MenuItem>)}
         </TextField>
         <Stack direction="row" spacing={2}>
-          <OrgMultiSelect label="Assign to" value={assignees} onChange={setAssignees} />
+          <OrgMultiSelect label="Assign to" value={assignees} onChange={setAssignees} size="medium" />
           <TextField select label="Priority" value={priority} onChange={(e) => setPriority(e.target.value as Priority)} fullWidth>
             <MenuItem value="Low">Low</MenuItem><MenuItem value="Medium">Medium</MenuItem><MenuItem value="High">High</MenuItem>
           </TextField>
@@ -124,14 +124,27 @@ export function TicketForm({ projects, onClose, onSubmit, busy }: {
  * and behaved exactly like TaskCard's description field + "Critical
  * points" section so both features read as one consistent pattern.
  */
-function TicketRow({ ticket, canUpdate, onUpdate }: {
+function TicketRow({ ticket, canUpdate, onUpdate, focus }: {
   ticket: Ticket;
   canUpdate: boolean;
   onUpdate: (id: string, updates: Partial<Ticket>) => void;
+  /** Deep-linked from a notification — open the row and flash a highlight. */
+  focus?: boolean;
 }) {
   const STATUS_HEX = useStatusHex();
   const color = TICKET_STATUS_COLOR[ticket.status];
   const [expanded, setExpanded] = useState(false);
+  const [highlight, setHighlight] = useState(false);
+
+  // When this row is the deep-link target, expand it and pulse a ring that
+  // fades after a couple of seconds so the eye lands on the right ticket.
+  useEffect(() => {
+    if (!focus) return;
+    setExpanded(true);
+    setHighlight(true);
+    const t = setTimeout(() => setHighlight(false), 2400);
+    return () => clearTimeout(t);
+  }, [focus]);
   const [description, setDescription] = useState(ticket.description || "");
   const [newPoint, setNewPoint] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -178,6 +191,7 @@ function TicketRow({ ticket, canUpdate, onUpdate }: {
 
   return (
     <Accordion
+      id={`ticket-${ticket.id}`}
       expanded={expanded} onChange={() => setExpanded(v => !v)} disableGutters
       sx={{
         bgcolor: "background.paper", border: "1px solid", borderColor: "divider",
@@ -188,6 +202,10 @@ function TicketRow({ ticket, canUpdate, onUpdate }: {
         transition: "border-color .16s ease, box-shadow .16s ease",
         // Settled tickets recede — the eye should land on what's still open.
         opacity: settled && !expanded ? 0.82 : 1,
+        // Deep-link highlight — a temporary ring in the priority colour.
+        // Uses outline (not boxShadow) so the .Mui-expanded boxShadow rule
+        // below can't override it once the row auto-expands.
+        ...(highlight ? { outline: `2px solid ${priorityFill}`, outlineOffset: 1 } : {}),
         "&:hover": { borderColor: tint(priorityFill, 55), borderLeftColor: priorityFill, boxShadow: `0 2px 10px ${tint(priorityFill, 18)}` },
         "&.Mui-expanded": { borderColor: tint(priorityFill, 45), boxShadow: `0 3px 14px ${tint(priorityFill, 15)}` },
       }}
@@ -461,6 +479,27 @@ export function TicketsPanel({ actor, projects, refreshKey, onChanged }: {
   const openCount = byStatus.Open + byStatus["In Progress"];
   const canRaiseTicket = roleCan(role, "raiseTicket");
 
+  // Deep link from a notification: /tickets?ticket=<id>. Read it once on
+  // mount (client-only, so no useSearchParams Suspense boundary needed), then
+  // open the ticket's bucket and scroll to it once the list has loaded.
+  const [focusId, setFocusId] = useState<string | null>(null);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const id = new URLSearchParams(window.location.search).get("ticket");
+    if (id) setFocusId(id);
+  }, []);
+  useEffect(() => {
+    if (!focusId) return;
+    const t = tickets.find(x => x.id === focusId);
+    if (!t) return; // list not loaded yet, or ticket doesn't exist
+    const bucket = BUCKETS.find(b => b.match(t));
+    if (bucket) setExpanded(e => ({ ...e, [bucket.key]: true }));
+    const timer = setTimeout(() => {
+      document.getElementById(`ticket-${focusId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [focusId, tickets]);
+
   return (
     <Box sx={{
       bgcolor: "background.paper", border: "1px solid", borderColor: "divider",
@@ -558,7 +597,7 @@ export function TicketsPanel({ actor, projects, refreshKey, onChanged }: {
                     <Typography variant="body2" color="text.disabled" sx={{ py: 1.5, textAlign: "center" }}>No tickets here.</Typography>
                   ) : (
                     <Stack spacing={1}>
-                      {grouped[key].map(t => <TicketRow key={t.id} ticket={t} canUpdate={roleCan(role, "updateTicketStatus")} onUpdate={updateTicket} />)}
+                      {grouped[key].map(t => <TicketRow key={t.id} ticket={t} canUpdate={roleCan(role, "updateTicketStatus")} onUpdate={updateTicket} focus={t.id === focusId} />)}
                     </Stack>
                   )}
                 </AccordionDetails>

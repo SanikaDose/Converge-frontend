@@ -78,7 +78,7 @@ function fmtStamp(iso: string): string {
  * PhaseTaskPanel can enforce that.
  */
 export function TaskCard({
-  task, canEdit, canApprove, today, weekOff, expanded, onToggleExpand,
+  task, canEdit, canApprove, selfId = null, today, weekOff, expanded, onToggleExpand,
   onStatusChange, onOpenEditor, onOpenHistory, onDelete, onApprove, onReject,
   onCommitAssignees, onCommitOffset, onCommitDates, onCommitDescription,
   onChecklistChange, phaseBounds,
@@ -86,6 +86,8 @@ export function TaskCard({
   task: Task;
   canEdit: boolean;
   canApprove: boolean;
+  /** Current user's employee id — an assignee may change their own task's status even without full edit rights. */
+  selfId?: string | null;
   today: string;
   weekOff: WeekDay[];
   expanded: boolean;
@@ -132,6 +134,13 @@ export function TaskCard({
   const overdue = isOverdue(task, today);
   const color = STATUS_COLOR[task.status] || "slate";
   const overdueDays = overdueWorkingDays(task, today, weekOff);
+
+  // A task's assignee may update its own task's status, notes and critical-
+  // points checklist even without full edit rights — those are the fields they
+  // own day-to-day, and every change is tracked. Scheduling, owners, name and
+  // delete stay gated on canEdit (admin only).
+  const isAssignee = !!selfId && (task.assignees ?? []).includes(selfId);
+  const canContribute = canEdit || isAssignee;
   // Live lateness. A task that finished late shows the "late" badge and NOT
   // an achievement — even if a stale achievement was stored on it by the old
   // (pre-fix) logic. The two are mutually exclusive.
@@ -141,7 +150,7 @@ export function TaskCard({
   // Tasks created before the checklist existed have no array at all.
   const checklist = task.checklist ?? [];
   const checklistDone = checklist.filter(c => c.done).length;
-  const canEditChecklist = canEdit && !locked;
+  const canEditChecklist = canContribute && !locked;
 
   const outsidePhase = !!phaseBounds && (startDateLocal < phaseBounds.min || startDateLocal > phaseBounds.max);
 
@@ -295,7 +304,7 @@ export function TaskCard({
 
           <Stack direction="row" spacing={1.25} alignItems="center" sx={{ flexShrink: 0, mr: 0.5 }}>
             {task.assignees.length > 0 && <EmployeeAvatarStack employeeIds={task.assignees} size={26} />}
-            {canEdit ? (
+            {canContribute ? (
               <Box onClick={(e) => e.stopPropagation()}>
                 <Select
                   size="small"
@@ -327,9 +336,9 @@ export function TaskCard({
         <AccordionDetails sx={{ px: 2, pt: 0, pb: 2.25 }}>
           <TextField
             value={description} onChange={(e) => setDescription(e.target.value)}
-            onBlur={() => canEdit && description !== (task.description || "") && onCommitDescription(description)}
-            placeholder={canEdit ? "Add notes about this task…" : "No notes added."}
-            disabled={!canEdit} multiline minRows={1} maxRows={4} fullWidth
+            onBlur={() => canContribute && description !== (task.description || "") && onCommitDescription(description)}
+            placeholder={canContribute ? "Add notes about this task…" : "No notes added."}
+            disabled={!canContribute} multiline minRows={1} maxRows={4} fullWidth
             sx={{ mb: 2, "& .MuiInputBase-input": { fontSize: 13 } }}
           />
 

@@ -151,7 +151,7 @@ export function AddTaskDialog({ projectStartDate, projectWeekOff, onClose, onCre
  * Resequencing is done by editing a task's dates, not by dragging.
  */
 export function PhaseTaskPanel({
-  phase, tasks, today, weekOff, canEdit, canManage, canApprove,
+  phase, tasks, today, weekOff, canEdit, canManage, canApprove, selfId = null,
   onUpdateTask, onOpenEditor, onOpenHistory, onDeleteTask, onApprove, onReject,
   onAddTask, onToggleNotRequired,
   onCommitAssignees, onCommitOffset, onCommitDates, onCommitDescription,
@@ -165,6 +165,8 @@ export function PhaseTaskPanel({
   canEdit: boolean;
   canManage: boolean;
   canApprove: boolean;
+  /** Current user's employee id — lets an assignee change their own task's status. */
+  selfId?: string | null;
   onUpdateTask: (taskId: string, status: TaskStatus) => void;
   onOpenEditor: (task: Task) => void;
   onOpenHistory: (task: Task) => void;
@@ -282,7 +284,7 @@ export function PhaseTaskPanel({
         {sorted.map((t) => (
           <Box key={t.id} ref={(el: HTMLDivElement | null) => { taskRefs.current[t.id] = el; }}>
             <TaskCard
-              task={t} canEdit={canEdit} canApprove={canApprove} today={today} weekOff={weekOff}
+              task={t} canEdit={canEdit} canApprove={canApprove} selfId={selfId} today={today} weekOff={weekOff}
               expanded={expandedTaskId === t.id}
               onToggleExpand={() => setExpandedTaskId(prev => prev === t.id ? null : t.id)}
               onStatusChange={(status) => onUpdateTask(t.id, status)}

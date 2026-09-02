@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useMemo, type ReactNode } from "react";
 import { useGetEmployeesQuery } from "@/store/api/employeesApi";
+import { useAuth } from "@/context/AuthContext";
 import type { Employee, Team } from "@/lib/types";
 
 interface OrgContextValue {
@@ -27,11 +28,12 @@ const OrgContext = createContext<OrgContextValue | null>(null);
  * this context rather than the other way around.
  */
 export function OrgProvider({ children }: { children: ReactNode }) {
-  // RTK Query replaces the fetch-once effect: it dedupes across consumers,
-  // caches for the session, and handles the unmount race the old `cancelled`
-  // flag existed to guard. A failed request falls back to empty lists, same
-  // as the old .catch() did.
-  const { data, isLoading } = useGetEmployeesQuery();
+  // Wait for a session before fetching. Every endpoint requires a token, so
+  // firing this on the login screen 401s and RTK caches the error — which then
+  // never refetches, leaving the whole directory empty (owners/assignees show
+  // "—" and "?"). `skip` holds the query until sign-in, then it runs once.
+  const { user } = useAuth();
+  const { data, isLoading } = useGetEmployeesQuery(undefined, { skip: !user });
   const teams: Team[] = useMemo(() => data?.teams ?? [], [data]);
   const employees: Employee[] = useMemo(() => data?.employees ?? [], [data]);
   const loading = isLoading;

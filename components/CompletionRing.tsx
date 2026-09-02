@@ -11,10 +11,13 @@ import type { StatusColorKey } from "@/lib/types";
  * text always has room to breathe — at smaller ring sizes the old fixed
  * values left too little room and the text crowded/overlapped the ring.
  */
-export function CompletionRing({ pct, size = 56, color = "amber" }: { pct: number; size?: number; color?: StatusColorKey }) {
+export function CompletionRing({ pct, size = 56, color = "amber", hexOverride }: { pct: number; size?: number; color?: StatusColorKey; hexOverride?: string }) {
   const STATUS_HEX = useStatusHex();
   const theme = useTheme();
-  const ringColor = STATUS_HEX[color] || STATUS_HEX.amber;
+  // hexOverride wins when a caller needs an exact colour (e.g. the vivid,
+  // mode-independent DASHBOARD_COLORS amber on project cards, since the
+  // light-mode STATUS_HEX amber darkens to brown).
+  const ringColor = hexOverride || STATUS_HEX[color] || STATUS_HEX.amber;
   const bg = `conic-gradient(${ringColor} ${pct * 3.6}deg, ${theme.palette.divider} 0deg)`;
   const stroke = Math.max(4, Math.round(size * 0.12));
   const fontSize = Math.max(10, Math.round(size * 0.24));

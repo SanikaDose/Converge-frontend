@@ -75,8 +75,13 @@ function NotificationsMenu() {
 
   const go = (item: NotificationItem) => {
     setAnchorEl(null);
-    if (item.kind === "ticket") router.push("/tickets");
-    else router.push(`/projects/${item.projectId}`);
+    if (item.kind === "ticket") {
+      // item.id is "ticket:<ticketId>" — deep-link so the page opens that row.
+      const ticketId = item.id.split(":")[1];
+      router.push(ticketId ? `/tickets?ticket=${ticketId}` : "/tickets");
+    } else {
+      router.push(`/projects/${item.projectId}`);
+    }
   };
 
   return (

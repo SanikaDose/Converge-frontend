@@ -20,6 +20,10 @@ import type { ProjectWithLiveStats } from "@/lib/types";
 export function ProjectCard({ project, onOpen }: { project: ProjectWithLiveStats; onOpen: (id: string) => void }) {
   const { employeeLabel } = useOrgContext();
   const delayed = project.delayed > 0;
+  const completed = project.pct >= 100;
+  // Vivid, mode-independent palette so the ring's amber stays amber (not the
+  // light-mode brown) and matches the phase bars + the dashboard donut.
+  const ringHex = completed ? DASHBOARD_COLORS.green : delayed ? DASHBOARD_COLORS.red : DASHBOARD_COLORS.amber;
   return (
     <Box onClick={() => onOpen(project.id)} sx={{
       position: "relative",
@@ -58,8 +62,8 @@ export function ProjectCard({ project, onOpen }: { project: ProjectWithLiveStats
         {/* Nudged below the absolutely-positioned arrow button (top:8, ~34px tall) so its top-right edge doesn't sit under it. */}
         <Box sx={{ mt: 3.5, flexShrink: 0 }}>
           {/* Ring colour reflects status: green when fully complete, red when
-              the project has overdue work, otherwise the default amber. */}
-          <CompletionRing pct={project.pct} color={project.pct >= 100 ? "green" : delayed ? "red" : "amber"} />
+              the project has overdue work, otherwise the vivid amber. */}
+          <CompletionRing pct={project.pct} hexOverride={ringHex} />
         </Box>
       </Stack>
 
@@ -80,7 +84,10 @@ export function ProjectCard({ project, onOpen }: { project: ProjectWithLiveStats
         </Stack>
         {delayed
           ? <Chip label={`${project.delayed} delayed`} size="small" sx={{ bgcolor: DASHBOARD_COLORS.red, color: "#fff", fontWeight: 700 }} />
-          : <Chip label="On track" size="small" sx={{ bgcolor: DASHBOARD_COLORS.green, color: "#fff", fontWeight: 700 }} />}
+          : completed
+            // A finished project isn't "on track" — show its completed state instead.
+            ? <Chip label="Completed" size="small" sx={{ bgcolor: DASHBOARD_COLORS.green, color: "#fff", fontWeight: 700 }} />
+            : <Chip label="On track" size="small" sx={{ bgcolor: DASHBOARD_COLORS.green, color: "#fff", fontWeight: 700 }} />}
       </Stack>
 
       {project.updatedAt && (

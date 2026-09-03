@@ -20,8 +20,10 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
-      <body>
+    // suppressHydrationWarning: theme sets data-theme on <html> post-SSR and
+    // extensions mutate <html>/<body> — attribute-only diffs, safe to ignore.
+    <html lang="en" suppressHydrationWarning>
+      <body suppressHydrationWarning>
         {/* Redux store outermost (providers fetch through RTK Query). AuthProvider
             wraps OrgProvider so the org-directory fetch can wait for a session —
             fetching it on the login screen (no token) 401s and RTK caches the

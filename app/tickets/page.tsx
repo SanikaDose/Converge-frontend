@@ -30,7 +30,7 @@ export default function TicketsPage() {
 
   const stats = useMemo(() => {
     const total = tickets.length;
-    const open = tickets.filter(t => t.status === "Open" || t.status === "In Progress").length;
+    const open = tickets.filter(t => t.status === "Open" || t.status === "In Progress" || t.status === "Reopened").length;
     const resolved = tickets.filter(t => t.status === "Resolved" || t.status === "Closed").length;
     const resolutionPct = total ? Math.round((resolved / total) * 100) : 0;
     return { total, open, resolved, resolutionPct };

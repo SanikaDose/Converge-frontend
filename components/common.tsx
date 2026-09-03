@@ -184,13 +184,15 @@ export function OrgSelect({ label, value, onChange, allowUnassigned = true, erro
  * checkboxes and a string[] value, for tasks that can have several owners.
  * renderValue shows the chosen members' names (or a placeholder).
  */
-export function OrgMultiSelect({ label, value, onChange, size = "small", fullWidth = true, disabled }: {
+export function OrgMultiSelect({ label, value, onChange, size = "small", fullWidth = true, disabled, placeholder = "Unassigned" }: {
   label: string;
   value: string[];
   onChange: (value: string[]) => void;
   size?: "small" | "medium";
   fullWidth?: boolean;
   disabled?: boolean;
+  /** Text shown when nothing is selected. */
+  placeholder?: string;
 }) {
   const { teams, employeeById } = useOrgContext();
   const selected = value || [];
@@ -211,7 +213,7 @@ export function OrgMultiSelect({ label, value, onChange, size = "small", fullWid
         }}
         renderValue={(ids) => {
           const arr = ids as string[];
-          if (!arr.length) return <Box component="span" sx={{ color: "text.secondary" }}>Unassigned</Box>;
+          if (!arr.length) return <Box component="span" sx={{ color: "text.secondary" }}>{placeholder}</Box>;
           return arr.map(id => employeeById[id]?.name ?? "—").join(", ");
         }}
         displayEmpty

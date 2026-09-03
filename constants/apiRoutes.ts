@@ -36,6 +36,14 @@ export const apiRoutes = {
     updateById: (id: string) => id,
   },
 
+  miscTasks: {
+    root: 'misc-tasks',
+    getList: '',
+    create: '',
+    updateById: (id: string) => id,
+    deleteById: (id: string) => id,
+  },
+
   projectTemplates: {
     root: 'project-templates',
     get: '',

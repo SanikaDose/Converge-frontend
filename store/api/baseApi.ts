@@ -66,6 +66,6 @@ export const baseApi = createApi({
    * touches, which is what replaced the manual `refreshKey` counters the
    * components used to thread through props to force a refetch.
    */
-  tagTypes: ['Projects', 'Project', 'Tickets', 'Employees', 'TeamPerformance', 'DashboardBaseline', 'Profile', 'ProjectTemplate', 'Notifications'],
+  tagTypes: ['Projects', 'Project', 'Tickets', 'Employees', 'TeamPerformance', 'DashboardBaseline', 'Profile', 'ProjectTemplate', 'Notifications', 'MiscTasks'],
   endpoints: () => ({}),
 });

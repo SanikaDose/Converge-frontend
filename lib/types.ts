@@ -356,7 +356,7 @@ export interface UpdateProjectPatch {
 /* ---------------------------------------------------------------------
    TICKETS
 ------------------------------------------------------------------------ */
-export type TicketStatus = "Open" | "In Progress" | "Resolved" | "Closed";
+export type TicketStatus = "Open" | "In Progress" | "Resolved" | "Closed" | "Reopened";
 
 export interface Ticket {
   id: string;
@@ -389,6 +389,44 @@ export interface CreateTicketInput {
   phase: string | null;
   assignees: string[];
   priority: Priority;
+}
+
+/* ---------------------------------------------------------------------
+   MISCELLANEOUS TASKS (ad-hoc work, not part of a project's phase plan)
+------------------------------------------------------------------------ */
+export type MiscTaskStatus = "To Do" | "In Progress" | "On Hold" | "Completed";
+
+export interface MiscTask {
+  id: string;
+  title: string;
+  description: string;
+  /** null = "Other (not related to any project)". */
+  projectId: string | null;
+  projectName: string | null;
+  /** Primary assignee — mirrors assignees[0]. */
+  assignedTo: string | null;
+  assignees: string[];
+  priority: Priority;
+  status: MiscTaskStatus;
+  dueDate: string | null;
+  checklist: ChecklistItem[];
+  createdAt: string;
+  /** Employee id of the creator — audit only, not rendered. */
+  createdBy?: string | null;
+  updatedAt: string | null;
+  history: HistoryEntry[];
+}
+
+/** Body for POST /misc-tasks and PATCH /misc-tasks/:id (partial). */
+export interface MiscTaskInput {
+  title: string;
+  description: string;
+  projectId: string | null;
+  assignees: string[];
+  priority: Priority;
+  status: MiscTaskStatus;
+  dueDate: string | null;
+  checklist: ChecklistItem[];
 }
 
 /* ---------------------------------------------------------------------

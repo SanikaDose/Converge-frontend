@@ -26,6 +26,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import AddIcon from "@mui/icons-material/Add";
 import FlagCircleIcon from "@mui/icons-material/FlagCircle";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import ReplayCircleFilledIcon from "@mui/icons-material/ReplayCircleFilled";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
 import CheckIcon from "@mui/icons-material/Check";
@@ -48,8 +49,8 @@ function fmtStamp(iso: string): string {
   return d.toLocaleString(undefined, { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
-const TICKET_STATUS: TicketStatus[] = ["Open", "In Progress", "Resolved", "Closed"];
-const TICKET_STATUS_COLOR: Record<TicketStatus, StatusColorKey> = { Open: "red", "In Progress": "amber", Resolved: "green", Closed: "slate" };
+const TICKET_STATUS: TicketStatus[] = ["Open", "In Progress", "Resolved", "Closed", "Reopened"];
+const TICKET_STATUS_COLOR: Record<TicketStatus, StatusColorKey> = { Open: "red", "In Progress": "amber", Resolved: "green", Closed: "slate", Reopened: "violet" };
 
 // Urgency, as a color — drives each row's left accent bar so a list of
 // tickets can be triaged by edge color before reading a single word.
@@ -58,13 +59,14 @@ const PRIORITY_COLOR: Record<Priority, StatusColorKey> = { Critical: "red", High
 /** Translucent wash of `hex` — the shading used for every tinted band and pill here. */
 const tint = (hex: string, pct: number) => `color-mix(in srgb, ${hex} ${pct}%, transparent)`;
 
-type BucketKey = "Raised" | "Completed";
+type BucketKey = "Raised" | "Reopened" | "Completed";
 
 // Two ticket buckets — "Raised" folds Open and In Progress together
 // (neither is done yet), "Completed" folds Resolved and Closed (neither
 // needs further action). No separate "In Progress" accordion.
 const BUCKETS: { key: BucketKey; label: string; hint: string; icon: ElementType; tone: StatusColorKey; match: (t: Ticket) => boolean }[] = [
   { key: "Raised", label: "Raised Tickets", hint: "Still need action", icon: FlagCircleIcon, tone: "red", match: (t) => t.status === "Open" || t.status === "In Progress" },
+  { key: "Reopened", label: "Reopened", hint: "Closed, then reopened", icon: ReplayCircleFilledIcon, tone: "violet", match: (t) => t.status === "Reopened" },
   { key: "Completed", label: "Completed", hint: "Resolved & closed", icon: CheckCircleIcon, tone: "green", match: (t) => t.status === "Resolved" || t.status === "Closed" },
 ];
 
@@ -295,9 +297,20 @@ function TicketRow({ ticket, canUpdate, onUpdate, focus }: {
               </IconButton>
             </Tooltip>
           )}
-          {/* A Closed ticket is final — show a read-only chip, never the
-              editable dropdown, so it can't be reopened. */}
-          {canUpdate && ticket.status !== "Closed" ? (
+          {/* A Closed ticket shows a chip + a Reopen action (Closed → Reopened);
+              every other status is editable via the dropdown. */}
+          {canUpdate && ticket.status === "Closed" ? (
+            <Stack direction="row" spacing={0.75} alignItems="center">
+              <StatusChip label="Closed" color={color} />
+              <Tooltip title="Reopen this ticket">
+                <Button size="small" variant="outlined" startIcon={<ReplayCircleFilledIcon fontSize="small" />}
+                  onClick={() => onUpdate(ticket.id, { status: "Reopened" })}
+                  sx={{ textTransform: "none", fontWeight: 600 }}>
+                  Reopen
+                </Button>
+              </Tooltip>
+            </Stack>
+          ) : canUpdate ? (
             <Select size="small" value={ticket.status} onChange={(e: SelectChangeEvent) => onUpdate(ticket.id, { status: e.target.value as TicketStatus })}
               MenuProps={{ onClick: (e) => e.stopPropagation() }}
               sx={{
@@ -306,7 +319,9 @@ function TicketRow({ ticket, canUpdate, onUpdate, focus }: {
                 "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: tint(statusHex, 60) },
                 "& .MuiSelect-icon": { color: statusHex },
               }}>
-              {TICKET_STATUS.map(s => <MenuItem key={s} value={s}>{s}</MenuItem>)}
+              {/* "Reopened" is only offered while the ticket is actually reopened
+                  (to display its own value); you don't pick it for an open ticket. */}
+              {TICKET_STATUS.filter(s => s !== "Reopened" || ticket.status === "Reopened").map(s => <MenuItem key={s} value={s}>{s}</MenuItem>)}
             </Select>
           ) : <StatusChip label={ticket.status} color={color} />}
         </Box>
@@ -480,7 +495,7 @@ export function TicketsPanel({ actor, projects, refreshKey, onChanged }: {
   const { role } = actor;
   const STATUS_HEX = useStatusHex();
   const [showForm, setShowForm] = useState(false);
-  const [expanded, setExpanded] = useState<Record<BucketKey, boolean>>({ Raised: true, Completed: false });
+  const [expanded, setExpanded] = useState<Record<BucketKey, boolean>>({ Raised: true, Reopened: true, Completed: false });
 
   // Normalisation of legacy rows now lives in the endpoint's
   // transformResponse, so every consumer of this query gets it.
@@ -515,7 +530,7 @@ export function TicketsPanel({ actor, projects, refreshKey, onChanged }: {
   };
 
   const grouped = useMemo(() => {
-    const g: Record<BucketKey, Ticket[]> = { Raised: [], Completed: [] };
+    const g: Record<BucketKey, Ticket[]> = { Raised: [], Reopened: [], Completed: [] };
     tickets.forEach(t => {
       const bucket = BUCKETS.find(b => b.match(t));
       (g[bucket?.key || "Raised"]).push(t);
@@ -526,11 +541,11 @@ export function TicketsPanel({ actor, projects, refreshKey, onChanged }: {
   // One tally per status, so the header can show the actual mix rather than
   // a single "n open" number that hides where everything is sitting.
   const byStatus = useMemo(() => {
-    const counts: Record<TicketStatus, number> = { Open: 0, "In Progress": 0, Resolved: 0, Closed: 0 };
+    const counts: Record<TicketStatus, number> = { Open: 0, "In Progress": 0, Resolved: 0, Closed: 0, Reopened: 0 };
     tickets.forEach(t => { counts[t.status] += 1; });
     return counts;
   }, [tickets]);
-  const openCount = byStatus.Open + byStatus["In Progress"];
+  const openCount = byStatus.Open + byStatus["In Progress"] + byStatus.Reopened;
   const canRaiseTicket = roleCan(role, "raiseTicket");
 
   // Deep link from a notification: /tickets?ticket=<id>. Read it once on

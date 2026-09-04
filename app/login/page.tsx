@@ -18,6 +18,7 @@ import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import VisibilityOffOutlinedIcon from "@mui/icons-material/VisibilityOffOutlined";
 import { ConvergeLogo } from "@/components/Logo";
+import { ForgotPasswordDialog } from "@/components/ForgotPasswordDialog";
 import { useAuth } from "@/context/AuthContext";
 
 const NAVY_GRADIENT = "linear-gradient(150deg, #0F172A 0%, #1E3A5F 100%)";
@@ -35,6 +36,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [forgotOpen, setForgotOpen] = useState(false);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -114,7 +116,7 @@ export default function LoginPage() {
             label="Password" fullWidth required autoComplete="current-password" size="medium"
             type={showPassword ? "text" : "password"}
             value={password} onChange={(e) => setPassword(e.target.value)}
-            disabled={busy} sx={{ mb: 4, "& .MuiInputBase-input": { py: 1.85 } }}
+            disabled={busy} sx={{ mb: 1.5, "& .MuiInputBase-input": { py: 1.85 } }}
             slotProps={{
               inputLabel: { shrink: true },
               input: {
@@ -138,6 +140,13 @@ export default function LoginPage() {
             }}
           />
 
+          <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 3 }}>
+            <Button variant="text" size="small" disabled={busy} onClick={() => setForgotOpen(true)}
+              sx={{ textTransform: "none", fontWeight: 600 }}>
+              Forgot password?
+            </Button>
+          </Box>
+
           <Button
             type="submit" variant="contained" fullWidth size="large"
             disabled={busy || !email.trim() || !password}
@@ -160,6 +169,8 @@ export default function LoginPage() {
         </Box>
       </Paper>
       </ThemeProvider>
+
+      <ForgotPasswordDialog open={forgotOpen} onClose={() => setForgotOpen(false)} defaultEmail={email} />
     </Box>
   );
 }

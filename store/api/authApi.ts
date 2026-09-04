@@ -56,6 +56,33 @@ export const authApi = baseApi.injectEndpoints({
         body,
       }),
     }),
+
+    // Forgot-password flow (all public). Step 1: email an OTP.
+    forgotPassword: builder.mutation<{ success: true }, { email: string }>({
+      query: (body) => ({
+        url: routePath(apiRoutes.auth.root, apiRoutes.auth.forgotPassword),
+        method: 'POST',
+        body,
+      }),
+    }),
+
+    // Step 2: verify the OTP → short-lived reset token.
+    verifyOtp: builder.mutation<{ resetToken: string }, { email: string; otp: string }>({
+      query: (body) => ({
+        url: routePath(apiRoutes.auth.root, apiRoutes.auth.verifyOtp),
+        method: 'POST',
+        body,
+      }),
+    }),
+
+    // Step 3: set the new password using the reset token.
+    resetPassword: builder.mutation<{ success: true }, { resetToken: string; newPassword: string }>({
+      query: (body) => ({
+        url: routePath(apiRoutes.auth.root, apiRoutes.auth.resetPassword),
+        method: 'POST',
+        body,
+      }),
+    }),
   }),
 });
 
@@ -64,4 +91,7 @@ export const {
   useMeQuery,
   useUpdateProfileMutation,
   useChangePasswordMutation,
+  useForgotPasswordMutation,
+  useVerifyOtpMutation,
+  useResetPasswordMutation,
 } = authApi;

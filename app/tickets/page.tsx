@@ -7,6 +7,7 @@ import ConfirmationNumberIcon from "@mui/icons-material/ConfirmationNumber";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import DonutLargeIcon from "@mui/icons-material/DonutLarge";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import ReplayCircleFilledIcon from "@mui/icons-material/ReplayCircleFilled";
 import { TicketsPanel } from "@/components/TicketsPanel";
 import { StatCard, computeStatTrend } from "@/components/common";
 import { useGetProjectsQuery } from "@/store/api/projectsApi";
@@ -32,8 +33,9 @@ export default function TicketsPage() {
     const total = tickets.length;
     const open = tickets.filter(t => t.status === "Open" || t.status === "In Progress" || t.status === "Reopened").length;
     const resolved = tickets.filter(t => t.status === "Resolved" || t.status === "Closed").length;
+    const reopened = tickets.filter(t => t.status === "Reopened").length;
     const resolutionPct = total ? Math.round((resolved / total) * 100) : 0;
-    return { total, open, resolved, resolutionPct };
+    return { total, open, resolved, reopened, resolutionPct };
   }, [tickets]);
 
   const trends = useMemo(() => baseline ? {
@@ -46,18 +48,22 @@ export default function TicketsPage() {
   return (
     <Box>
       <Grid container spacing={1.5} sx={{ mb: 3 }}>
-        <Grid size={{ xs: 6, sm: 3 }}>
+        <Grid size={{ xs: 6, sm: 4, lg: 2.4 }}>
           <StatCard icon={ConfirmationNumberIcon} label="Total Tickets" value={stats.total} color={DASHBOARD_COLORS.blue} trend={trends?.total} />
         </Grid>
-        <Grid size={{ xs: 6, sm: 3 }}>
+        <Grid size={{ xs: 6, sm: 4, lg: 2.4 }}>
           <StatCard icon={CheckCircleIcon} label="Resolved" value={stats.resolved} color={DASHBOARD_COLORS.green} trend={trends?.resolved} />
         </Grid>
-        <Grid size={{ xs: 6, sm: 3 }}>
+        <Grid size={{ xs: 6, sm: 4, lg: 2.4 }}>
           <StatCard icon={DonutLargeIcon} label="Resolution Rate" value={`${stats.resolutionPct}%`} color={DASHBOARD_COLORS.violet} trend={trends?.resolutionPct} />
         </Grid>
-        <Grid size={{ xs: 6, sm: 3 }}>
+        <Grid size={{ xs: 6, sm: 4, lg: 2.4 }}>
           <StatCard icon={WarningAmberIcon} label="Open Tickets" value={stats.open}
             color={stats.open > 0 ? DASHBOARD_COLORS.red : DASHBOARD_COLORS.green} trend={trends?.open} tint={stats.open > 0} />
+        </Grid>
+        <Grid size={{ xs: 6, sm: 4, lg: 2.4 }}>
+          <StatCard icon={ReplayCircleFilledIcon} label="Reopened" value={stats.reopened}
+            color={DASHBOARD_COLORS.orange} tint={stats.reopened > 0} />
         </Grid>
       </Grid>
 

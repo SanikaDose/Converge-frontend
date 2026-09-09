@@ -370,9 +370,10 @@ function TaskRow({ task, canManage, onEdit, onDelete }: {
 /* -------------------------------------------------------------------- page */
 
 export function MiscTasksPage() {
-  const { role } = useAppContext();
   const { employeeById } = useOrgContext();
-  const canManage = role === "Admin";
+  const { role } = useAppContext();
+
+  const canManage = role === "Admin" || role === "Lead";
   const { data: tasksData } = useGetMiscTasksQuery();
   const { data: projectsData } = useGetProjectsQuery();
   const [createTask, { isLoading: creating }] = useCreateMiscTaskMutation();

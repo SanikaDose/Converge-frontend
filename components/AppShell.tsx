@@ -282,14 +282,14 @@ function ProjectQuickActions() {
 
       {showNewProject && roleCan(role, "createProject") && (
         <ProjectForm
-          title="New project" initial={null} submitLabel="Create project" busy={projectBusy}
+          title="New project" initial={undefined} submitLabel="Create project" busy={projectBusy}
           defaults={{ type: "Solution" }} error={createError}
           onClose={() => { setShowNewProject(false); setCreateError(""); }} onSubmit={createProject}
         />
       )}
       {showNewProduct && roleCan(role, "createProject") && (
         <ProjectForm
-          title="New product" initial={null} submitLabel="Create product" busy={projectBusy}
+          title="New product" initial={undefined} submitLabel="Create product" busy={projectBusy}
           defaults={{ type: "Product", customer: "Elansol Technologies", location: "Pune, Maharashtra, India" }} error={createError}
           onClose={() => { setShowNewProduct(false); setCreateError(""); }} onSubmit={createProject}
         />

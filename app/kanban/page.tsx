@@ -45,6 +45,15 @@ export default function GlobalKanbanPage() {
   const [projectFilter, setProjectFilter] = useState<string[]>([]);
   const [selectedStatuses, setSelectedStatuses] = useState<TaskStatus[]>(DEFAULT_STATUSES);
 
+  // Deep link from the Team page: /kanban?user=<id> preselects that person in
+  // the assignee filter so the board opens on their tasks. Read once on mount
+  // (client-only, so no useSearchParams Suspense boundary needed).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const id = new URLSearchParams(window.location.search).get("user");
+    if (id) setSelectedUserIds([id]);
+  }, []);
+
   // Index + every project's detail as one cached query — see
   // getProjectsWithDetails. Refresh maps to its refetch.
   const { data, isFetching, refetch } = useGetProjectsWithDetailsQuery();

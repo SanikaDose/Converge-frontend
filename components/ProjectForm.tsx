@@ -25,7 +25,9 @@ import { suggestedEndDate, guessEmployeeIdFromFreeText } from "@/lib/businessLog
 import { todayISO, DEFAULT_WEEK_OFF, addWorkingDays } from "@/lib/dateUtils";
 import { useOrgContext } from "@/context/OrgContext";
 import { useGetProjectTemplateQuery } from "@/store/api/projectTemplatesApi";
-import type { PhaseDiscipline, ProjectMeta, ProjectType, WeekDay } from "@/lib/types";
+import type { PhaseDiscipline, ProjectMeta, ProjectType, RelatedRepository, WeekDay } from "@/lib/types";
+import DeleteOutlineOutlined from "@mui/icons-material/DeleteOutlineOutlined";
+import { IconButton } from "@mui/material";
 
 /** A phase reduced to what the count preview needs, from either source. */
 interface PhaseCount { discipline: PhaseDiscipline | null; taskCount: number }
@@ -53,6 +55,7 @@ export interface ProjectFormPayload {
   startDate: string;
   endDate: string;
   weekOff: WeekDay[];
+  relatedRepositories: RelatedRepository[];
 }
 
 /**
@@ -67,16 +70,26 @@ export interface ProjectFormDefaults {
 }
 
 /** Shared dialog for both "New project" and "Project settings" (edit). */
-export function ProjectForm({ title, initial, defaults, error, onClose, onSubmit, busy, submitLabel }: {
+export function ProjectForm({
+  title,
+  initial,
+  defaults,
+  submitLabel,
+  busy,
+  error,
+  readOnly = false,
+  onClose,
+  onSubmit,
+}: {
   title: string;
-  initial?: ProjectMeta | null;
+  initial?: ProjectMeta;
   defaults?: ProjectFormDefaults;
-  /** Server-side error to surface (e.g. duplicate name). */
+  submitLabel?: string;
+  busy?: boolean;
   error?: string;
+  readOnly?: boolean;
   onClose: () => void;
-  onSubmit: (payload: ProjectFormPayload) => void;
-  busy: boolean;
-  submitLabel: string;
+  onSubmit?: (payload: ProjectFormPayload) => void;
 }) {
   const { employeeById, employees } = useOrgContext();
   const [name, setName] = useState(initial?.name || "");
@@ -93,6 +106,9 @@ export function ProjectForm({ title, initial, defaults, error, onClose, onSubmit
   );
   const [startDate, setStartDate] = useState(initial?.startDate || todayISO());
   const [weekOff, setWeekOff] = useState<WeekDay[]>(initial?.weekOff?.length ? initial.weekOff : DEFAULT_WEEK_OFF);
+
+  const initialRelatedRepositories = ((initial as Partial<ProjectMeta> & { relatedRepositories?: RelatedRepository[] } | null)?.relatedRepositories ?? []) as RelatedRepository[];
+  const [relatedRepositories, setRelatedRepositories] = useState<RelatedRepository[]>(initialRelatedRepositories);
   const [endDate, setEndDate] = useState(initial?.endDate || suggestedEndDate(initial?.startDate || todayISO(), weekOff));
   const [endTouched, setEndTouched] = useState(!!initial?.endDate);
   const [showPreview, setShowPreview] = useState(false);
@@ -157,11 +173,41 @@ export function ProjectForm({ title, initial, defaults, error, onClose, onSubmit
     });
   };
 
+  const addRepository = () => {
+    setRelatedRepositories(prev => [
+      ...prev,
+      {
+        name: "",
+        url: "",
+      },
+    ]);
+  };
+
+  const updateRepository = (
+    index: number,
+    field: "name" | "url",
+    value: string,
+  ) => {
+    setRelatedRepositories(prev =>
+      prev.map((repository, i) =>
+        i === index
+          ? { ...repository, [field]: value }
+          : repository,
+      ),
+    );
+  };
+
+  const removeRepository = (index: number) => {
+    setRelatedRepositories(prev =>
+      prev.filter((_, i) => i !== index),
+    );
+  };
+
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>{title}</DialogTitle>
       <DialogContent dividers sx={{ display: "flex", flexDirection: "column", gap: 2.25 }}>
-        {error && <Alert severity="error">{error}</Alert>}
+        {/* {error && <Alert severity="error">{error}</Alert>} */}
         {/* Product/Solution toggle only when editing an existing project —
             on creation the type comes from which button was clicked (New
             Product vs New Project), so the toggle would just be redundant. */}
@@ -228,6 +274,88 @@ export function ProjectForm({ title, initial, defaults, error, onClose, onSubmit
             error={endBeforeStart} helperText={endBeforeStart ? "End date can't be before the start date" : " "} />
         </Stack>
 
+        <Stack spacing={1}>
+          <Stack
+            direction="row"
+            justifyContent="space-between"
+            alignItems="left"
+          >
+            {!readOnly && (
+  <Button
+    size="small"
+    variant="text"
+    startIcon={<AddIcon fontSize="small" />}
+    onClick={addRepository}
+    sx={{
+      textTransform: "none",
+      minWidth: "auto",
+      px: 1,
+    }}
+  >
+    Add Repository
+  </Button>
+)}
+
+            {/* <Button
+              size="small"
+              variant="text"
+              startIcon={<AddIcon fontSize="small" />}
+              onClick={addRepository}
+            >
+              Add Repository
+            </Button> */}
+          </Stack>
+
+          {relatedRepositories.map((repository, index) => (
+            <Stack
+              key={index}
+              direction="row"
+              spacing={1}
+              alignItems="center"
+              sx={{ width: "100%" }}
+            >
+              <TextField
+                label="Repository name"
+                size="small"
+                value={repository.name}
+                onChange={(e) =>
+                  updateRepository(index, "name", e.target.value)
+                }
+                placeholder="e.g. Backend"
+                sx={{ flex: "0 0 32%" }}
+              />
+
+              <TextField
+                label="Repository link"
+                size="small"
+                value={repository.url}
+                onChange={(e) =>
+                  updateRepository(index, "url", e.target.value)
+                }
+                placeholder="https://github.com/..."
+                sx={{ flex: 1 }}
+              />
+
+              <IconButton
+                color="error"
+                size="small"
+                onClick={() => removeRepository(index)}
+                aria-label="Delete repository"
+                sx={{
+                  flexShrink: 0,
+                  width: 36,
+                  height: 36,
+                }}
+              >
+                <DeleteOutlineOutlined fontSize="small" />
+              </IconButton>
+            </Stack>
+          ))}
+
+
+
+        </Stack>
+
         <Stack spacing={0.75}>
           <Typography variant="caption" color="text.secondary" sx={{ textTransform: "uppercase", letterSpacing: 0.5, fontSize: 10.5 }}>
             Week off (max {MAX_WEEK_OFF_DAYS})
@@ -273,10 +401,30 @@ export function ProjectForm({ title, initial, defaults, error, onClose, onSubmit
       )}
       <DialogActions sx={{ p: 2 }}>
         <Button onClick={onClose}>Cancel</Button>
-        <Button variant="contained" disabled={!canSubmit || busy} startIcon={busy ? <CircularProgress size={16} /> : <AddIcon />}
-          onClick={() => onSubmit({ name: name.trim(), type, disciplines, financialYear, customer: customer.trim(), location: location.trim(), owner, startDate, endDate, weekOff })}>
-          {busy ? "Saving…" : submitLabel}
-        </Button>
+        {!readOnly && onSubmit && (
+  <Button
+    variant="contained"
+    disabled={!canSubmit || busy}
+    startIcon={busy ? <CircularProgress size={16} /> : <AddIcon />}
+    onClick={() =>
+      onSubmit({
+        name: name.trim(),
+        type,
+        disciplines,
+        financialYear,
+        customer: customer.trim(),
+        location: location.trim(),
+        owner,
+        startDate,
+        endDate,
+        weekOff,
+        relatedRepositories,
+      })
+    }
+  >
+    {busy ? "Saving…" : submitLabel}
+  </Button>
+)}
       </DialogActions>
     </Dialog>
   );

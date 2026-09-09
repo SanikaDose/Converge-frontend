@@ -41,7 +41,7 @@ import {
 import { newId, roleCan, VIEW_ONLY_HINT } from "@/lib/data";
 import { useOrgContext } from "@/context/OrgContext";
 import { fmt, todayISO, diffDays, businessDaysBetween } from "@/lib/dateUtils";
-import type { Actor, ChecklistItem, HistoryEntry, ProjectDetailData, Task, TaskStatus, Warranty } from "@/lib/types";
+import type { Actor, ChecklistItem, HistoryEntry, ProjectDetailData, Task, TaskStatus, RelatedRepository, Warranty } from "@/lib/types";
 
 type ViewMode = "phases" | "timeline" | "kanban";
 
@@ -87,6 +87,7 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
     setFocusTask(prev => ({ id: taskId, seq: (prev?.seq ?? 0) + 1 }));
   }, []);
 
+  const canViewProjectSettings = true;
   const canEditProjectSettings = roleCan(role, "editProjectSettings");
   const canDeleteProject = roleCan(role, "deleteProject");
   const canManagePhases = roleCan(role, "managePhases");
@@ -461,12 +462,13 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
               </Tooltip>
             )}
             {/* Both stay visible and go disabled for a read-only User. */}
-            <Tooltip title={canEditProjectSettings ? "Project settings" : VIEW_ONLY_HINT}>
-              <span>
-                <IconButton size="small" disabled={!canEditProjectSettings} onClick={() => setShowSettings(true)}>
-                  <SettingsIcon fontSize="small" />
-                </IconButton>
-              </span>
+            <Tooltip title="Project settings">
+              <IconButton
+                size="small"
+                onClick={() => setShowSettings(true)}
+              >
+                <SettingsIcon fontSize="small" />
+              </IconButton>
             </Tooltip>
             <Tooltip title={canDeleteProject ? "Delete project" : VIEW_ONLY_HINT}>
               <span>
@@ -543,9 +545,16 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
         />
       )}
       {showSettings && (
-        <ProjectForm title="Project settings" initial={detail.meta} submitLabel="Save changes" busy={savingSettings}
-          onClose={() => setShowSettings(false)} onSubmit={saveSettings} />
-      )}
+  <ProjectForm
+    title="Project settings"
+    initial={detail.meta}
+    submitLabel={canEditProjectSettings ? "Save changes" : undefined}
+    busy={savingSettings}
+    readOnly={!canEditProjectSettings}
+    onClose={() => setShowSettings(false)}
+    onSubmit={canEditProjectSettings ? saveSettings : undefined}
+  />
+)}
       {showWarranty && (
         <WarrantyDialog initial={warranty} busy={savingWarranty}
           onClose={() => setShowWarranty(false)} onSave={saveWarranty} />

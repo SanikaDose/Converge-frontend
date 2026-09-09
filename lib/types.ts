@@ -16,7 +16,7 @@ export type ThemeMode = "light" | "dark";
  * directory now distinguishes only who administers the app from everyone
  * else, so the two roles line up 1:1 with AppRole.
  */
-export type OrgRole = "Admin" | "User";
+export type OrgRole = "Admin" | "User" | "Lead";
 
 export interface TeamMember {
   id: string;
@@ -38,7 +38,7 @@ export interface Employee extends TeamMember {
 /* ---------------------------------------------------------------------
    ROLES & PERMISSIONS ("viewing as" simulation)
 ------------------------------------------------------------------------ */
-export type AppRole = "Admin" | "User";
+export type AppRole = "Admin" | "User" | "Lead";
 
 export type PermissionAction =
   | "createProject"
@@ -87,6 +87,10 @@ export interface UpdateProfileInput {
 export interface ChangePasswordInput {
   currentPassword: string;
   newPassword: string;
+}
+export interface RelatedRepository {
+  name: string;
+  url: string;
 }
 
 export interface Actor {

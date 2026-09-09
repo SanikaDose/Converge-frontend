@@ -212,27 +212,45 @@ export function ProjectForm({
             on creation the type comes from which button was clicked (New
             Product vs New Project), so the toggle would just be redundant. */}
         {initial && (
-          <ToggleButtonGroup exclusive value={type} onChange={(_e, v: ProjectType | null) => v && setType(v)} size="small">
+          <ToggleButtonGroup
+            exclusive
+            value={type}
+            disabled={readOnly}
+            onChange={(_e, v: ProjectType | null) => v && setType(v)}
+            size="small"
+          >
+
             <ToggleButton value="Product">Product</ToggleButton>
             <ToggleButton value="Solution">Solution</ToggleButton>
           </ToggleButtonGroup>
         )}
 
-        <TextField label={`${noun} name`} fullWidth value={name} onChange={(e) => setName(e.target.value)}
+        <TextField
+          label={`${noun} name`}
+          fullWidth
+          value={name}
+          disabled={readOnly}
+          onChange={(e) => setName(e.target.value)}
           placeholder={type === "Product" ? "e.g. Bin Inspection AI Vision System" : "e.g. TE Connectivity — Robotic Connector Inspection Cell"} />
 
-        <TextField select label="Financial year" fullWidth value={financialYear}
-          onChange={(e) => setFinancialYear(e.target.value)}>
+        <TextField
+          select
+          label="Financial year"
+          fullWidth
+          value={financialYear}
+          disabled={readOnly}
+          onChange={(e) => setFinancialYear(e.target.value)}
+        >
           {FINANCIAL_YEAR_OPTIONS.map(fy => <MenuItem key={fy} value={fy}>{fy}</MenuItem>)}
         </TextField>
 
-        <TextField label="Customer" fullWidth value={customer} onChange={(e) => setCustomer(e.target.value)}
+        <TextField label="Customer" fullWidth value={customer} disabled={readOnly} onChange={(e) => setCustomer(e.target.value)}
           placeholder="e.g. TE Connectivity" />
 
-        <TextField label="Location" fullWidth value={location} onChange={(e) => setLocation(e.target.value)}
+        <TextField label="Location" fullWidth value={location} disabled={readOnly} onChange={(e) => setLocation(e.target.value)}
           placeholder="e.g. Pune, India" />
 
-        <OrgSelect label={`${noun} lead / owner`} value={owner} onChange={setOwner} />
+        <OrgSelect label={`${noun} lead / owner`} value={owner} disabled={readOnly} onChange={setOwner} />
 
         {/* Discipline multi-picker — creation only. Filters which phases get
             built: e.g. selecting only Software excludes the Vision and
@@ -267,9 +285,9 @@ export function ProjectForm({
         )}
 
         <Stack direction="row" spacing={2}>
-          <TextField label={`${noun} start`} type="date" fullWidth slotProps={{ inputLabel: { shrink: true } }}
+          <TextField label={`${noun} start`} type="date" disabled={readOnly} fullWidth slotProps={{ inputLabel: { shrink: true } }}
             value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-          <TextField label={`${noun} end`} type="date" fullWidth slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: startDate } }}
+          <TextField label={`${noun} end`} type="date" disabled={readOnly} fullWidth slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: startDate } }}
             value={endDate} onChange={(e) => { setEndDate(e.target.value); setEndTouched(true); }}
             error={endBeforeStart} helperText={endBeforeStart ? "End date can't be before the start date" : " "} />
         </Stack>
@@ -281,20 +299,20 @@ export function ProjectForm({
             alignItems="left"
           >
             {!readOnly && (
-  <Button
-    size="small"
-    variant="text"
-    startIcon={<AddIcon fontSize="small" />}
-    onClick={addRepository}
-    sx={{
-      textTransform: "none",
-      minWidth: "auto",
-      px: 1,
-    }}
-  >
-    Add Repository
-  </Button>
-)}
+              <Button
+                size="small"
+                variant="text"
+                startIcon={<AddIcon fontSize="small" />}
+                onClick={addRepository}
+                sx={{
+                  textTransform: "none",
+                  minWidth: "auto",
+                  px: 1,
+                }}
+              >
+                Add Repository
+              </Button>
+            )}
 
             {/* <Button
               size="small"
@@ -318,6 +336,7 @@ export function ProjectForm({
                 label="Repository name"
                 size="small"
                 value={repository.name}
+                disabled={readOnly}
                 onChange={(e) =>
                   updateRepository(index, "name", e.target.value)
                 }
@@ -329,26 +348,30 @@ export function ProjectForm({
                 label="Repository link"
                 size="small"
                 value={repository.url}
+                disabled={readOnly}
                 onChange={(e) =>
+
                   updateRepository(index, "url", e.target.value)
                 }
                 placeholder="https://github.com/..."
                 sx={{ flex: 1 }}
               />
 
-              <IconButton
-                color="error"
-                size="small"
-                onClick={() => removeRepository(index)}
-                aria-label="Delete repository"
-                sx={{
-                  flexShrink: 0,
-                  width: 36,
-                  height: 36,
-                }}
-              >
-                <DeleteOutlineOutlined fontSize="small" />
-              </IconButton>
+              {!readOnly && (
+                <IconButton
+                  color="error"
+                  size="small"
+                  onClick={() => removeRepository(index)}
+                  aria-label="Delete repository"
+                  sx={{
+                    flexShrink: 0,
+                    width: 36,
+                    height: 36,
+                  }}
+                >
+                  <DeleteOutlineOutlined fontSize="small" />
+                </IconButton>
+              )}
             </Stack>
           ))}
 
@@ -367,7 +390,7 @@ export function ProjectForm({
                 <Tooltip key={day} title={WEEKDAY_LABELS[day]}>
                   <ToggleButton
                     value={day} selected={selected} size="small"
-                    disabled={!selected && weekOff.length >= MAX_WEEK_OFF_DAYS}
+                    disabled={readOnly || (!selected && weekOff.length >= MAX_WEEK_OFF_DAYS)}
                     onChange={() => toggleWeekOffDay(day)}
                     sx={{ width: 52, px: 0 }}
                   >
@@ -402,29 +425,29 @@ export function ProjectForm({
       <DialogActions sx={{ p: 2 }}>
         <Button onClick={onClose}>Cancel</Button>
         {!readOnly && onSubmit && (
-  <Button
-    variant="contained"
-    disabled={!canSubmit || busy}
-    startIcon={busy ? <CircularProgress size={16} /> : <AddIcon />}
-    onClick={() =>
-      onSubmit({
-        name: name.trim(),
-        type,
-        disciplines,
-        financialYear,
-        customer: customer.trim(),
-        location: location.trim(),
-        owner,
-        startDate,
-        endDate,
-        weekOff,
-        relatedRepositories,
-      })
-    }
-  >
-    {busy ? "Saving…" : submitLabel}
-  </Button>
-)}
+          <Button
+            variant="contained"
+            disabled={!canSubmit || busy}
+            startIcon={busy ? <CircularProgress size={16} /> : <AddIcon />}
+            onClick={() =>
+              onSubmit({
+                name: name.trim(),
+                type,
+                disciplines,
+                financialYear,
+                customer: customer.trim(),
+                location: location.trim(),
+                owner,
+                startDate,
+                endDate,
+                weekOff,
+                relatedRepositories,
+              })
+            }
+          >
+            {busy ? "Saving…" : submitLabel}
+          </Button>
+        )}
       </DialogActions>
     </Dialog>
   );

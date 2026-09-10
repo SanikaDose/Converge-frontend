@@ -375,8 +375,6 @@ export function ProjectForm({
             </Stack>
           ))}
 
-
-
         </Stack>
 
         <Stack spacing={0.75}>

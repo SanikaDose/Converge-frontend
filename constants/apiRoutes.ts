@@ -44,6 +44,7 @@ export const apiRoutes = {
     getList: '',
     create: '',
     updateById: (id: string) => id,
+    updateStatusById: (id: string) => `${id}/status`,
     deleteById: (id: string) => id,
   },
 
@@ -74,6 +75,7 @@ export const apiRoutes = {
   notifications: {
     root: 'notifications',
     getList: '',
+    markRead: 'mark-read',
   },
 } as const;
 

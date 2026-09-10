@@ -39,7 +39,7 @@ import { initials, avatarColor, roleCan, VIEW_ONLY_HINT } from "@/lib/data";
 import { recordNavigation } from "@/lib/navHistory";
 import { useGetProjectsQuery, useCreateProjectMutation } from "@/store/api/projectsApi";
 import { useCreateTicketMutation } from "@/store/api/ticketsApi";
-import { useGetNotificationsQuery } from "@/store/api/notificationsApi";
+import { useGetNotificationsQuery, useMarkNotificationsReadMutation } from "@/store/api/notificationsApi";
 import { useAppContext } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
 import type { CreateTicketInput, NotificationItem, ProjectIndexRow } from "@/lib/types";
@@ -56,7 +56,13 @@ const NAV_ITEMS = [
 
 /** Small dot icon per notification kind, keyed to the dashboard palette. */
 function KindDot({ kind }: { kind: NotificationItem["kind"] }) {
-  const color = kind === "task" ? DASHBOARD_COLORS.blue : kind === "project" ? DASHBOARD_COLORS.violet : DASHBOARD_COLORS.orange;
+  const colorByKind: Record<NotificationItem["kind"], string> = {
+    task: DASHBOARD_COLORS.blue,
+    project: DASHBOARD_COLORS.violet,
+    ticket: DASHBOARD_COLORS.orange,
+    "misc-task": DASHBOARD_COLORS.green,
+  };
+  const color = colorByKind[kind] ?? DASHBOARD_COLORS.blue;
   return <Box sx={{ mt: 0.65, width: 8, height: 8, borderRadius: "50%", bgcolor: color, flexShrink: 0 }} />;
 }
 
@@ -73,11 +79,25 @@ function NotificationsMenu() {
   // Opening the bell refetches so a freshly assigned task/ticket shows up
   // without a full page reload.
   const { data, refetch } = useGetNotificationsQuery();
+  const [markRead] = useMarkNotificationsReadMutation();
   const items: NotificationItem[] = useMemo(() => data ?? [], [data]);
+  // Derived items (task/project/ticket) have no read flag and always count;
+  // stored events (misc-task) only count until the bell is opened.
+  const unreadCount = useMemo(() => items.filter(i => !i.read).length, [items]);
+
+  const openBell = (e: React.MouseEvent<HTMLElement>) => {
+    setAnchorEl(e.currentTarget);
+    refetch();
+    // Clear the unread badge on stored notifications — opening = seeing them.
+    if (items.some(i => i.read === false)) markRead();
+  };
 
   const go = (item: NotificationItem) => {
     setAnchorEl(null);
-    if (item.kind === "ticket") {
+    if (item.link) {
+      // Stored events (misc-task) carry an explicit deep link.
+      router.push(item.link);
+    } else if (item.kind === "ticket") {
       // item.id is "ticket:<ticketId>" — deep-link so the page opens that row.
       const ticketId = item.id.split(":")[1];
       router.push(ticketId ? `/tickets?ticket=${ticketId}` : "/tickets");
@@ -89,8 +109,8 @@ function NotificationsMenu() {
   return (
     <>
       <Tooltip title="Notifications">
-        <IconButton size="small" onClick={(e) => { setAnchorEl(e.currentTarget); refetch(); }} sx={{ color: "text.secondary" }}>
-          <Badge badgeContent={items.length} color="error" max={99}>
+        <IconButton size="small" onClick={openBell} sx={{ color: "text.secondary" }}>
+          <Badge badgeContent={unreadCount} color="error" max={99}>
             <NotificationsNoneIcon fontSize="small" />
           </Badge>
         </IconButton>

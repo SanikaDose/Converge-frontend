@@ -14,7 +14,15 @@ export const notificationsApi = baseApi.injectEndpoints({
       query: () => routePath(apiRoutes.notifications.root, apiRoutes.notifications.getList),
       providesTags: ['Notifications'],
     }),
+    // Clears the unread flag on the caller's stored notifications (bell opened).
+    markNotificationsRead: builder.mutation<{ updated: number }, void>({
+      query: () => ({
+        url: routePath(apiRoutes.notifications.root, apiRoutes.notifications.markRead),
+        method: 'POST',
+      }),
+      invalidatesTags: ['Notifications'],
+    }),
   }),
 });
 
-export const { useGetNotificationsQuery } = notificationsApi;
+export const { useGetNotificationsQuery, useMarkNotificationsReadMutation } = notificationsApi;

@@ -144,7 +144,7 @@ export interface PhaseTemplateItem {
 }
 
 /** One item in the signed-in user's bell feed (GET /notifications). */
-export type NotificationKind = "task" | "project" | "ticket";
+export type NotificationKind = "task" | "project" | "ticket" | "misc-task";
 export interface NotificationItem {
   id: string;
   kind: NotificationKind;
@@ -152,6 +152,10 @@ export interface NotificationItem {
   context: string;
   projectId: string;
   createdAt: string | null;
+  /** Stored events (misc-task) carry a read flag; derived items are always unread. */
+  read?: boolean;
+  /** Explicit in-app deep link for stored events, e.g. "/tasks?task=<id>". */
+  link?: string | null;
 }
 
 export interface HistoryEntry {
@@ -413,9 +417,12 @@ export interface MiscTask {
   priority: Priority;
   status: MiscTaskStatus;
   dueDate: string | null;
+  /** Planned start / end of the work. */
+  startDate: string | null;
+  endDate: string | null;
   checklist: ChecklistItem[];
   createdAt: string;
-  /** Employee id of the creator — audit only, not rendered. */
+  /** Employee id of the creator (the person who assigned the task). */
   createdBy?: string | null;
   updatedAt: string | null;
   history: HistoryEntry[];
@@ -429,7 +436,8 @@ export interface MiscTaskInput {
   assignees: string[];
   priority: Priority;
   status: MiscTaskStatus;
-  dueDate: string | null;
+  startDate: string | null;
+  endDate: string | null;
   checklist: ChecklistItem[];
 }
 

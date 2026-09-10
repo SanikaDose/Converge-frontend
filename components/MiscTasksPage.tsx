@@ -35,6 +35,7 @@ import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import LinkOutlinedIcon from "@mui/icons-material/LinkOutlined";
 import { OrgMultiSelect, EmployeeAvatar } from "./common";
 import { useAppContext } from "@/context/AppContext";
+import { useAuth } from "@/context/AuthContext";
 import { useOrgContext } from "@/context/OrgContext";
 import { genId } from "@/lib/data";
 import { fmt } from "@/lib/dateUtils";
@@ -44,6 +45,7 @@ import {
   useGetMiscTasksQuery,
   useCreateMiscTaskMutation,
   useUpdateMiscTaskMutation,
+  useUpdateMiscTaskStatusMutation,
   useDeleteMiscTaskMutation,
 } from "@/store/api/miscTasksApi";
 import type { ChecklistItem, MiscTask, MiscTaskInput, MiscTaskStatus, Priority } from "@/lib/types";
@@ -110,13 +112,13 @@ interface DraftForm {
   description: string;
   assignees: string[];
   priority: Priority | "";
-  status: MiscTaskStatus | "";
-  dueDate: string | null;
+  startDate: string | null;
+  endDate: string | null;
   checklist: ChecklistItem[];
 }
 const EMPTY_DRAFT: DraftForm = {
   title: "", description: "", assignees: [],
-  priority: "", status: "", dueDate: null, checklist: [],
+  priority: "", startDate: null, endDate: null, checklist: [],
 };
 
 function TaskDrawer({ open, initial, projects, busy, onClose, onSave }: {
@@ -141,8 +143,9 @@ function TaskDrawer({ open, initial, projects, busy, onClose, onSave }: {
       setForm({
         title: initial.title, description: initial.description,
         assignees: initial.assignees ?? [],
-        priority: initial.priority, status: initial.status,
-        dueDate: initial.dueDate, checklist: initial.checklist ?? [],
+        priority: initial.priority,
+        startDate: initial.startDate, endDate: initial.endDate,
+        checklist: initial.checklist ?? [],
       });
       // An existing task always had a choice: a project id, or Other (null).
       setRelated(initial.projectId ?? OTHER);
@@ -155,7 +158,10 @@ function TaskDrawer({ open, initial, projects, busy, onClose, onSave }: {
   const set = <K extends keyof DraftForm>(key: K, value: DraftForm[K]) =>
     setForm(f => ({ ...f, [key]: value }));
 
-  const canSave = form.title.trim().length > 0 && related !== "" && form.priority !== "" && form.status !== "";
+  // End date can't precede start date (both optional). Status isn't set here —
+  // a new task is always "To Do" and moved later via the card's status control.
+  const datesValid = !(form.startDate && form.endDate) || form.endDate >= form.startDate;
+  const canSave = form.title.trim().length > 0 && related !== "" && form.priority !== "" && datesValid;
 
   const addPoint = () =>
     set("checklist", [...form.checklist, { id: genId("mt"), text: "", done: false, createdAt: new Date().toISOString() }]);
@@ -214,27 +220,28 @@ function TaskDrawer({ open, initial, projects, busy, onClose, onSave }: {
               <OrgMultiSelect label="" value={form.assignees} onChange={v => set("assignees", v)} size="medium" placeholder="Select assignee" />
             </Box>
 
+            <Box>
+              <FieldLabel required>Priority</FieldLabel>
+              <TextField select value={form.priority} onChange={e => set("priority", e.target.value as Priority)} fullWidth
+                slotProps={{ select: { displayEmpty: true, renderValue: (v) => (v as string) || <Box component="span" sx={{ color: "text.secondary" }}>Select priority</Box> } }}>
+                {PRIORITIES.map(p => <MenuItem key={p} value={p}>{p}</MenuItem>)}
+              </TextField>
+            </Box>
+
             <Stack direction="row" gap={2}>
               <Box sx={{ flex: 1 }}>
-                <FieldLabel required>Priority</FieldLabel>
-                <TextField select value={form.priority} onChange={e => set("priority", e.target.value as Priority)} fullWidth
-                  slotProps={{ select: { displayEmpty: true, renderValue: (v) => (v as string) || <Box component="span" sx={{ color: "text.secondary" }}>Select priority</Box> } }}>
-                  {PRIORITIES.map(p => <MenuItem key={p} value={p}>{p}</MenuItem>)}
-                </TextField>
+                <FieldLabel>Start Date</FieldLabel>
+                <TextField type="date" value={form.startDate ?? ""} onChange={e => set("startDate", e.target.value || null)} fullWidth
+                  slotProps={{ htmlInput: { max: form.endDate ?? undefined } }} />
               </Box>
               <Box sx={{ flex: 1 }}>
-                <FieldLabel required>Status</FieldLabel>
-                <TextField select value={form.status} onChange={e => set("status", e.target.value as MiscTaskStatus)} fullWidth
-                  slotProps={{ select: { displayEmpty: true, renderValue: (v) => (v as string) || <Box component="span" sx={{ color: "text.secondary" }}>Select status</Box> } }}>
-                  {STATUSES.map(s => <MenuItem key={s} value={s}>{s}</MenuItem>)}
-                </TextField>
+                <FieldLabel>End Date</FieldLabel>
+                <TextField type="date" value={form.endDate ?? ""} onChange={e => set("endDate", e.target.value || null)} fullWidth
+                  error={!datesValid}
+                  helperText={!datesValid ? "End is before start" : undefined}
+                  slotProps={{ htmlInput: { min: form.startDate ?? undefined } }} />
               </Box>
             </Stack>
-
-            <Box>
-              <FieldLabel>Due Date</FieldLabel>
-              <TextField type="date" value={form.dueDate ?? ""} onChange={e => set("dueDate", e.target.value || null)} fullWidth />
-            </Box>
 
             {/* Checklist */}
             <Box>
@@ -271,8 +278,11 @@ function TaskDrawer({ open, initial, projects, busy, onClose, onSave }: {
               projectId: related === OTHER ? null : related,
               assignees: form.assignees,
               priority: form.priority as Priority,
-              status: form.status as MiscTaskStatus,
-              dueDate: form.dueDate,
+              // New task starts To Do; an edit keeps whatever status it has now
+              // (status is moved from the card, not this form).
+              status: initial ? initial.status : "To Do",
+              startDate: form.startDate,
+              endDate: form.endDate,
               checklist: form.checklist.filter(c => c.text.trim().length > 0),
             })}>
             {busy ? "Saving…" : "Save Task"}
@@ -285,14 +295,18 @@ function TaskDrawer({ open, initial, projects, busy, onClose, onSave }: {
 
 /* -------------------------------------------------------------------- card */
 
-function TaskRow({ task, canManage, onEdit, onDelete }: {
+function TaskRow({ task, canManage, canChangeStatus, onEdit, onDelete, onStatusChange }: {
   task: MiscTask;
   canManage: boolean;
+  /** Whether this viewer may change the status (lead/admin, or an assignee). */
+  canChangeStatus: boolean;
   onEdit: () => void;
   onDelete: () => void;
+  onStatusChange: (status: MiscTaskStatus) => void;
 }) {
   const { employeeById } = useOrgContext();
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const [statusAnchor, setStatusAnchor] = useState<HTMLElement | null>(null);
   const statusColor = STATUS_COLOR[task.status];
   const priorityColor = PRIORITY_COLOR[task.priority];
   const { Icon, color: iconColor } = iconFor(task.id);
@@ -301,6 +315,12 @@ function TaskRow({ task, canManage, onEdit, onDelete }: {
   const primary = assignees[0];
   const primaryName = primary ? (employeeById[primary]?.name ?? "—") : "Unassigned";
   const extra = assignees.length - 1;
+  // The person who created/assigned the task.
+  const assignerName = task.createdBy ? (employeeById[task.createdBy]?.name ?? null) : null;
+  // Date range (start – end), tolerating either bound being missing.
+  const dateRange = task.startDate || task.endDate
+    ? `${task.startDate ? fmt(task.startDate) : "…"} – ${task.endDate ? fmt(task.endDate) : "…"}`
+    : (task.dueDate ? fmt(task.dueDate) : null);
 
   return (
     <Box onClick={canManage ? onEdit : undefined} sx={{
@@ -321,7 +341,22 @@ function TaskRow({ task, canManage, onEdit, onDelete }: {
             <Typography sx={{ fontWeight: 700, fontSize: 16 }}>{task.title}</Typography>
             <Stack direction="row" gap={0.75} alignItems="center" sx={{ flexShrink: 0 }}>
               <PillChip label={task.priority} color={priorityColor} />
-              <PillChip label={task.status} color={statusColor} />
+              {/* Status is a menu trigger for a lead/admin or the assignee; a
+                  plain chip for everyone else. */}
+              {canChangeStatus ? (
+                <Chip label={task.status} size="small"
+                  onClick={(e) => { e.stopPropagation(); setStatusAnchor(e.currentTarget); }}
+                  onDelete={(e) => { e.stopPropagation(); setStatusAnchor(e.currentTarget as HTMLElement); }}
+                  deleteIcon={<KeyboardArrowDownIcon />}
+                  sx={{
+                    height: 24, borderRadius: "7px", fontSize: 12, fontWeight: 600, cursor: "pointer",
+                    color: statusColor, bgcolor: alpha(statusColor, 0.13),
+                    "& .MuiChip-label": { px: 1.25 },
+                    "& .MuiChip-deleteIcon": { color: statusColor, fontSize: 16, ml: "-2px" },
+                  }} />
+              ) : (
+                <PillChip label={task.status} color={statusColor} />
+              )}
               {canManage && (
                 <IconButton size="small" onClick={(e) => { e.stopPropagation(); setAnchor(e.currentTarget); }}>
                   <MoreHorizIcon fontSize="small" />
@@ -331,8 +366,10 @@ function TaskRow({ task, canManage, onEdit, onDelete }: {
           </Stack>
 
           {task.description && (
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5,
-              display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+            <Typography variant="body2" color="text.secondary" sx={{
+              mt: 0.5,
+              display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden"
+            }}>
               {task.description}
             </Typography>
           )}
@@ -345,15 +382,32 @@ function TaskRow({ task, canManage, onEdit, onDelete }: {
                 {primaryName}{extra > 0 ? ` +${extra}` : ""}
               </Typography>
             </Stack>
-            {task.dueDate && (
+            {dateRange && (
               <Stack direction="row" spacing={0.5} alignItems="center" sx={{ color: "text.secondary", flexShrink: 0 }}>
                 <CalendarMonthIcon sx={{ fontSize: 15 }} />
-                <Typography variant="caption" sx={{ fontSize: 12.5 }}>{fmt(task.dueDate)}</Typography>
+                <Typography variant="caption" sx={{ fontSize: 12.5 }}>{dateRange}</Typography>
               </Stack>
             )}
           </Stack>
+
+          {assignerName && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.75 }}>
+              Assigned by {assignerName}
+            </Typography>
+          )}
         </Box>
       </Stack>
+
+      {/* Status menu — lead/admin or the assignee can move the task. */}
+      <Menu anchorEl={statusAnchor} open={!!statusAnchor} onClose={() => setStatusAnchor(null)} onClick={(e) => e.stopPropagation()}>
+        {STATUSES.map(s => (
+          <MenuItem key={s} selected={s === task.status}
+            onClick={() => { setStatusAnchor(null); if (s !== task.status) onStatusChange(s); }}>
+            <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: STATUS_COLOR[s], mr: 1 }} />
+            {s}
+          </MenuItem>
+        ))}
+      </Menu>
 
       <Menu anchorEl={anchor} open={!!anchor} onClose={() => setAnchor(null)} onClick={(e) => e.stopPropagation()}>
         <MenuItem onClick={() => { setAnchor(null); onEdit(); }}>
@@ -371,13 +425,16 @@ function TaskRow({ task, canManage, onEdit, onDelete }: {
 
 export function MiscTasksPage() {
   const { employeeById } = useOrgContext();
-  const { role } = useAppContext();
+  const { user } = useAuth();
 
-  const canManage = role === "Admin" || role === "Lead";
+  // Admins and leads may create/edit/delete tasks (matches the backend's
+  // assertCanManage). Assignees can't manage, but can still change status.
+  const canManage = user?.appRole === "Admin" || user?.appRole === "Lead";
   const { data: tasksData } = useGetMiscTasksQuery();
   const { data: projectsData } = useGetProjectsQuery();
   const [createTask, { isLoading: creating }] = useCreateMiscTaskMutation();
   const [updateTask, { isLoading: updating }] = useUpdateMiscTaskMutation();
+  const [updateStatus] = useUpdateMiscTaskStatusMutation();
   const [deleteTask] = useDeleteMiscTaskMutation();
 
   const tasks: MiscTask[] = useMemo(() => tasksData ?? [], [tasksData]);
@@ -419,10 +476,10 @@ export function MiscTasksPage() {
       if (statusFilter !== "All" && t.status !== statusFilter) return false;
       if (priorityFilter !== "All" && t.priority !== priorityFilter) return false;
       if (assigneeFilter !== "All" && !(t.assignees ?? []).includes(assigneeFilter)) return false;
-      // Due-date range (ISO strings compare lexicographically). Tasks with no
-      // due date drop out when a date bound is set.
-      if (dueFrom && (!t.dueDate || t.dueDate < dueFrom)) return false;
-      if (dueTo && (!t.dueDate || t.dueDate > dueTo)) return false;
+      // End-date range (ISO strings compare lexicographically). Tasks with no
+      // end date drop out when a date bound is set.
+      if (dueFrom && (!t.endDate || t.endDate < dueFrom)) return false;
+      if (dueTo && (!t.endDate || t.endDate > dueTo)) return false;
       if (!q) return true;
       return t.title.toLowerCase().includes(q) || (t.description || "").toLowerCase().includes(q);
     });
@@ -430,6 +487,22 @@ export function MiscTasksPage() {
 
   const openAdd = () => { setEditing(null); setDrawerOpen(true); };
   const openEdit = (task: MiscTask) => { setEditing(task); setDrawerOpen(true); };
+
+  // Deep link from the notification bell: /tasks?task=<id> opens that task once
+  // the list has loaded. Consumed once (the ref guard) and the URL is cleared
+  // so a later manual close doesn't reopen it.
+  const deepLinkedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (deepLinkedRef.current || !tasks.length) return;
+    const id = new URLSearchParams(window.location.search).get("task");
+    if (!id) return;
+    const match = tasks.find(t => t.id === id);
+    if (match) {
+      deepLinkedRef.current = true;
+      openEdit(match);
+      window.history.replaceState(null, "", "/tasks");
+    }
+  }, [tasks]);
 
   const save = async (payload: MiscTaskInput) => {
     try {
@@ -443,13 +516,17 @@ export function MiscTasksPage() {
     try { await deleteTask(id).unwrap(); } catch (e) { console.error(e); }
   };
 
+  const changeStatus = async (id: string, status: MiscTaskStatus) => {
+    try { await updateStatus({ id, status }).unwrap(); } catch (e) { console.error(e); }
+  };
+
   return (
     <Box sx={{ width: "100%" }}>
       {/* Header */}
       <Stack direction="row" alignItems="flex-start" justifyContent="space-between" flexWrap="wrap" gap={1.5} sx={{ mb: 2.5 }}>
         <Box>
           <Typography variant="h5" sx={{ fontWeight: 700 }}>Miscellaneous Tasks</Typography>
-          <Typography variant="body2" color="text.secondary">POCs, module development, services and other ad-hoc work.</Typography>
+          <Typography variant="body2" color="text.secondary">Use Misc. Tasks only for small, standalone development activities with single-team ownership and an expected completion time of 2–3 working days.</Typography>
         </Box>
         {canManage && <Button variant="contained" startIcon={<AddIcon />} onClick={openAdd}>Add Task</Button>}
       </Stack>
@@ -506,14 +583,14 @@ export function MiscTasksPage() {
         <Button variant="outlined" color="inherit" onClick={(e) => setDateAnchor(e.currentTarget)}
           startIcon={<CalendarMonthIcon />} endIcon={<KeyboardArrowDownIcon />}
           sx={{ borderRadius: 2, borderColor: dateActive ? "primary.main" : "divider", color: "text.primary", px: 2, textTransform: "none", fontWeight: 600 }}>
-          {dateActive ? `${dueFrom ? fmt(dueFrom) : "…"} – ${dueTo ? fmt(dueTo) : "…"}` : "Due date"}
+          {dateActive ? `${dueFrom ? fmt(dueFrom) : "…"} – ${dueTo ? fmt(dueTo) : "…"}` : "End date"}
         </Button>
         <Popover anchorEl={dateAnchor} open={!!dateAnchor} onClose={() => setDateAnchor(null)}
           anchorOrigin={{ vertical: "bottom", horizontal: "left" }}>
           <Stack gap={1.5} sx={{ p: 2, width: 240 }}>
-            <TextField type="date" label="Due from" value={dueFrom} onChange={e => setDueFrom(e.target.value)}
+            <TextField type="date" label="End from" value={dueFrom} onChange={e => setDueFrom(e.target.value)}
               fullWidth size="small" slotProps={{ inputLabel: { shrink: true } }} />
-            <TextField type="date" label="Due to" value={dueTo} onChange={e => setDueTo(e.target.value)}
+            <TextField type="date" label="End to" value={dueTo} onChange={e => setDueTo(e.target.value)}
               fullWidth size="small" slotProps={{ inputLabel: { shrink: true } }} />
             <Button size="small" variant="text" disabled={!dateActive} onClick={() => { setDueFrom(""); setDueTo(""); }}>
               Clear dates
@@ -534,9 +611,15 @@ export function MiscTasksPage() {
 
       {/* List */}
       <Stack gap={1.5}>
-        {filtered.map(t => (
-          <TaskRow key={t.id} task={t} canManage={canManage} onEdit={() => openEdit(t)} onDelete={() => remove(t.id)} />
-        ))}
+        {filtered.map(t => {
+          const isAssignee = !!user && (t.assignees ?? []).includes(user.id);
+          return (
+            <TaskRow key={t.id} task={t} canManage={canManage}
+              canChangeStatus={canManage || isAssignee}
+              onEdit={() => openEdit(t)} onDelete={() => remove(t.id)}
+              onStatusChange={(s) => changeStatus(t.id, s)} />
+          );
+        })}
         {filtered.length === 0 && (
           <Box sx={{ textAlign: "center", py: 8, color: "text.secondary" }}>
             <TaskAltIcon sx={{ fontSize: 40, opacity: 0.4 }} />

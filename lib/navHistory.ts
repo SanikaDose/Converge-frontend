@@ -14,6 +14,7 @@
  */
 let navigationCount = 0;
 let lastPath: string | null = null;
+let prevPath: string | null = null;
 
 /**
  * Called by AppShell whenever the route changes.
@@ -25,8 +26,20 @@ let lastPath: string | null = null;
  */
 export function recordNavigation(path: string): void {
   if (path === lastPath) return;
+  prevPath = lastPath;
   lastPath = path;
   navigationCount += 1;
+}
+
+/**
+ * The route the user was on immediately before the current one — used by the
+ * project page's "Back to portfolio" to return to wherever they came from
+ * (dashboard, Kanban, …). It only tracks real route changes, so in-project view
+ * toggles (Phases/Timeline/Kanban, which only change the ?view query) never
+ * pollute it. Null on the first page of a fresh load.
+ */
+export function previousPath(): string | null {
+  return prevPath;
 }
 
 /**

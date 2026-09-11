@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import Box from "@mui/material/Box";
 import Stack from "./Stack";
 import Typography from "@mui/material/Typography";
@@ -12,6 +13,7 @@ import IconButton from "@mui/material/IconButton";
 import Chip from "@mui/material/Chip";
 import Popover from "@mui/material/Popover";
 import InputAdornment from "@mui/material/InputAdornment";
+import Tooltip from "@mui/material/Tooltip";
 import CircularProgress from "@mui/material/CircularProgress";
 import Autocomplete from "@mui/material/Autocomplete";
 import Table from "@mui/material/Table";
@@ -143,6 +145,7 @@ function WorkModeSelect({ value, onChange, disabled }: { value: WorkMode; onChan
 export function ScrumPage() {
   const { employees: allEmployees, teams } = useOrgContext();
   const { user } = useAuth();
+  const router = useRouter();
   const [date, setDate] = useState<string>(todayISO());
 
   // The board only lists people who are on scrum and still active — sales team
@@ -406,13 +409,19 @@ export function ScrumPage() {
                     }}>{i + 1}</Box>
                   </TableCell>
                   <TableCell>
-                    <Stack direction="row" alignItems="center" gap={1.25}>
-                      <EmployeeAvatar employeeId={emp.id} size={34} />
-                      <Box sx={{ minWidth: 0 }}>
-                        <Typography variant="body2" sx={{ fontWeight: 700 }} noWrap>{emp.name}</Typography>
-                        <Typography variant="caption" color="text.secondary" noWrap>{emp.role}</Typography>
-                      </Box>
-                    </Stack>
+                    {/* Click the person to jump to their Kanban board, with them
+                        preselected in the assignee filter (/kanban?user=<id>). */}
+                    <Tooltip title="Open this person's tasks in Kanban" disableInteractive>
+                      <Stack direction="row" alignItems="center" gap={1.25}
+                        onClick={() => router.push(`/kanban?user=${emp.id}`)}
+                        sx={{ cursor: "pointer", width: "fit-content", "&:hover .scrum-emp-name": { color: "primary.main", textDecoration: "underline" } }}>
+                        <EmployeeAvatar employeeId={emp.id} size={34} />
+                        <Box sx={{ minWidth: 0 }}>
+                          <Typography className="scrum-emp-name" variant="body2" sx={{ fontWeight: 700 }} noWrap>{emp.name}</Typography>
+                          <Typography variant="caption" color="text.secondary" noWrap>{emp.role}</Typography>
+                        </Box>
+                      </Stack>
+                    </Tooltip>
                   </TableCell>
                   <TableCell>
                     <TextField

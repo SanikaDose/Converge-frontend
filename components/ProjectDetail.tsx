@@ -56,7 +56,15 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
   const { employeeLabel } = useOrgContext();
   const [detail, setDetail] = useState<ProjectDetailData | null>(null);
   const [activePhaseId, setActivePhaseId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>("phases");
+  // View is mirrored in the URL (?view=timeline|kanban) so switching views is a
+  // real history step: the browser Back button then returns to the previous
+  // view / this project instead of skipping straight out to the dashboard.
+  const readViewFromUrl = (): ViewMode => {
+    if (typeof window === "undefined") return "phases";
+    const v = new URLSearchParams(window.location.search).get("view");
+    return v === "timeline" || v === "kanban" ? v : "phases";
+  };
+  const [viewMode, setViewMode] = useState<ViewMode>(readViewFromUrl);
   const [showSettings, setShowSettings] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [showWarranty, setShowWarranty] = useState(false);
@@ -83,8 +91,29 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
   const openTask = useCallback((phaseId: string, taskId: string) => {
     setActivePhaseId(phaseId);
     setViewMode("phases");
+    // Keep the URL in step (drop ?view) without adding a history entry — opening
+    // a task isn't a navigation the user should have to "Back" out of.
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("view")) {
+      window.history.replaceState(window.history.state, "", `/projects/${projectId}`);
+    }
     // Bump seq so clicking the same task twice re-opens it after a manual collapse.
     setFocusTask(prev => ({ id: taskId, seq: (prev?.seq ?? 0) + 1 }));
+  }, [projectId]);
+
+  // Manual view switch (the Phases/Timeline/Kanban toggle): mirror it into the
+  // URL as a real history push, so the browser Back button steps back through
+  // views and returns to the project rather than exiting to the dashboard.
+  const changeView = useCallback((v: ViewMode) => {
+    setViewMode(v);
+    const url = v === "phases" ? `/projects/${projectId}` : `/projects/${projectId}?view=${v}`;
+    window.history.pushState(window.history.state, "", url);
+  }, [projectId]);
+
+  // Browser Back/Forward within the project: re-read the view from the URL.
+  useEffect(() => {
+    const onPop = () => setViewMode(readViewFromUrl());
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
   }, []);
 
   const canViewProjectSettings = true;
@@ -486,7 +515,7 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
           {/* Kanban's status checkboxes ride in this row (not a second one) to
               save vertical space — see kanbanVisible. */}
           {viewMode === "kanban" && <KanbanStatusFilter visible={kanbanVisible} onToggle={toggleKanbanStatus} />}
-          <ToggleButtonGroup size="small" exclusive value={viewMode} onChange={(_e, v: ViewMode | null) => v && setViewMode(v)}>
+          <ToggleButtonGroup size="small" exclusive value={viewMode} onChange={(_e, v: ViewMode | null) => v && changeView(v)}>
             <ToggleButton value="phases"><GridViewIcon sx={{ fontSize: 16, mr: 0.75 }} />Phases</ToggleButton>
             <ToggleButton value="timeline"><TimelineIcon sx={{ fontSize: 16, mr: 0.75 }} />Timeline</ToggleButton>
             <ToggleButton value="kanban"><ViewKanbanIcon sx={{ fontSize: 16, mr: 0.75 }} />Kanban</ToggleButton>

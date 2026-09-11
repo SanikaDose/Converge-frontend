@@ -4,7 +4,7 @@ import React, { Suspense } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { ProjectDetail } from "@/components/ProjectDetail";
 import { useAppContext } from "@/context/AppContext";
-import { hasInAppHistory } from "@/lib/navHistory";
+import { hasInAppHistory, previousPath } from "@/lib/navHistory";
 
 function ProjectDetailRoute() {
   const params = useParams<{ id: string }>();
@@ -18,11 +18,18 @@ function ProjectDetailRoute() {
       actor={actor}
       // Set by the portfolio Kanban when you click a card — opens that task expanded.
       initialTaskId={search.get("task")}
-      // Step back rather than pushing "/": pushing stacked a new entry, so
-      // browser Back returned *into* the project the user had just left, and
-      // it always landed on the Dashboard even when they'd come from Kanban.
-      // Falling back to "/" covers a direct link, where there's no history.
-      onBack={() => { if (hasInAppHistory()) router.back(); else router.push("/"); }}
+      // Return to the route the user came from (dashboard, Kanban, …). We push
+      // that path rather than router.back(): the in-project view toggles add
+      // their own ?view history entries now (so the *browser* Back steps through
+      // views and stays in the project), and router.back() would only undo one
+      // of those instead of actually leaving. previousPath() ignores those view
+      // toggles, so it's the real prior page. Fallbacks cover a direct load.
+      onBack={() => {
+        const prev = previousPath();
+        if (prev && prev !== `/projects/${params.id}`) router.push(prev);
+        else if (hasInAppHistory()) router.back();
+        else router.push("/");
+      }}
     />
   );
 }

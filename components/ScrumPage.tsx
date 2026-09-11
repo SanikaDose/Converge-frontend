@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Box from "@mui/material/Box";
 import Stack from "./Stack";
 import Typography from "@mui/material/Typography";
@@ -11,10 +11,9 @@ import Button from "@mui/material/Button";
 import IconButton from "@mui/material/IconButton";
 import Chip from "@mui/material/Chip";
 import Popover from "@mui/material/Popover";
-import Snackbar from "@mui/material/Snackbar";
-import Alert from "@mui/material/Alert";
 import InputAdornment from "@mui/material/InputAdornment";
 import CircularProgress from "@mui/material/CircularProgress";
+import Autocomplete from "@mui/material/Autocomplete";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
@@ -25,11 +24,11 @@ import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
-import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined";
 import SearchIcon from "@mui/icons-material/Search";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import HistoryIcon from "@mui/icons-material/History";
+import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import Diversity3Icon from "@mui/icons-material/Diversity3";
 import FormatListBulletedIcon from "@mui/icons-material/FormatListBulleted";
 import ApartmentIcon from "@mui/icons-material/Apartment";
@@ -39,10 +38,14 @@ import HomeOutlinedIcon from "@mui/icons-material/HomeOutlined";
 import EventBusyOutlinedIcon from "@mui/icons-material/EventBusyOutlined";
 import { EmployeeAvatar } from "./common";
 import { useOrgContext } from "@/context/OrgContext";
+import { useAuth } from "@/context/AuthContext";
 import { todayISO } from "@/lib/dateUtils";
 import { DASHBOARD_COLORS } from "@/lib/theme";
 import { useGetScrumQuery, useSaveScrumMutation } from "@/store/api/scrumApi";
-import type { ScrumEntry, WorkMode } from "@/lib/types";
+import { useGetProjectsQuery } from "@/store/api/projectsApi";
+import { useGetTicketsQuery } from "@/store/api/ticketsApi";
+import { useGetMiscTasksQuery } from "@/store/api/miscTasksApi";
+import type { ScrumEntry, ScrumReference, ScrumReferenceType, WorkMode } from "@/lib/types";
 
 const WORK_MODES: WorkMode[] = ["Office", "Onsite", "Both", "WFH", "Leave"];
 
@@ -55,10 +58,27 @@ const MODE_META: Record<WorkMode, { color: string; Icon: typeof ApartmentIcon }>
   Leave: { color: DASHBOARD_COLORS.red, Icon: EventBusyOutlinedIcon },
 };
 
-interface Draft { workPerformed: string; workMode: WorkMode; }
+/** Group heading + accent colour per reference type. */
+const REF_GROUP: Record<ScrumReferenceType, string> = { na: "General", other: "General", project: "Projects", task: "Tasks", ticket: "Tickets" };
+const REF_COLOR: Record<ScrumReferenceType, string> = {
+  project: DASHBOARD_COLORS.blue,
+  task: DASHBOARD_COLORS.violet,
+  ticket: DASHBOARD_COLORS.orange,
+  na: DASHBOARD_COLORS.slate,
+  other: DASHBOARD_COLORS.slate,
+};
 
-/** A saved row counts as "updated" if there's real content or it's a Leave. */
-const isUpdated = (e: ScrumEntry) => e.workPerformed.trim().length > 0 || e.workMode === "Leave";
+/** Generic, entity-less choices shown at the top of the work-item dropdown. */
+const GENERAL_OPTIONS: ScrumReference[] = [
+  { type: "na", id: "na", label: "Not Applicable" },
+  { type: "other", id: "other", label: "Other" },
+];
+
+interface Draft { workPerformed: string; workMode: WorkMode; references: ScrumReference[]; }
+
+/** A saved row counts as "updated" if there's text, a work item, or it's a Leave. */
+const isUpdated = (e: ScrumEntry) =>
+  e.workPerformed.trim().length > 0 || (e.references?.length ?? 0) > 0 || e.workMode === "Leave";
 
 /* ---------- date helpers (scrum date is a plain YYYY-MM-DD, tz-safe) ------ */
 const shiftDate = (iso: string, days: number): string => {
@@ -76,13 +96,13 @@ const timeLabel = (iso: string): string =>
 
 /* ------------------------------------------------------------- work mode */
 
-function WorkModeSelect({ value, onChange }: { value: WorkMode; onChange: (v: WorkMode) => void }) {
+function WorkModeSelect({ value, onChange, disabled }: { value: WorkMode; onChange: (v: WorkMode) => void; disabled?: boolean }) {
   const meta = MODE_META[value];
-  const Icon = meta.Icon;
   return (
     <Select
       value={value}
       onChange={(e) => onChange(e.target.value as WorkMode)}
+      disabled={disabled}
       size="small"
       renderValue={(v) => {
         const m = MODE_META[v as WorkMode];
@@ -121,10 +141,37 @@ function WorkModeSelect({ value, onChange }: { value: WorkMode; onChange: (v: Wo
 /* -------------------------------------------------------------------- page */
 
 export function ScrumPage() {
-  const { employees, teams } = useOrgContext();
+  const { employees: allEmployees, teams } = useOrgContext();
+  const { user } = useAuth();
   const [date, setDate] = useState<string>(todayISO());
+
+  // The board only lists people who are on scrum and still active — sales team
+  // and a few others are excluded, and someone who left the org drops off.
+  const employees = useMemo(
+    () => allEmployees.filter((e) => e.status !== "inactive" && e.scrumEnabled !== false),
+    [allEmployees],
+  );
+
+  // Editing rules: only today is editable (previous days are read-only), and a
+  // regular user may edit only their own row — an admin/lead edits anyone's.
+  const isEditableDay = date === todayISO();
+  const canEditAll = user?.appRole === "Admin" || user?.appRole === "Lead";
+  const canEditRow = (empId: string) => isEditableDay && (canEditAll || user?.id === empId);
   const { data: entriesData, isFetching } = useGetScrumQuery(date);
   const [saveScrum, { isLoading: saving }] = useSaveScrumMutation();
+
+  // Generic work-item options — every project, misc task and ticket, NOT scoped
+  // to what's assigned to anyone (a person may work on something not theirs).
+  const { data: projectsData } = useGetProjectsQuery();
+  const { data: ticketsData } = useGetTicketsQuery();
+  const { data: miscTasksData } = useGetMiscTasksQuery();
+  const workItemOptions = useMemo<ScrumReference[]>(() => {
+    const opts: ScrumReference[] = [...GENERAL_OPTIONS];
+    for (const p of projectsData ?? []) opts.push({ type: "project", id: p.id, label: p.name });
+    for (const t of miscTasksData ?? []) opts.push({ type: "task", id: t.id, label: t.title });
+    for (const tk of ticketsData ?? []) opts.push({ type: "ticket", id: tk.id, label: `TKT-${tk.seq} · ${tk.title}` });
+    return opts;
+  }, [projectsData, miscTasksData, ticketsData]);
 
   const entries: ScrumEntry[] = useMemo(() => entriesData ?? [], [entriesData]);
   const entriesByEmp = useMemo(
@@ -136,24 +183,73 @@ export function ScrumPage() {
   const [search, setSearch] = useState("");
   const [teamFilter, setTeamFilter] = useState<string>("All");
   const [dateAnchor, setDateAnchor] = useState<HTMLElement | null>(null);
-  const [toast, setToast] = useState(false);
 
-  // Seed the editable draft from the day's saved entries (defaults for the
-  // rest). Re-runs when the day changes or a save refetches — never mid-edit,
-  // since local typing doesn't change the query result's identity.
+  // A ref mirror of `draft` so auto-save reads the latest values synchronously
+  // (state updates are async, and a dropdown change saves immediately).
+  const draftRef = useRef<Record<string, Draft>>({});
+  // Debounce timers per employee, for save-on-type.
+  const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  // Guards re-seeding: only re-seed when the day or the roster changes, NOT when
+  // an auto-save refetch updates the entries (which would clobber a live edit).
+  const seededKey = useRef<string | null>(null);
+
+  // Seed the editable draft from the day's saved entries (defaults for the rest).
   useEffect(() => {
+    const key = `${date}|${employees.length}`;
+    if (seededKey.current === key) return; // already seeded this day + roster
+    if (isFetching) return;                // wait until this date's entries arrive
     const next: Record<string, Draft> = {};
     for (const emp of employees) {
       const e = entriesByEmp[emp.id];
       next[emp.id] = e
-        ? { workPerformed: e.workPerformed, workMode: e.workMode }
-        : { workPerformed: "", workMode: "Office" };
+        ? { workPerformed: e.workPerformed, workMode: e.workMode, references: e.references ?? [] }
+        : { workPerformed: "", workMode: "Office", references: [] };
     }
+    draftRef.current = next;
     setDraft(next);
-  }, [employees, entriesByEmp]);
+    seededKey.current = key;
+  }, [date, employees, entriesByEmp, isFetching]);
 
-  const setField = (empId: string, patch: Partial<Draft>) =>
-    setDraft((d) => ({ ...d, [empId]: { ...d[empId], ...patch } }));
+  // Update a field in both the ref (for immediate reads) and state (for render).
+  const setField = (empId: string, patch: Partial<Draft>) => {
+    const cur = draftRef.current[empId] ?? { workPerformed: "", workMode: "Office" as WorkMode, references: [] as ScrumReference[] };
+    const next = { ...draftRef.current, [empId]: { ...cur, ...patch } };
+    draftRef.current = next;
+    setDraft(next);
+  };
+
+  // Persist a single row (the whole day's grid isn't sent — just this employee).
+  const persistRow = useCallback(async (empId: string) => {
+    const row = draftRef.current[empId];
+    if (!row) return;
+    try {
+      await saveScrum({
+        date,
+        entries: [{ employeeId: empId, workPerformed: row.workPerformed, workMode: row.workMode, references: row.references }],
+      }).unwrap();
+    } catch (e) { console.error(e); }
+  }, [date, saveScrum]);
+
+  // Save-on-type: debounce so a save fires shortly after the user pauses.
+  const scheduleSave = useCallback((empId: string) => {
+    if (saveTimers.current[empId]) clearTimeout(saveTimers.current[empId]);
+    saveTimers.current[empId] = setTimeout(() => {
+      delete saveTimers.current[empId];
+      persistRow(empId);
+    }, 700);
+  }, [persistRow]);
+
+  // Save immediately (dropdown change, or the field losing focus).
+  const flushSave = useCallback((empId: string) => {
+    if (saveTimers.current[empId]) { clearTimeout(saveTimers.current[empId]); delete saveTimers.current[empId]; }
+    persistRow(empId);
+  }, [persistRow]);
+
+  // Flush any pending debounced saves on unmount.
+  useEffect(() => {
+    const timers = saveTimers.current;
+    return () => { Object.values(timers).forEach(clearTimeout); };
+  }, []);
 
   // Ordered, filtered view (search by name, filter by team). Numbering follows
   // this list. Save always covers everyone, regardless of the filter.
@@ -169,20 +265,6 @@ export function ScrumPage() {
   const updatedCount = useMemo(() => entries.filter(isUpdated).length, [entries]);
   const allUpdated = total > 0 && updatedCount >= total;
   const isToday = date === todayISO();
-
-  const save = async () => {
-    try {
-      await saveScrum({
-        date,
-        entries: employees.map((emp) => ({
-          employeeId: emp.id,
-          workPerformed: draft[emp.id]?.workPerformed ?? "",
-          workMode: draft[emp.id]?.workMode ?? "Office",
-        })),
-      }).unwrap();
-      setToast(true);
-    } catch (e) { console.error(e); }
-  };
 
   return (
     <Box sx={{ width: "100%" }}>
@@ -219,26 +301,39 @@ export function ScrumPage() {
                 <ChevronRightIcon fontSize="small" />
               </IconButton>
             </Stack>
-
-            <Button variant="contained" onClick={save} disabled={saving}
-              startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <SaveOutlinedIcon />}>
-              {saving ? "Saving…" : "Save Updates"}
-            </Button>
           </Stack>
 
-          <Chip
-            icon={allUpdated ? <CheckCircleIcon sx={{ fontSize: 16 }} /> : undefined}
-            label={allUpdated ? `All ${updatedCount}/${total} updated` : `${updatedCount}/${total} updated`}
-            size="small"
-            sx={{
-              fontWeight: 600, borderRadius: "8px",
-              color: allUpdated ? DASHBOARD_COLORS.green : "text.secondary",
-              bgcolor: allUpdated ? alpha(DASHBOARD_COLORS.green, 0.13) : "action.hover",
-              border: "1px solid",
-              borderColor: allUpdated ? alpha(DASHBOARD_COLORS.green, 0.3) : "divider",
-              "& .MuiChip-icon": { color: DASHBOARD_COLORS.green },
-            }}
-          />
+          {/* No save button — every edit auto-saves; this shows the live status. */}
+          <Stack direction="row" alignItems="center" gap={1}>
+            {isEditableDay ? (
+              <Stack direction="row" alignItems="center" gap={0.5} sx={{ color: "text.secondary" }}>
+                {saving
+                  ? <CircularProgress size={12} color="inherit" />
+                  : <CheckCircleIcon sx={{ fontSize: 14, color: DASHBOARD_COLORS.green }} />}
+                <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                  {saving ? "Saving…" : "Saved automatically"}
+                </Typography>
+              </Stack>
+            ) : (
+              <Stack direction="row" alignItems="center" gap={0.5} sx={{ color: "text.secondary" }}>
+                <LockOutlinedIcon sx={{ fontSize: 14 }} />
+                <Typography variant="caption" sx={{ fontWeight: 600 }}>Read-only (previous day)</Typography>
+              </Stack>
+            )}
+            <Chip
+              icon={allUpdated ? <CheckCircleIcon sx={{ fontSize: 16 }} /> : undefined}
+              label={allUpdated ? `All ${updatedCount}/${total} updated` : `${updatedCount}/${total} updated`}
+              size="small"
+              sx={{
+                fontWeight: 600, borderRadius: "8px",
+                color: allUpdated ? DASHBOARD_COLORS.green : "text.secondary",
+                bgcolor: allUpdated ? alpha(DASHBOARD_COLORS.green, 0.13) : "action.hover",
+                border: "1px solid",
+                borderColor: allUpdated ? alpha(DASHBOARD_COLORS.green, 0.3) : "divider",
+                "& .MuiChip-icon": { color: DASHBOARD_COLORS.green },
+              }}
+            />
+          </Stack>
         </Stack>
       </Stack>
 
@@ -275,22 +370,24 @@ export function ScrumPage() {
 
       {/* Table */}
       <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2.5, bgcolor: "background.paper", overflow: "auto", maxHeight: "62vh" }}>
-        <Table stickyHeader sx={{ minWidth: 860 }}>
+        <Table stickyHeader sx={{ minWidth: 1080 }}>
           <TableHead>
             <TableRow sx={{ "& th": { bgcolor: "background.default", borderBottom: "1px solid", borderColor: "divider", py: 1.5, fontWeight: 700, fontSize: 12.5, color: "text.secondary", letterSpacing: 0.2 } }}>
               <TableCell sx={{ width: 60 }}>No.</TableCell>
-              <TableCell sx={{ width: 220 }}>Employee</TableCell>
-              <TableCell>Work Performed (Project / Task / Ticket)</TableCell>
+              <TableCell sx={{ width: 210 }}>Employee</TableCell>
+              <TableCell>Work Performed</TableCell>
+              <TableCell sx={{ width: 230 }}>Project / Task / Ticket</TableCell>
               <TableCell sx={{ width: 170 }}>Work Mode</TableCell>
-              <TableCell sx={{ width: 150 }}>Actions</TableCell>
+              <TableCell sx={{ width: 140 }}>Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {rows.map((emp, i) => {
-              const d = draft[emp.id] ?? { workPerformed: "", workMode: "Office" as WorkMode };
+              const d = draft[emp.id] ?? { workPerformed: "", workMode: "Office" as WorkMode, references: [] as ScrumReference[] };
               const saved = entriesByEmp[emp.id];
               const done = !!saved && isUpdated(saved);
               const isLeave = d.workMode === "Leave";
+              const editable = canEditRow(emp.id);
               return (
                 <TableRow key={emp.id} sx={{
                   transition: "background-color .12s ease",
@@ -320,14 +417,15 @@ export function ScrumPage() {
                   <TableCell>
                     <TextField
                       value={d.workPerformed}
-                      onChange={(e) => setField(emp.id, { workPerformed: e.target.value })}
+                      onChange={(e) => { setField(emp.id, { workPerformed: e.target.value }); scheduleSave(emp.id); }}
+                      onBlur={() => flushSave(emp.id)}
                       placeholder={isLeave ? "On leave — no update needed." : "Describe what you worked on today — project, task or ticket…"}
-                      disabled={isLeave}
+                      disabled={isLeave || !editable}
                       fullWidth multiline minRows={2} maxRows={6}
                       sx={{
                         "& .MuiOutlinedInput-root": {
                           borderRadius: 2, fontSize: 14,
-                          bgcolor: isLeave ? "action.hover" : "background.default",
+                          bgcolor: (isLeave || !editable) ? "action.hover" : "background.default",
                           transition: "background-color .15s ease, border-color .15s ease",
                           "&:hover:not(.Mui-disabled)": { bgcolor: "background.paper" },
                           "&.Mui-focused": { bgcolor: "background.paper" },
@@ -336,7 +434,46 @@ export function ScrumPage() {
                     />
                   </TableCell>
                   <TableCell>
-                    <WorkModeSelect value={d.workMode} onChange={(v) => setField(emp.id, { workMode: v })} />
+                    <Autocomplete
+                      multiple size="small" disableCloseOnSelect
+                      disabled={isLeave || !editable}
+                      options={workItemOptions}
+                      value={d.references}
+                      groupBy={(o) => REF_GROUP[o.type]}
+                      getOptionLabel={(o) => o.label}
+                      isOptionEqualToValue={(a, b) => a.type === b.type && a.id === b.id}
+                      onChange={(_, val) => {
+                        // "Not Applicable" is exclusive: picking it clears the
+                        // rest, and picking anything else clears it.
+                        const lastAdded = val[val.length - 1];
+                        let next = val;
+                        if (lastAdded?.type === "na") next = [lastAdded];
+                        else if (val.some((v) => v.type === "na")) next = val.filter((v) => v.type !== "na");
+                        setField(emp.id, { references: next });
+                        flushSave(emp.id);
+                      }}
+                      renderValue={(value, getItemProps) =>
+                        value.map((opt, index) => {
+                          const c = REF_COLOR[opt.type];
+                          const { key, ...itemProps } = getItemProps({ index });
+                          return (
+                            <Chip key={`${opt.type}:${opt.id}`} {...itemProps} label={opt.label} size="small"
+                              sx={{
+                                maxWidth: 190, height: 22, borderRadius: "7px", fontWeight: 600,
+                                color: c, bgcolor: alpha(c, 0.13),
+                                "& .MuiChip-deleteIcon": { color: alpha(c, 0.7), "&:hover": { color: c } },
+                              }} />
+                          );
+                        })
+                      }
+                      renderInput={(params) => (
+                        <TextField {...params} placeholder={d.references.length ? "" : "Select…"} />
+                      )}
+                      sx={{ minWidth: 200, "& .MuiOutlinedInput-root": { borderRadius: 2, bgcolor: (isLeave || !editable) ? "action.hover" : "background.default" } }}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <WorkModeSelect value={d.workMode} disabled={!editable} onChange={(v) => { setField(emp.id, { workMode: v }); flushSave(emp.id); }} />
                   </TableCell>
                   <TableCell>
                     {saved ? (
@@ -359,7 +496,7 @@ export function ScrumPage() {
             })}
             {rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5}>
+                <TableCell colSpan={6}>
                   <Box sx={{ textAlign: "center", py: 6, color: "text.secondary" }}>
                     <Diversity3Icon sx={{ fontSize: 40, opacity: 0.4 }} />
                     <Typography sx={{ mt: 1 }}>
@@ -387,24 +524,11 @@ export function ScrumPage() {
             </Typography>
           </Box>
         </Stack>
-        <Stack direction="row" gap={1.5} flexWrap="wrap">
-          <Button variant="outlined" color="inherit" startIcon={<HistoryIcon />} onClick={() => setDate((d) => shiftDate(d, -1))}
-            sx={{ borderColor: "divider", color: "text.primary", textTransform: "none", fontWeight: 600, borderRadius: 2 }}>
-            View Previous Days
-          </Button>
-          <Button variant="contained" onClick={save} disabled={saving}
-            startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <SaveOutlinedIcon />}>
-            {saving ? "Saving…" : "Save Updates"}
-          </Button>
-        </Stack>
+        <Button variant="outlined" color="inherit" startIcon={<HistoryIcon />} onClick={() => setDate((d) => shiftDate(d, -1))}
+          sx={{ borderColor: "divider", color: "text.primary", textTransform: "none", fontWeight: 600, borderRadius: 2 }}>
+          View Previous Days
+        </Button>
       </Stack>
-
-      <Snackbar open={toast} autoHideDuration={2500} onClose={() => setToast(false)}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>
-        <Alert severity="success" variant="filled" onClose={() => setToast(false)} sx={{ borderRadius: 2 }}>
-          Scrum updates saved.
-        </Alert>
-      </Snackbar>
     </Box>
   );
 }

@@ -30,9 +30,26 @@ export interface Team {
   members: TeamMember[];
 }
 
+export type EmployeeStatus = "active" | "inactive";
 export interface Employee extends TeamMember {
   team: string;
   teamId: string;
+  /** Directory lifecycle + scrum participation (present from GET /employees). */
+  status?: EmployeeStatus;
+  scrumEnabled?: boolean;
+  email?: string | null;
+  phoneNumber?: string | null;
+}
+
+/** Body for POST /employees and PATCH /employees/:id (partial). */
+export interface EmployeeInput {
+  name: string;
+  teamId: string;
+  role?: OrgRole;
+  email?: string;
+  phoneNumber?: string;
+  status?: EmployeeStatus;
+  scrumEnabled?: boolean;
 }
 
 /* ---------------------------------------------------------------------
@@ -434,6 +451,14 @@ export interface MiscTask {
 /** Where an employee worked on a given day — the scrum "Work Mode". */
 export type WorkMode = "Office" | "Onsite" | "Both" | "WFH" | "Leave";
 
+/** A generic reference to a project / task / ticket worked on (not assignment-scoped). */
+export type ScrumReferenceType = "project" | "task" | "ticket" | "na" | "other";
+export interface ScrumReference {
+  type: ScrumReferenceType;
+  id: string;
+  label: string;
+}
+
 /** One saved scrum update (GET /scrum, PUT /scrum). */
 export interface ScrumEntry {
   id: string;
@@ -441,6 +466,7 @@ export interface ScrumEntry {
   date: string;
   workPerformed: string;
   workMode: WorkMode;
+  references: ScrumReference[];
   updatedAt: string;
 }
 
@@ -449,6 +475,7 @@ export interface ScrumSaveEntry {
   employeeId: string;
   workPerformed: string;
   workMode: WorkMode;
+  references: ScrumReference[];
 }
 
 /** Body for PUT /scrum — the whole day at once. */

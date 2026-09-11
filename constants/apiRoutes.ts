@@ -60,6 +60,9 @@ export const apiRoutes = {
   employees: {
     root: 'employees',
     getList: '',
+    create: '',
+    updateById: (id: string) => id,
+    deleteById: (id: string) => id,
   },
 
   teamPerformance: {

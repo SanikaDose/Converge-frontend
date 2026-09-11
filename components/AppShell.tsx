@@ -182,6 +182,12 @@ function AccountMenu() {
           My profile
         </MenuItem>
         {user?.appRole === "Admin" && (
+          <MenuItem onClick={() => { setAnchorEl(null); router.push("/employees"); }}>
+            <ListItemIcon><GroupsIcon fontSize="small" /></ListItemIcon>
+            Manage employees
+          </MenuItem>
+        )}
+        {user?.appRole === "Admin" && (
           <MenuItem onClick={() => { setAnchorEl(null); router.push("/template"); }}>
             <ListItemIcon><TuneIcon fontSize="small" /></ListItemIcon>
             Project template

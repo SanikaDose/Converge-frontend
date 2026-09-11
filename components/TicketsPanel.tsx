@@ -67,7 +67,7 @@ type BucketKey = "Raised" | "Reopened" | "Completed";
 const BUCKETS: { key: BucketKey; label: string; hint: string; icon: ElementType; tone: StatusColorKey; match: (t: Ticket) => boolean }[] = [
   { key: "Raised", label: "Raised Tickets", hint: "Still need action", icon: FlagCircleIcon, tone: "red", match: (t) => t.status === "Open" || t.status === "In Progress" },
   { key: "Reopened", label: "Reopened", hint: "Closed, then reopened", icon: ReplayCircleFilledIcon, tone: "violet", match: (t) => t.status === "Reopened" },
-  { key: "Completed", label: "Completed", hint: "Resolved & closed", icon: CheckCircleIcon, tone: "green", match: (t) => t.status === "Resolved" || t.status === "Closed" },
+  { key: "Completed", label: "Closed", hint: "Resolved & closed", icon: CheckCircleIcon, tone: "green", match: (t) => t.status === "Resolved" || t.status === "Closed" },
 ];
 
 export interface ProjectOption { id: string; name: string }
@@ -228,6 +228,15 @@ function TicketRow({ ticket, canUpdate, onUpdate, focus }: {
   const urgent = ticket.priority === "High" || ticket.priority === "Critical";
   const settled = ticket.status === "Resolved" || ticket.status === "Closed";
 
+  // Status options in the dropdown depend on the current status:
+  //  - Reopened: can only go to Closed (its own value shown so the select reads
+  //    correctly). Closed itself is handled below with a dedicated Reopen action.
+  //  - Anything else: the normal flow, minus "Reopened" (only reachable by
+  //    reopening a closed ticket, never picked directly).
+  const statusOptions: TicketStatus[] = ticket.status === "Reopened"
+    ? ["Reopened", "Closed"]
+    : TICKET_STATUS.filter(s => s !== "Reopened");
+
   return (
     <Accordion
       id={`ticket-${ticket.id}`}
@@ -319,9 +328,7 @@ function TicketRow({ ticket, canUpdate, onUpdate, focus }: {
                 "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: tint(statusHex, 60) },
                 "& .MuiSelect-icon": { color: statusHex },
               }}>
-              {/* "Reopened" is only offered while the ticket is actually reopened
-                  (to display its own value); you don't pick it for an open ticket. */}
-              {TICKET_STATUS.filter(s => s !== "Reopened" || ticket.status === "Reopened").map(s => <MenuItem key={s} value={s}>{s}</MenuItem>)}
+              {statusOptions.map(s => <MenuItem key={s} value={s} disabled={s === ticket.status}>{s}</MenuItem>)}
             </Select>
           ) : <StatusChip label={ticket.status} color={color} />}
         </Box>

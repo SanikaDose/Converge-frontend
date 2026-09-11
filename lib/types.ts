@@ -428,6 +428,35 @@ export interface MiscTask {
   history: HistoryEntry[];
 }
 
+/* ---------------------------------------------------------------------
+   DAILY SCRUM
+------------------------------------------------------------------------ */
+/** Where an employee worked on a given day — the scrum "Work Mode". */
+export type WorkMode = "Office" | "Onsite" | "Both" | "WFH" | "Leave";
+
+/** One saved scrum update (GET /scrum, PUT /scrum). */
+export interface ScrumEntry {
+  id: string;
+  employeeId: string;
+  date: string;
+  workPerformed: string;
+  workMode: WorkMode;
+  updatedAt: string;
+}
+
+/** One row in the save payload. */
+export interface ScrumSaveEntry {
+  employeeId: string;
+  workPerformed: string;
+  workMode: WorkMode;
+}
+
+/** Body for PUT /scrum — the whole day at once. */
+export interface ScrumSavePayload {
+  date: string;
+  entries: ScrumSaveEntry[];
+}
+
 /** Body for POST /misc-tasks and PATCH /misc-tasks/:id (partial). */
 export interface MiscTaskInput {
   title: string;

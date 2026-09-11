@@ -77,6 +77,12 @@ export const apiRoutes = {
     getList: '',
     markRead: 'mark-read',
   },
+
+  scrum: {
+    root: 'scrum',
+    getByDate: '',
+    save: '',
+  },
 } as const;
 
 /** Joins a controller root and an endpoint path, tolerating an empty path. */

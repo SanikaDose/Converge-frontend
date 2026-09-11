@@ -22,6 +22,7 @@ import DashboardIcon from "@mui/icons-material/SpaceDashboard";
 import GroupsIcon from "@mui/icons-material/Groups";
 import ConfirmationNumberIcon from "@mui/icons-material/ConfirmationNumber";
 import ViewKanbanIcon from "@mui/icons-material/ViewKanban";
+import Diversity3Icon from "@mui/icons-material/Diversity3";
 import TaskAltIcon from "@mui/icons-material/TaskAlt";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
@@ -52,6 +53,7 @@ const NAV_ITEMS = [
   { href: "/tickets", label: "Tickets", icon: ConfirmationNumberIcon },
   { href: "/tasks", label: "Tasks", icon: TaskAltIcon },
   { href: "/kanban", label: "Kanban", icon: ViewKanbanIcon },
+  { href: "/scrum", label: "Scrum", icon: Diversity3Icon },
 ];
 
 /** Small dot icon per notification kind, keyed to the dashboard palette. */

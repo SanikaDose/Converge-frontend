@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState, type ElementType, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import Box from "@mui/material/Box";
 import { alpha, useTheme } from "@mui/material/styles";
 import Stack from "./Stack";
@@ -146,6 +147,7 @@ export function Dashboard({ actor, onOpen }: {
   onOpen: (id: string) => void;
 }) {
   const { role } = actor;
+  const router = useRouter();
   const theme = useTheme();
   const [query, setQuery] = useState("");
   const [myOnly, setMyOnly] = useState(false);
@@ -310,7 +312,8 @@ export function Dashboard({ actor, onOpen }: {
         </Grid>
         <Grid size={{ xs: 6, sm: 4, md: 2 }}>
           <StatCard icon={WarningAmberIcon} label="Delayed Tasks" value={portfolio.totalDelayed}
-            color={portfolio.totalDelayed > 0 ? DASHBOARD_COLORS.red : DASHBOARD_COLORS.green} trend={trends?.delayed} tint={portfolio.totalDelayed > 0} />
+            color={portfolio.totalDelayed > 0 ? DASHBOARD_COLORS.red : DASHBOARD_COLORS.green} trend={trends?.delayed} tint={portfolio.totalDelayed > 0}
+            onClick={() => router.push("/kanban?status=Delayed")} />
         </Grid>
       </Grid>
 

@@ -18,7 +18,7 @@ import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 import FlagOutlinedIcon from "@mui/icons-material/FlagOutlined";
 import { GlobalKanbanBoard, type GlobalKanbanTask } from "@/components/GlobalKanbanBoard";
 import { useGetProjectsWithDetailsQuery, useUpdateProjectMutation } from "@/store/api/projectsApi";
-import { computeAchievement } from "@/lib/businessLogic";
+import { computeAchievement, isOverdue } from "@/lib/businessLogic";
 import { todayISO } from "@/lib/dateUtils";
 import { roleCan, STATUS_OPTIONS } from "@/lib/data";
 import { useAppContext } from "@/context/AppContext";
@@ -32,7 +32,10 @@ const ALL_PROJECTS = "__all_projects__";
 // derived/warning state, and Not Required is out-of-scope work; neither is
 // somewhere active work sits, so the board opens focused on the statuses
 // someone would actually triage day to day. Both are still tickable on.
-const DEFAULT_STATUSES: TaskStatus[] = STATUS_OPTIONS.filter(s => s !== "Delayed" && s !== "Not Required") as TaskStatus[];
+// Everything except "Not Required" shows by default. "Delayed" IS shown: it's a
+// derived column (overdue tasks land here — see allTasks), so hiding it would
+// make overdue work vanish from the board.
+const DEFAULT_STATUSES: TaskStatus[] = STATUS_OPTIONS.filter(s => s !== "Not Required") as TaskStatus[];
 
 export default function GlobalKanbanPage() {
   const router = useRouter();
@@ -45,13 +48,18 @@ export default function GlobalKanbanPage() {
   const [projectFilter, setProjectFilter] = useState<string[]>([]);
   const [selectedStatuses, setSelectedStatuses] = useState<TaskStatus[]>(DEFAULT_STATUSES);
 
-  // Deep link from the Team page: /kanban?user=<id> preselects that person in
-  // the assignee filter so the board opens on their tasks. Read once on mount
-  // (client-only, so no useSearchParams Suspense boundary needed).
+  // Deep links, read once on mount (client-only, so no useSearchParams Suspense
+  // boundary needed):
+  //   ?user=<id>       — from the Team/Scrum pages: preselect that person.
+  //   ?status=<status> — from the dashboard "Delayed Tasks" KPI: show only that
+  //                      status column (e.g. Delayed), everything else off.
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const id = new URLSearchParams(window.location.search).get("user");
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get("user");
     if (id) setSelectedUserIds([id]);
+    const status = params.get("status");
+    if (status && (STATUS_OPTIONS as readonly string[]).includes(status)) setSelectedStatuses([status as TaskStatus]);
   }, []);
 
   // Index + every project's detail as one cached query — see
@@ -73,15 +81,26 @@ export default function GlobalKanbanPage() {
     projectDetails.forEach(pd => {
       const phaseNameById: Record<string, string> = {};
       pd.phases.forEach(ph => { phaseNameById[ph.id] = ph.name; });
+      // Tasks in a "Not Required" phase are out of scope, so they never count as
+      // delayed — this is exactly how the dashboard's "Delayed Tasks" KPI counts
+      // (liveProjectStats), so the board's Delayed total matches the KPI.
+      const notRequiredPhaseIds = new Set(pd.phases.filter(ph => ph.notRequired).map(ph => ph.id));
       pd.tasks.forEach(t => {
+        // A task past its planned finish (and not done) shows as "Delayed" — the
+        // same overdue rule the dashboard KPI and the timeline use — so the
+        // Delayed column reflects real delays, not a literal status nobody sets.
+        // The real status is untouched in the DB; drag/drop re-reads it from
+        // project data (handleStatusChange), so moving a card still works.
+        const overdue = isOverdue(t, today) && !notRequiredPhaseIds.has(t.phaseId);
+        const status: TaskStatus = overdue ? "Delayed" : t.status;
         out.push({
-          ...t, projectId: pd.id, projectName: pd.meta.name, projectType: pd.meta.type,
+          ...t, status, projectId: pd.id, projectName: pd.meta.name, projectType: pd.meta.type,
           phaseName: phaseNameById[t.phaseId] || "—", weekOff: pd.meta.weekOff,
         });
       });
     });
     return out;
-  }, [projectDetails]);
+  }, [projectDetails, today]);
 
   const filteredTasks = useMemo(() => {
     return allTasks.filter(t => {

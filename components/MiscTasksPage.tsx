@@ -472,6 +472,13 @@ export function MiscTasksPage() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
+    // Order rows by status: To Do → In Progress → On Hold → Completed (last),
+    // per STATUSES. Unknown statuses fall to the end. Array.sort is stable, so
+    // within a status the existing order (newest first, from the API) is kept.
+    const rank = (s: MiscTaskStatus) => {
+      const i = STATUSES.indexOf(s);
+      return i === -1 ? STATUSES.length : i;
+    };
     return tasks.filter(t => {
       if (statusFilter !== "All" && t.status !== statusFilter) return false;
       if (priorityFilter !== "All" && t.priority !== priorityFilter) return false;
@@ -482,7 +489,7 @@ export function MiscTasksPage() {
       if (dueTo && (!t.endDate || t.endDate > dueTo)) return false;
       if (!q) return true;
       return t.title.toLowerCase().includes(q) || (t.description || "").toLowerCase().includes(q);
-    });
+    }).sort((a, b) => rank(a.status) - rank(b.status));
   }, [tasks, search, statusFilter, priorityFilter, assigneeFilter, dueFrom, dueTo]);
 
   const openAdd = () => { setEditing(null); setDrawerOpen(true); };

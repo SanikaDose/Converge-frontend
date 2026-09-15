@@ -182,6 +182,15 @@ export function ScrumPage() {
     [entries],
   );
 
+  // The previous day, shown read-only beside today so both are on one screen
+  // (classic "Yesterday / Today" standup view).
+  const prevDate = shiftDate(date, -1);
+  const { data: prevData } = useGetScrumQuery(prevDate);
+  const prevByEmp = useMemo(
+    () => Object.fromEntries((prevData ?? []).map((e) => [e.employeeId, e])),
+    [prevData],
+  );
+
   const [draft, setDraft] = useState<Record<string, Draft>>({});
   const [search, setSearch] = useState("");
   const [teamFilter, setTeamFilter] = useState<string>("All");
@@ -373,12 +382,13 @@ export function ScrumPage() {
 
       {/* Table */}
       <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2.5, bgcolor: "background.paper", overflow: "auto", maxHeight: "62vh" }}>
-        <Table stickyHeader sx={{ minWidth: 1080 }}>
+        <Table stickyHeader sx={{ minWidth: 1320 }}>
           <TableHead>
             <TableRow sx={{ "& th": { bgcolor: "background.default", borderBottom: "1px solid", borderColor: "divider", py: 1.5, fontWeight: 700, fontSize: 12.5, color: "text.secondary", letterSpacing: 0.2 } }}>
               <TableCell sx={{ width: 60 }}>No.</TableCell>
-              <TableCell sx={{ width: 210 }}>Employee</TableCell>
-              <TableCell>Work Performed</TableCell>
+              <TableCell sx={{ width: 200 }}>Employee</TableCell>
+              <TableCell sx={{ width: 260 }}>Yesterday · {dayLabel(prevDate)}</TableCell>
+              <TableCell>Today&apos;s Work</TableCell>
               <TableCell sx={{ width: 230 }}>Project / Task / Ticket</TableCell>
               <TableCell sx={{ width: 170 }}>Work Mode</TableCell>
               <TableCell sx={{ width: 140 }}>Actions</TableCell>
@@ -388,6 +398,7 @@ export function ScrumPage() {
             {rows.map((emp, i) => {
               const d = draft[emp.id] ?? { workPerformed: "", workMode: "Office" as WorkMode, references: [] as ScrumReference[] };
               const saved = entriesByEmp[emp.id];
+              const prev = prevByEmp[emp.id];
               const done = !!saved && isUpdated(saved);
               const isLeave = d.workMode === "Leave";
               const editable = canEditRow(emp.id);
@@ -422,6 +433,32 @@ export function ScrumPage() {
                         </Box>
                       </Stack>
                     </Tooltip>
+                  </TableCell>
+                  {/* Yesterday — read-only, so you see the last update next to today's. */}
+                  <TableCell>
+                    {prev && (prev.workPerformed.trim() || prev.workMode === "Leave" || (prev.references?.length ?? 0) > 0) ? (
+                      <Stack gap={0.75}>
+                        {prev.workPerformed.trim() ? (
+                          <Typography variant="body2" sx={{ fontSize: 13, whiteSpace: "pre-wrap", color: "text.secondary" }}>{prev.workPerformed}</Typography>
+                        ) : (
+                          <Typography variant="caption" sx={{ fontStyle: "italic", color: "text.disabled" }}>
+                            {prev.workMode === "Leave" ? "On leave" : "No description"}
+                          </Typography>
+                        )}
+                        <Stack direction="row" gap={0.5} flexWrap="wrap" alignItems="center">
+                          {(() => { const m = MODE_META[prev.workMode]; const I = m.Icon; return (
+                            <Chip size="small" icon={<I sx={{ fontSize: 14 }} />} label={prev.workMode}
+                              sx={{ height: 20, borderRadius: "6px", fontSize: 11, fontWeight: 600, color: m.color, bgcolor: alpha(m.color, 0.12), "& .MuiChip-icon": { color: m.color, ml: "4px" } }} />
+                          ); })()}
+                          {(prev.references ?? []).map((r) => (
+                            <Chip key={`${r.type}:${r.id}`} size="small" label={r.label}
+                              sx={{ height: 20, maxWidth: 150, borderRadius: "6px", fontSize: 11, fontWeight: 600, color: REF_COLOR[r.type], bgcolor: alpha(REF_COLOR[r.type], 0.12) }} />
+                          ))}
+                        </Stack>
+                      </Stack>
+                    ) : (
+                      <Typography variant="caption" color="text.disabled">No update</Typography>
+                    )}
                   </TableCell>
                   <TableCell>
                     <TextField
@@ -505,7 +542,7 @@ export function ScrumPage() {
             })}
             {rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6}>
+                <TableCell colSpan={7}>
                   <Box sx={{ textAlign: "center", py: 6, color: "text.secondary" }}>
                     <Diversity3Icon sx={{ fontSize: 40, opacity: 0.4 }} />
                     <Typography sx={{ mt: 1 }}>

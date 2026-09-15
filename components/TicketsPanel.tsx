@@ -49,8 +49,8 @@ function fmtStamp(iso: string): string {
   return d.toLocaleString(undefined, { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
-const TICKET_STATUS: TicketStatus[] = ["Open", "In Progress", "Resolved", "Closed", "Reopened"];
-const TICKET_STATUS_COLOR: Record<TicketStatus, StatusColorKey> = { Open: "red", "In Progress": "amber", Resolved: "green", Closed: "slate", Reopened: "violet" };
+const TICKET_STATUS: TicketStatus[] = ["Open", "In Progress", "Closed", "Reopened"];
+const TICKET_STATUS_COLOR: Record<TicketStatus, StatusColorKey> = { Open: "red", "In Progress": "amber", Closed: "slate", Reopened: "violet" };
 
 // Urgency, as a color — drives each row's left accent bar so a list of
 // tickets can be triaged by edge color before reading a single word.
@@ -67,7 +67,7 @@ type BucketKey = "Raised" | "Reopened" | "Completed";
 const BUCKETS: { key: BucketKey; label: string; hint: string; icon: ElementType; tone: StatusColorKey; match: (t: Ticket) => boolean }[] = [
   { key: "Raised", label: "Raised Tickets", hint: "Still need action", icon: FlagCircleIcon, tone: "red", match: (t) => t.status === "Open" || t.status === "In Progress" },
   { key: "Reopened", label: "Reopened", hint: "Closed, then reopened", icon: ReplayCircleFilledIcon, tone: "violet", match: (t) => t.status === "Reopened" },
-  { key: "Completed", label: "Closed", hint: "Resolved & closed", icon: CheckCircleIcon, tone: "green", match: (t) => t.status === "Resolved" || t.status === "Closed" },
+  { key: "Completed", label: "Closed", hint: "Done", icon: CheckCircleIcon, tone: "green", match: (t) => t.status === "Closed" },
 ];
 
 export interface ProjectOption { id: string; name: string }
@@ -226,7 +226,7 @@ function TicketRow({ ticket, canUpdate, onUpdate, focus }: {
   const priorityHex = STATUS_HEX[PRIORITY_COLOR[ticket.priority]];
   const priorityFill = DASHBOARD_COLORS[PRIORITY_COLOR[ticket.priority]];
   const urgent = ticket.priority === "High" || ticket.priority === "Critical";
-  const settled = ticket.status === "Resolved" || ticket.status === "Closed";
+  const settled = ticket.status === "Closed";
 
   // Status options in the dropdown depend on the current status:
   //  - Reopened: can only go to Closed (its own value shown so the select reads
@@ -293,7 +293,7 @@ function TicketRow({ ticket, canUpdate, onUpdate, focus }: {
           </Stack>
           <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.4 }}>
             {ticket.projectName} · Raised {fmt(ticket.createdAt)}
-            {ticket.resolvedAt ? ` · ${ticket.status === "Closed" ? "Closed" : "Resolved"} ${fmt(ticket.resolvedAt)}` : ""}
+            {ticket.resolvedAt ? ` · Closed ${fmt(ticket.resolvedAt)}` : ""}
           </Typography>
         </Box>
         <Box onClick={(e) => e.stopPropagation()} sx={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 0.5 }}>
@@ -356,8 +356,8 @@ function TicketRow({ ticket, canUpdate, onUpdate, focus }: {
         <Stack direction="row" gap={1.5} flexWrap="wrap" sx={{ mb: 2, fontSize: 11.5, color: "text.secondary" }}>
           <span>Raised {fmt(ticket.createdAt)}</span>
           {ticket.resolvedAt && (
-            <span style={{ color: ticket.status === "Closed" ? STATUS_HEX.slate : STATUS_HEX.green }}>
-              {ticket.status === "Closed" ? "Closed" : "Resolved"} {fmt(ticket.resolvedAt)}
+            <span style={{ color: STATUS_HEX.slate }}>
+              Closed {fmt(ticket.resolvedAt)}
             </span>
           )}
         </Stack>
@@ -548,7 +548,7 @@ export function TicketsPanel({ actor, projects, refreshKey, onChanged }: {
   // One tally per status, so the header can show the actual mix rather than
   // a single "n open" number that hides where everything is sitting.
   const byStatus = useMemo(() => {
-    const counts: Record<TicketStatus, number> = { Open: 0, "In Progress": 0, Resolved: 0, Closed: 0, Reopened: 0 };
+    const counts: Record<TicketStatus, number> = { Open: 0, "In Progress": 0, Closed: 0, Reopened: 0 };
     tickets.forEach(t => { counts[t.status] += 1; });
     return counts;
   }, [tickets]);
@@ -606,7 +606,7 @@ export function TicketsPanel({ actor, projects, refreshKey, onChanged }: {
                 {([
                   ["Open", byStatus.Open, DASHBOARD_COLORS.red],
                   ["In progress", byStatus["In Progress"], DASHBOARD_COLORS.amber],
-                  ["Done", byStatus.Resolved + byStatus.Closed, DASHBOARD_COLORS.green],
+                  ["Done", byStatus.Closed, DASHBOARD_COLORS.green],
                 ] as const).map(([label, n, hex]) => (
                   <Stack key={label} direction="row" alignItems="center" gap={0.6}>
                     <Box sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: n ? hex : "text.disabled" }} />

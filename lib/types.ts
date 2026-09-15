@@ -381,7 +381,7 @@ export interface UpdateProjectPatch {
 /* ---------------------------------------------------------------------
    TICKETS
 ------------------------------------------------------------------------ */
-export type TicketStatus = "Open" | "In Progress" | "Resolved" | "Closed" | "Reopened";
+export type TicketStatus = "Open" | "In Progress" | "Closed" | "Reopened";
 
 export interface Ticket {
   id: string;

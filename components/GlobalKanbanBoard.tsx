@@ -16,6 +16,7 @@ import { isOverdue, overdueWorkingDays, openChecklistCount, lateWorkingDays } fr
 import { fmt } from "@/lib/dateUtils";
 import { useStatusHex } from "@/lib/theme";
 import type { ProjectType, Task, TaskStatus, WeekDay } from "@/lib/types";
+import type { KanbanSource } from "@/lib/kanbanStatus";
 
 export interface GlobalKanbanTask extends Task {
   projectId: string;
@@ -23,7 +24,18 @@ export interface GlobalKanbanTask extends Task {
   projectType: ProjectType;
   phaseName: string;
   weekOff: WeekDay[];
+  /** Which module this card came from. Defaults to "task" (project task). */
+  source?: KanbanSource;
+  /** The card's own (native) status, before the forward map — shown as a chip. */
+  nativeStatus?: string;
 }
+
+/** Small badge per source, so mixed cards are distinguishable at a glance. */
+const SOURCE_BADGE: Record<KanbanSource, { label: string; color: string } | null> = {
+  task: null,
+  misc: { label: "Misc Task", color: "#8B5CF6" },
+  ticket: { label: "Ticket", color: "#F97316" },
+};
 
 /**
  * Portfolio-wide Kanban — same column/card visual structure as the
@@ -121,22 +133,29 @@ export function GlobalKanbanBoard({
                 </Box>
               )}
               {colTasks.map(t => {
+                const source: KanbanSource = t.source ?? "task";
+                const isTask = source === "task";
+                const badge = SOURCE_BADGE[source];
                 const overdue = isOverdue(t, today);
                 const overdueDays = overdueWorkingDays(t, today, t.weekOff);
-                const lateDays = lateWorkingDays(t, t.weekOff);
+                const lateDays = isTask ? lateWorkingDays(t, t.weekOff) : 0;
                 const locked = t.status === "Pending Approval";
+                // Only project tasks are draggable here — tickets/misc keep their
+                // own status vocabulary, so they open in their own screen instead
+                // of being re-statused from this board (forward-map display only).
+                const draggable = canEdit && !locked && isTask;
                 return (
                   <Box
                     key={t.id}
-                    draggable={canEdit && !locked}
-                    onDragStart={() => setDragId(t.id)}
+                    draggable={draggable}
+                    onDragStart={() => draggable && setDragId(t.id)}
                     onDragEnd={() => { setDragId(null); setDragOverStatus(null); }}
                     onClick={() => onOpenTask(t)}
                     sx={{
                       p: 1.25, borderRadius: 1.5, bgcolor: "background.paper", border: "1px solid", borderColor: "divider",
                       borderLeft: "3px solid", borderLeftColor: overdue ? STATUS_HEX.red : color,
                       boxShadow: "0 1px 2px rgba(16,24,40,0.06)",
-                      cursor: canEdit && !locked ? "grab" : "pointer", opacity: dragId === t.id ? 0.5 : 1,
+                      cursor: draggable ? "grab" : "pointer", opacity: dragId === t.id ? 0.5 : 1,
                       transition: "border-color .15s ease, transform .15s ease, box-shadow .15s ease",
                       "&:hover": { borderColor: "primary.main", transform: "translateY(-1px)", boxShadow: "0 4px 10px rgba(16,24,40,0.10)" },
                     }}
@@ -147,15 +166,26 @@ export function GlobalKanbanBoard({
                     </Typography>
 
                     <Stack direction="row" alignItems="center" gap={0.6} flexWrap="wrap" sx={{ mt: 0.75 }}>
+                      {badge && (
+                        <Chip label={badge.label} size="small" sx={{
+                          height: 18, fontSize: 10, fontWeight: 700,
+                          color: badge.color, bgcolor: alpha(badge.color, 0.13),
+                        }} />
+                      )}
+                      {!isTask && t.nativeStatus && (
+                        <Chip label={t.nativeStatus} size="small" variant="outlined" sx={{
+                          height: 18, fontSize: 10, fontWeight: 600, color: "text.secondary", borderColor: "divider",
+                        }} />
+                      )}
                       {t.priority && t.priority !== "Medium" && (
                         <Chip label={t.priority} size="small" variant="outlined" sx={{
                           height: 18, fontSize: 10, fontWeight: 700,
                           color: STATUS_HEX[PRIORITY_COLOR[t.priority]], borderColor: STATUS_HEX[PRIORITY_COLOR[t.priority]],
                         }} />
                       )}
-                      {lateDays > 0
+                      {isTask && (lateDays > 0
                         ? <LateBadge days={lateDays} size="small" />
-                        : <AchievementBadge achievement={t.achievement} size="small" />}
+                        : <AchievementBadge achievement={t.achievement} size="small" />)}
                     </Stack>
 
                     <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 1 }}>

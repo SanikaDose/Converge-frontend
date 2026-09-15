@@ -32,7 +32,7 @@ export default function TicketsPage() {
   const stats = useMemo(() => {
     const total = tickets.length;
     const open = tickets.filter(t => t.status === "Open" || t.status === "In Progress" || t.status === "Reopened").length;
-    const resolved = tickets.filter(t => t.status === "Resolved" || t.status === "Closed").length;
+    const resolved = tickets.filter(t => t.status === "Closed").length;
     const reopened = tickets.filter(t => t.status === "Reopened").length;
     const resolutionPct = total ? Math.round((resolved / total) * 100) : 0;
     return { total, open, resolved, reopened, resolutionPct };
@@ -52,7 +52,7 @@ export default function TicketsPage() {
           <StatCard icon={ConfirmationNumberIcon} label="Total Tickets" value={stats.total} color={DASHBOARD_COLORS.blue} trend={trends?.total} />
         </Grid>
         <Grid size={{ xs: 6, sm: 4, lg: 2.4 }}>
-          <StatCard icon={CheckCircleIcon} label="Resolved" value={stats.resolved} color={DASHBOARD_COLORS.green} trend={trends?.resolved} />
+          <StatCard icon={CheckCircleIcon} label="Closed" value={stats.resolved} color={DASHBOARD_COLORS.green} trend={trends?.resolved} />
         </Grid>
         <Grid size={{ xs: 6, sm: 4, lg: 2.4 }}>
           <StatCard icon={DonutLargeIcon} label="Resolution Rate" value={`${stats.resolutionPct}%`} color={DASHBOARD_COLORS.violet} trend={trends?.resolutionPct} />

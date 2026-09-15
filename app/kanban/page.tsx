@@ -19,11 +19,14 @@ import FlagOutlinedIcon from "@mui/icons-material/FlagOutlined";
 import { GlobalKanbanBoard, type GlobalKanbanTask } from "@/components/GlobalKanbanBoard";
 import { useGetProjectsWithDetailsQuery, useUpdateProjectMutation } from "@/store/api/projectsApi";
 import { computeAchievement, isOverdue } from "@/lib/businessLogic";
-import { todayISO } from "@/lib/dateUtils";
+import { todayISO, DEFAULT_WEEK_OFF } from "@/lib/dateUtils";
+import { useGetMiscTasksQuery } from "@/store/api/miscTasksApi";
+import { useGetTicketsQuery } from "@/store/api/ticketsApi";
+import { miscStatusToKanban, ticketStatusToKanban } from "@/lib/kanbanStatus";
 import { roleCan, STATUS_OPTIONS } from "@/lib/data";
 import { useAppContext } from "@/context/AppContext";
 import { useOrgContext } from "@/context/OrgContext";
-import type { HistoryEntry, ProjectDetailData, ProjectIndexRow, Task, TaskStatus } from "@/lib/types";
+import type { HistoryEntry, MiscTask, ProjectDetailData, ProjectIndexRow, Task, TaskStatus, Ticket } from "@/lib/types";
 
 const ALL_USERS = "__all_users__";
 const ALL_PROJECTS = "__all_projects__";
@@ -67,6 +70,10 @@ export default function GlobalKanbanPage() {
   const { data, isFetching, refetch } = useGetProjectsWithDetailsQuery();
   const projectsIndex: ProjectIndexRow[] = useMemo(() => data?.index ?? [], [data]);
   const projectDetails: ProjectDetailData[] = useMemo(() => data?.details ?? [], [data]);
+  // Tickets + misc tasks also show on the overall board, mapped into the kanban
+  // columns (see kanbanStatus.ts). Cached queries reused from other pages.
+  const { data: miscTasksData } = useGetMiscTasksQuery();
+  const { data: ticketsData } = useGetTicketsQuery();
   const loading = isFetching;
   const load = refetch;
   const [updateProjectMutation] = useUpdateProjectMutation();
@@ -94,13 +101,50 @@ export default function GlobalKanbanPage() {
         const overdue = isOverdue(t, today) && !notRequiredPhaseIds.has(t.phaseId);
         const status: TaskStatus = overdue ? "Delayed" : t.status;
         out.push({
-          ...t, status, projectId: pd.id, projectName: pd.meta.name, projectType: pd.meta.type,
+          ...t, status, source: "task", projectId: pd.id, projectName: pd.meta.name, projectType: pd.meta.type,
           phaseName: phaseNameById[t.phaseId] || "—", weekOff: pd.meta.weekOff,
         });
       });
     });
+
+    // Defaults for the Task fields tickets/misc don't have, so a synthesized
+    // card still satisfies the board's Task-shaped type.
+    const blank = {
+      order: 0, description: "", dependencies: [] as string[], dayOffset: 0, duration: 0,
+      actualStart: null, actualFinish: null, pendingChange: null, achievement: null,
+      history: [] as HistoryEntry[], checklist: [], phaseId: "", weekOff: DEFAULT_WEEK_OFF,
+      projectType: "Product" as const,
+    };
+
+    // Misc tasks → kanban columns (forward map). Overdue (past endDate, not done)
+    // promotes to "Delayed", same rule as tasks.
+    for (const m of miscTasksData ?? []) {
+      const base = miscStatusToKanban(m.status);
+      const plannedFinish = m.endDate ?? "";
+      const overdue = isOverdue({ status: base, plannedFinish }, today);
+      out.push({
+        ...blank, id: m.id, name: m.title, status: overdue ? "Delayed" : base,
+        nativeStatus: m.status, source: "misc",
+        assignedTo: m.assignees?.[0] ?? null, assignees: m.assignees ?? [], priority: m.priority,
+        plannedStart: m.endDate ?? "", plannedFinish,
+        projectId: m.projectId ?? "", projectName: m.projectName || "Misc task", phaseName: "Misc task",
+      });
+    }
+
+    // Tickets → kanban columns (forward map). Tickets have no due date, so they
+    // don't get the "Delayed" treatment.
+    for (const tk of ticketsData ?? []) {
+      out.push({
+        ...blank, id: tk.id, name: `TKT-${tk.seq} · ${tk.title}`, status: ticketStatusToKanban(tk.status),
+        nativeStatus: tk.status, source: "ticket",
+        assignedTo: tk.assignedTo ?? null, assignees: tk.assignees ?? [], priority: tk.priority,
+        plannedStart: tk.createdAt ?? "", plannedFinish: "",
+        projectId: tk.projectId, projectName: tk.projectName, phaseName: tk.phase || "Ticket",
+      });
+    }
+
     return out;
-  }, [projectDetails, today]);
+  }, [projectDetails, miscTasksData, ticketsData, today]);
 
   const filteredTasks = useMemo(() => {
     return allTasks.filter(t => {
@@ -272,9 +316,14 @@ export default function GlobalKanbanPage() {
           <GlobalKanbanBoard
             tasks={filteredTasks} today={today} canEdit={canEdit} visibleStatuses={orderedVisibleStatuses}
             onStatusChange={handleStatusChange}
-            // ?task= survives the page change — ProjectDetail reads it once
-            // loaded and opens that card expanded, same as an in-page jump.
-            onOpenTask={(t) => router.push(`/projects/${t.projectId}?task=${encodeURIComponent(t.id)}`)}
+            // Open each card in its own screen. Project tasks deep-link to the
+            // project (?task= opens that card); tickets → Tickets page, misc →
+            // Tasks page. Only project tasks are draggable on this board.
+            onOpenTask={(t) => {
+              if (t.source === "ticket") router.push(`/tickets?ticket=${encodeURIComponent(t.id)}`);
+              else if (t.source === "misc") router.push(`/tasks?task=${encodeURIComponent(t.id)}`);
+              else router.push(`/projects/${t.projectId}?task=${encodeURIComponent(t.id)}`);
+            }}
           />
         )}
       </Box>

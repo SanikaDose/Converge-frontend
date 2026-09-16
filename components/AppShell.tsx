@@ -76,6 +76,7 @@ function KindDot({ kind }: { kind: NotificationItem["kind"] }) {
  */
 function NotificationsMenu() {
   const router = useRouter();
+  const { user } = useAuth();
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
 
   // Opening the bell refetches so a freshly assigned task/ticket shows up
@@ -83,15 +84,37 @@ function NotificationsMenu() {
   const { data, refetch } = useGetNotificationsQuery();
   const [markRead] = useMarkNotificationsReadMutation();
   const items: NotificationItem[] = useMemo(() => data ?? [], [data]);
-  // Derived items (task/project/ticket) have no read flag and always count;
-  // stored events (misc-task) only count until the bell is opened.
-  const unreadCount = useMemo(() => items.filter(i => !i.read).length, [items]);
+
+  // Derived items (task/project/ticket) have no server-side `read` flag, so
+  // they'd count forever. To behave like a normal bell — viewing clears the
+  // count, a *new* item brings it back — we remember the ids already seen (per
+  // user, persisted so it survives reloads) and treat only unseen items as
+  // unread. Stored events (misc-task) also honor their server `read` flag.
+  const seenKey = user?.id ? `converge_notif_seen_v1:${user.id}` : null;
+  const [seenIds, setSeenIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (!seenKey) { setSeenIds(new Set()); return; }
+    try {
+      const raw = localStorage.getItem(seenKey);
+      setSeenIds(new Set(raw ? (JSON.parse(raw) as string[]) : []));
+    } catch { setSeenIds(new Set()); }
+  }, [seenKey]);
+
+  const unreadCount = useMemo(
+    () => items.filter(i => !i.read && !seenIds.has(i.id)).length,
+    [items, seenIds],
+  );
 
   const openBell = (e: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(e.currentTarget);
     refetch();
     // Clear the unread badge on stored notifications — opening = seeing them.
     if (items.some(i => i.read === false)) markRead();
+    // Mark everything currently shown as seen so the badge drops to zero; a
+    // later assignment (a new id) is not in this set, so it counts again.
+    const ids = items.map(i => i.id);
+    setSeenIds(new Set(ids));
+    if (seenKey) { try { localStorage.setItem(seenKey, JSON.stringify(ids)); } catch { /* storage unavailable */ } }
   };
 
   const go = (item: NotificationItem) => {

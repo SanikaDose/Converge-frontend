@@ -31,14 +31,15 @@ import type { HistoryEntry, MiscTask, ProjectDetailData, ProjectIndexRow, Task, 
 const ALL_USERS = "__all_users__";
 const ALL_PROJECTS = "__all_projects__";
 
-// Delayed and Not Required are excluded by default — Delayed is a
-// derived/warning state, and Not Required is out-of-scope work; neither is
-// somewhere active work sits, so the board opens focused on the statuses
-// someone would actually triage day to day. Both are still tickable on.
-// Everything except "Not Required" shows by default. "Delayed" IS shown: it's a
-// derived column (overdue tasks land here — see allTasks), so hiding it would
-// make overdue work vanish from the board.
-const DEFAULT_STATUSES: TaskStatus[] = STATUS_OPTIONS.filter(s => s !== "Not Required") as TaskStatus[];
+// "Not Required" (out-of-scope work) and "Pending Approval" (a task parked in
+// the approval workflow, not active work) are excluded by default, so the board
+// opens focused on the statuses someone would actually triage day to day. Both
+// are still tickable on. "Delayed" IS shown: it's a derived column (overdue
+// tasks land here — see allTasks), so hiding it would make overdue work vanish
+// from the board.
+const DEFAULT_STATUSES: TaskStatus[] = STATUS_OPTIONS.filter(
+  s => s !== "Not Required" && s !== "Pending Approval",
+) as TaskStatus[];
 
 export default function GlobalKanbanPage() {
   const router = useRouter();

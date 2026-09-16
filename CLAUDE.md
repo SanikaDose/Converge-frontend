@@ -584,6 +584,116 @@ changed several APIs from what older MUI docs/examples show:
   instead — every `Typography` usage in this app already does this; don't reintroduce a bare
   `fontWeight={...}`/`fontSize={...}` prop.
 
+## Recent additions (latest session — newest first)
+
+Big modules and behavior changes added after the "data-driven template" entry below.
+Load-bearing facts + file pointers so this doesn't have to be re-derived.
+
+### Daily Scrum (`/scrum`, `components/ScrumPage.tsx`)
+- Per-day standup grid: one row per **scrum-enabled, active** employee (see Employee
+  management). Columns: No. · Employee · **Yesterday** (read-only, prev day) · Today's
+  Work (multiline text) · **Project / Task / Ticket** (multi-select) · Work Mode · Actions.
+- Backend `converge_backend/src/scrum/` — `scrum_entries` table (unique `(employee_id,date)`),
+  `GET /scrum?date=` and `PUT /scrum` (bulk upsert). Columns are TypeORM-default **camelCase
+  quoted** (`"workPerformed"`) except `work_mode`/`updated_at`; `"references"` is a **reserved
+  word** so it MUST be double-quoted in raw SQL.
+- **Auto-save, no Save button**: typing debounces (~700ms) + saves on blur; Work Mode / reference
+  dropdowns save immediately (`scrumApi` per-row `PUT`). A `draftRef` mirror lets dropdowns read
+  the just-changed value synchronously; a `seededKey` guard stops the refetch from clobbering a
+  live edit. Header shows "Saving…/Saved automatically".
+- **Work Mode**: Office / Onsite / Both / WFH / Leave (`WorkMode`). Leave mutes the row.
+- **References**: generic (NOT assignment-scoped) — options built client-side from projects +
+  misc tasks + tickets, plus hardcoded **Not Applicable** / **Other** ("General" group). NA is
+  exclusive. Stored as `references` jsonb of `{type,id,label}` (label = frozen snapshot).
+- **Permissions/edit rules** (UI + enforced in `scrum.service.save`): only **today** is editable
+  (past days read-only, "🔒 Read-only" header); a regular user edits **only their own row**,
+  admin/lead edit anyone. Wrong-date/other-row writes → 403.
+- Clicking an employee → `/kanban?user=<id>` (preselects them).
+
+### Misc Tasks (`/tasks`, `components/MiscTasksPage.tsx`)
+- Standalone `misc_tasks` table + `converge_backend/src/misc-tasks/`. Create/edit/delete are
+  **admin/lead only**; a plain **assignee can change status** via `PATCH /misc-tasks/:id/status`
+  (service authorizes assignee-or-manager). New tasks are forced to **"To Do"**.
+- Fields include `startDate`/`endDate` (replaced the single due date in the form; end-date filter),
+  and `createdBy` (shown as "Assigned by"). Statuses: To Do · In Progress · On Hold · Completed;
+  list is **sorted by that status order** (Completed last).
+- **Notifications** on assign + on complete: email + in-app bell. See Notifications below.
+
+### Notifications (stored bell feed)
+- `notifications` table + `converge_backend/src/notification-feed/`. `NotificationFeedService`
+  **merges** derived items (open tasks/tickets/projects assigned to you) with **stored** rows
+  (misc-task assigned/completed events, which carry a `read` flag). `POST /notifications/mark-read`
+  clears unread; the bell badge counts unread (`AppShell` NotificationsMenu). `misc-task` cards
+  deep-link to `/tasks?task=<id>`.
+- `NotificationsService.dispatch` (tickets) + `MiscTasksService.notifyAssignees` fan out email
+  (per assignee) + Google Chat (once). **All notification sends are fire-and-forget** — the
+  entity is saved first, then `void …catch()` so the HTTP response returns in ~10ms instead of
+  waiting ~4s per email (raising a ticket was slow because it awaited SMTP). Misc-task keeps the
+  **bell DB write awaited**, backgrounds only the emails.
+
+### Employee management (`/employees`, `components/EmployeeManager.tsx`, admin-only)
+- Linked from the account menu. Add joiner / mark **inactive** (leaver) / **delete**. `employees`
+  gained `status` ('active'|'inactive') + `scrum_enabled` (nullable). Endpoints in
+  `employees.controller` (admin-gated): `POST` / `PATCH :id` / `DELETE :id`.
+- **Deactivate** needs a type-the-name confirm; **Delete** needs type-the-name **and the admin's
+  password** (verified server-side; wrong password → **400**, not 401, to avoid the global
+  sign-out). Delete is FK-safe (references SET NULL; falls back to 409).
+- `scrum_enabled` backfill runs in `EmployeesService.onModuleInit` (every boot, regardless of
+  SEED_ON_BOOT): **sales team + `nikhil-warokar` default OFF**, everyone else ON; only fills
+  NULLs so admin toggles persist. The scrum board filters to `status==='active' && scrumEnabled`.
+
+### Tickets
+- Added **Reopened** status + accordion earlier; **close notifications** (email + chat) on the
+  transition into Closed. Transition rules (service + UI): Closed → only Reopened; Reopened →
+  only Closed.
+- **"Resolved" status REMOVED** — Closed is the only completion state now. `TicketStatus` =
+  Open · In Progress · Closed · Reopened everywhere; the "Completed" accordion is labeled
+  **"Closed"**; the tickets-page completion KPI is labeled **"Closed"**. Existing Resolved rows
+  migrated to Closed.
+
+### Kanban
+- **Overall board (`app/kanban/page.tsx` + `components/GlobalKanbanBoard.tsx`)** now shows
+  **project tasks + tickets + misc tasks** together, mapped into the 7 kanban columns via the
+  **forward map** in `lib/kanbanStatus.ts` (misc/ticket native status → column; e.g. On Hold→
+  Blocked, Closed→Completed, Open/Reopened→Not Started). Tickets/misc cards show a source badge +
+  native-status chip, open in their own screen on click, and are **not draggable** (display-only;
+  reverse map for drag-to-restatus is a future step). Only project tasks are draggable.
+- **Overdue → "Delayed"**: an overdue task (past planned finish, not done, **excluding
+  not-required phases**) is bucketed in the Delayed column — matches the dashboard "Delayed Tasks"
+  KPI exactly (both use `isOverdue` and exclude not-required-phase tasks). Misc tasks apply the
+  same rule via `endDate`; tickets have no due date so never "Delayed".
+- Dashboard **"Delayed Tasks" KPI is clickable** → `/kanban?status=Delayed` (only that column).
+  `StatCard` gained an optional `onClick`. (The "Completed" KPI counts *projects*, so it was
+  deliberately left non-clickable — a task board wouldn't match it.)
+- **Project view Back-button fix**: the in-project Phases/Timeline/Kanban toggle now writes
+  `?view=` to history (browser Back returns to the project instead of jumping home), and
+  "Back to portfolio" uses `previousPath()` from `lib/navHistory.ts` to return to wherever you
+  came from (dashboard or global kanban) rather than `router.back()` (which would only undo a
+  view toggle). Project-specific kanban is otherwise unchanged (native 7 statuses).
+
+### Forgot password
+- `components/ForgotPasswordDialog.tsx` + 3 public auth endpoints (email → OTP → reset). OTP is
+  bcrypt-hashed, 10-min TTL, attempt-limited; nodemailer email. `employees` has
+  `reset_otp_hash`/`reset_otp_expires_at`/`reset_otp_attempts`.
+
+### Pending hosted migrations (run once on `pmt_converge`, synchronize off)
+Local uses `synchronize:true` so these auto-apply; hosted needs each SQL run once (files in
+`converge_backend/migrations/`):
+- `2026-09-add-misc-tasks.sql` (note: FK `project_id` is **varchar** — hosted `projects.id` is
+  varchar, not uuid), `2026-09-add-misc-task-dates.sql`
+- `2026-09-add-password-reset-otp.sql`
+- `2026-09-add-notifications.sql`
+- `2026-09-add-scrum-entries.sql`, `2026-09-add-scrum-references.sql` (`"references"` quoted)
+- `2026-09-add-employee-status-scrum.sql`
+- `2026-09-tickets-drop-resolved.sql`
+
+### Cross-cutting gotchas learned this session
+- **New TypeORM columns without `{ name }` are camelCase-quoted in Postgres** (`"workPerformed"`),
+  and raw SQL to those (or to reserved words like `"references"`) must double-quote them.
+- Notification delivery is **best-effort** (fire-and-forget, no retry queue) — a crash mid-send
+  drops that one message; core entity data is always committed first.
+- The scrum-default and misc-task-FK edge cases above bit us once; keep them in mind.
+
 ## History of notable decisions (most recent first)
 
 1. Made the project template **data-driven** (see "Project template"): the 12-phase/62-task plan

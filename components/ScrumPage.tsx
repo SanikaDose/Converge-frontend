@@ -28,11 +28,8 @@ import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import SearchIcon from "@mui/icons-material/Search";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import AccessTimeIcon from "@mui/icons-material/AccessTime";
-import HistoryIcon from "@mui/icons-material/History";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import Diversity3Icon from "@mui/icons-material/Diversity3";
-import FormatListBulletedIcon from "@mui/icons-material/FormatListBulleted";
 import ApartmentIcon from "@mui/icons-material/Apartment";
 import BusinessCenterOutlinedIcon from "@mui/icons-material/BusinessCenterOutlined";
 import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
@@ -93,8 +90,6 @@ const dayLabel = (iso: string): string => {
     weekday: "short", day: "2-digit", month: "short", year: "numeric", timeZone: "UTC",
   });
 };
-const timeLabel = (iso: string): string =>
-  new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
 /* ------------------------------------------------------------- work mode */
 
@@ -279,7 +274,7 @@ export function ScrumPage() {
   const isToday = date === todayISO();
 
   return (
-    <Box sx={{ width: "100%" }}>
+    <Box sx={{ width: "100%", display: "flex", flexDirection: "column", height: { xs: "calc(100vh - 96px)", md: "calc(100vh - 116px)" } }}>
       {/* Header */}
       <Stack direction="row" alignItems="flex-start" justifyContent="space-between" flexWrap="wrap" gap={2} sx={{ mb: 2.5 }}>
         <Box>
@@ -381,17 +376,19 @@ export function ScrumPage() {
       </Stack>
 
       {/* Table */}
-      <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2.5, bgcolor: "background.paper", overflow: "auto", maxHeight: "62vh" }}>
-        <Table stickyHeader sx={{ minWidth: 1320 }}>
+      <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2.5, bgcolor: "background.paper", overflow: "auto", flex: 1, minHeight: 0 }}>
+        {/* Fixed layout: column widths are honoured regardless of cell content,
+            so a row with many Project/Task/Ticket chips can't widen the column
+            or shift the rest of the table. */}
+        <Table stickyHeader sx={{ minWidth: 1300, tableLayout: "fixed" }}>
           <TableHead>
             <TableRow sx={{ "& th": { bgcolor: "background.default", borderBottom: "1px solid", borderColor: "divider", py: 1.5, fontWeight: 700, fontSize: 12.5, color: "text.secondary", letterSpacing: 0.2 } }}>
               <TableCell sx={{ width: 60 }}>No.</TableCell>
               <TableCell sx={{ width: 200 }}>Employee</TableCell>
-              <TableCell sx={{ width: 260 }}>Yesterday · {dayLabel(prevDate)}</TableCell>
+              <TableCell sx={{ width: 240 }}>Yesterday · {dayLabel(prevDate)}</TableCell>
+              <TableCell sx={{ width: 360 }}>Project / Task / Ticket</TableCell>
               <TableCell>Today&apos;s Work</TableCell>
-              <TableCell sx={{ width: 230 }}>Project / Task / Ticket</TableCell>
               <TableCell sx={{ width: 170 }}>Work Mode</TableCell>
-              <TableCell sx={{ width: 140 }}>Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -460,6 +457,71 @@ export function ScrumPage() {
                       <Typography variant="caption" color="text.disabled">No update</Typography>
                     )}
                   </TableCell>
+                  {/* Project / Task / Ticket (multi-select) — sits before today's
+                      work so you pick what you worked on, then describe it. */}
+                  <TableCell>
+                    <Autocomplete
+                      multiple size="small" disableCloseOnSelect
+                      disabled={isLeave || !editable}
+                      options={workItemOptions}
+                      value={d.references}
+                      groupBy={(o) => REF_GROUP[o.type]}
+                      getOptionLabel={(o) => o.label}
+                      isOptionEqualToValue={(a, b) => a.type === b.type && a.id === b.id}
+                      onChange={(_, val) => {
+                        // "Not Applicable" is exclusive: picking it clears the
+                        // rest, and picking anything else clears it.
+                        const lastAdded = val[val.length - 1];
+                        let next = val;
+                        if (lastAdded?.type === "na") next = [lastAdded];
+                        else if (val.some((v) => v.type === "na")) next = val.filter((v) => v.type !== "na");
+                        setField(emp.id, { references: next });
+                        flushSave(emp.id);
+                      }}
+                      renderValue={(value, getItemProps) => {
+                        // Show at most a few chips + a "+N" counter so the field
+                        // stays a stable, small height no matter how many are
+                        // selected (was overflowing into the row below). Manage
+                        // the full set from the dropdown checkboxes.
+                        const MAX_CHIPS = 3;
+                        const shown = value.slice(0, MAX_CHIPS);
+                        const extra = value.length - shown.length;
+                        return (
+                          <>
+                            {shown.map((opt, index) => {
+                              const c = REF_COLOR[opt.type];
+                              const { key, ...itemProps } = getItemProps({ index });
+                              return (
+                                <Chip key={`${opt.type}:${opt.id}`} {...itemProps} label={opt.label} size="small"
+                                  sx={{
+                                    maxWidth: 170, height: 22, borderRadius: "7px", fontWeight: 600,
+                                    color: c, bgcolor: alpha(c, 0.13),
+                                    "& .MuiChip-deleteIcon": { color: alpha(c, 0.7), "&:hover": { color: c } },
+                                  }} />
+                              );
+                            })}
+                            {extra > 0 && (
+                              <Chip label={`+${extra}`} size="small"
+                                sx={{ height: 22, borderRadius: "7px", fontWeight: 700, color: "text.secondary", bgcolor: "action.selected" }} />
+                            )}
+                          </>
+                        );
+                      }}
+                      renderInput={(params) => (
+                        <TextField {...params} placeholder={d.references.length ? "" : "Select…"} />
+                      )}
+                      sx={{
+                        minWidth: 200,
+                        // Cap the chip area at a fixed height and scroll inside it,
+                        // so selecting many items never grows the row (the field
+                        // stays the same size; extra chips scroll).
+                        "& .MuiOutlinedInput-root": {
+                          borderRadius: 2, bgcolor: (isLeave || !editable) ? "action.hover" : "background.default",
+                          maxHeight: 76, overflowY: "auto", alignContent: "flex-start", py: 0.5,
+                        },
+                      }}
+                    />
+                  </TableCell>
                   <TableCell>
                     <TextField
                       value={d.workPerformed}
@@ -480,69 +542,14 @@ export function ScrumPage() {
                     />
                   </TableCell>
                   <TableCell>
-                    <Autocomplete
-                      multiple size="small" disableCloseOnSelect
-                      disabled={isLeave || !editable}
-                      options={workItemOptions}
-                      value={d.references}
-                      groupBy={(o) => REF_GROUP[o.type]}
-                      getOptionLabel={(o) => o.label}
-                      isOptionEqualToValue={(a, b) => a.type === b.type && a.id === b.id}
-                      onChange={(_, val) => {
-                        // "Not Applicable" is exclusive: picking it clears the
-                        // rest, and picking anything else clears it.
-                        const lastAdded = val[val.length - 1];
-                        let next = val;
-                        if (lastAdded?.type === "na") next = [lastAdded];
-                        else if (val.some((v) => v.type === "na")) next = val.filter((v) => v.type !== "na");
-                        setField(emp.id, { references: next });
-                        flushSave(emp.id);
-                      }}
-                      renderValue={(value, getItemProps) =>
-                        value.map((opt, index) => {
-                          const c = REF_COLOR[opt.type];
-                          const { key, ...itemProps } = getItemProps({ index });
-                          return (
-                            <Chip key={`${opt.type}:${opt.id}`} {...itemProps} label={opt.label} size="small"
-                              sx={{
-                                maxWidth: 190, height: 22, borderRadius: "7px", fontWeight: 600,
-                                color: c, bgcolor: alpha(c, 0.13),
-                                "& .MuiChip-deleteIcon": { color: alpha(c, 0.7), "&:hover": { color: c } },
-                              }} />
-                          );
-                        })
-                      }
-                      renderInput={(params) => (
-                        <TextField {...params} placeholder={d.references.length ? "" : "Select…"} />
-                      )}
-                      sx={{ minWidth: 200, "& .MuiOutlinedInput-root": { borderRadius: 2, bgcolor: (isLeave || !editable) ? "action.hover" : "background.default" } }}
-                    />
-                  </TableCell>
-                  <TableCell>
                     <WorkModeSelect value={d.workMode} disabled={!editable} onChange={(v) => { setField(emp.id, { workMode: v }); flushSave(emp.id); }} />
-                  </TableCell>
-                  <TableCell>
-                    {saved ? (
-                      <Stack direction="row" alignItems="center" gap={0.75} sx={{ color: "text.secondary" }}>
-                        <AccessTimeIcon sx={{ fontSize: 16 }} />
-                        <Box>
-                          <Typography variant="caption" sx={{ display: "block", fontWeight: 600, color: "text.primary" }}>Updated</Typography>
-                          <Typography variant="caption" color="text.secondary">{timeLabel(saved.updatedAt)}</Typography>
-                        </Box>
-                      </Stack>
-                    ) : (
-                      <Stack direction="row" alignItems="center" gap={0.75}>
-                        <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: "text.disabled" }} />
-                        <Typography variant="caption" color="text.disabled">Pending</Typography>
-                      </Stack>
-                    )}
                   </TableCell>
                 </TableRow>
               );
             })}
             {rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7}>
+                <TableCell colSpan={6}>
                   <Box sx={{ textAlign: "center", py: 6, color: "text.secondary" }}>
                     <Diversity3Icon sx={{ fontSize: 40, opacity: 0.4 }} />
                     <Typography sx={{ mt: 1 }}>
@@ -555,26 +562,6 @@ export function ScrumPage() {
           </TableBody>
         </Table>
       </Box>
-
-      {/* Footer — quick tips + actions */}
-      <Stack direction="row" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap={2}
-        sx={{ mt: 2.5, p: 2, borderRadius: 2.5, border: "1px solid", borderColor: "divider", bgcolor: "background.paper" }}>
-        <Stack direction="row" alignItems="flex-start" gap={1.25} sx={{ minWidth: 0, flex: 1 }}>
-          <Box sx={{ width: 34, height: 34, borderRadius: 2, flexShrink: 0, display: "grid", placeItems: "center", bgcolor: alpha(DASHBOARD_COLORS.blue, 0.13), color: DASHBOARD_COLORS.blue }}>
-            <FormatListBulletedIcon fontSize="small" />
-          </Box>
-          <Box>
-            <Typography variant="body2" sx={{ fontWeight: 700 }}>Quick Tips</Typography>
-            <Typography variant="caption" color="text.secondary">
-              Include project names, tasks or ticket numbers and a short description of what you worked on today.
-            </Typography>
-          </Box>
-        </Stack>
-        <Button variant="outlined" color="inherit" startIcon={<HistoryIcon />} onClick={() => setDate((d) => shiftDate(d, -1))}
-          sx={{ borderColor: "divider", color: "text.primary", textTransform: "none", fontWeight: 600, borderRadius: 2 }}>
-          View Previous Days
-        </Button>
-      </Stack>
     </Box>
   );
 }

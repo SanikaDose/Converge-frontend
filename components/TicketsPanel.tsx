@@ -258,14 +258,14 @@ function TicketRow({ ticket, canUpdate, onUpdate, focus }: {
         "&.Mui-expanded": { borderColor: tint(priorityFill, 45), boxShadow: `0 3px 14px ${tint(priorityFill, 15)}` },
       }}
     >
-      <AccordionSummary
-        expandIcon={<ExpandMoreIcon fontSize="small" />}
-        sx={{
-          px: 1.75, minHeight: 58,
-          "& .MuiAccordionSummary-content": { display: "flex", alignItems: "center", gap: 1.5, minWidth: 0, my: 1, flexWrap: "wrap" },
-        }}
-      >
-        <Box sx={{ minWidth: 0, flex: 1 }}>
+      {/* Custom header instead of AccordionSummary: the header holds interactive
+          controls (Edit / Reopen / status Select), and MUI's AccordionSummary
+          renders a <button>, which can't legally contain nested buttons (that
+          caused a hydration error). As the Accordion's first child it stays
+          visible while the details collapse; the title area toggles expand, and
+          the actions + chevron are plain siblings, not nested in a button. */}
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.75, minHeight: 58, py: 1 }}>
+        <Box onClick={() => setExpanded(v => !v)} sx={{ minWidth: 0, flex: 1, cursor: "pointer" }}>
           <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
             {/* Status as a dot: color without spending a chip's worth of width. */}
             <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: statusFill, boxShadow: `0 0 0 3px ${tint(statusFill, 20)}`, flexShrink: 0 }} />
@@ -296,7 +296,7 @@ function TicketRow({ ticket, canUpdate, onUpdate, focus }: {
             {ticket.resolvedAt ? ` · Closed ${fmt(ticket.resolvedAt)}` : ""}
           </Typography>
         </Box>
-        <Box onClick={(e) => e.stopPropagation()} sx={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 0.5 }}>
+        <Box sx={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 0.5 }}>
           {/* Edit (re-assign people, retitle, re-prioritise). A Closed ticket
               is final, so no edits once closed. */}
           {canUpdate && ticket.status !== "Closed" && (
@@ -332,7 +332,11 @@ function TicketRow({ ticket, canUpdate, onUpdate, focus }: {
             </Select>
           ) : <StatusChip label={ticket.status} color={color} />}
         </Box>
-      </AccordionSummary>
+        <IconButton size="small" onClick={() => setExpanded(v => !v)} aria-label={expanded ? "Collapse" : "Expand"}
+          sx={{ flexShrink: 0, color: "text.secondary", transform: expanded ? "rotate(180deg)" : "none", transition: "transform .2s ease" }}>
+          <ExpandMoreIcon fontSize="small" />
+        </IconButton>
+      </Box>
 
       {editOpen && (
         <EditTicketDialog

@@ -110,6 +110,50 @@ export interface RelatedRepository {
   url: string;
 }
 
+/* ---------------------------------------------------------------------
+   PROJECT CHARTER — Converge "Standard Charter" (sections 02–08), captured
+   at creation for Solution projects only (Products skip it). Section 01
+   "Project Information" is the base project form itself.
+------------------------------------------------------------------------ */
+/** 06. Key Technical Commitments — one table row. */
+export interface CharterTechnicalCommitment {
+  parameter: string;
+  commitment: string;
+  reference: string;
+  remarks: string;
+}
+/** 07. Major Milestones — one high-level phase/milestone. */
+export interface CharterMilestone {
+  name: string;
+  targetDate: string | null;
+}
+export interface ProjectCharter {
+  // 02. Sales / Pre-Sales Information
+  proposalNo: string;
+  proposalRevision: string;
+  proposalDate: string | null;
+  poNo: string;
+  poDate: string | null;
+  salesOwner: string;
+  proposalDocument: string;
+  poDocument: string;
+  // 03. Project Objective
+  objective: string;
+  // 04. Solution Offered
+  solutionOffered: string;
+  // 05. Project Conditions
+  scope: string[];
+  outOfScope: string[];
+  assumptions: string[];
+  constraints: string[];
+  // 06. Key Technical Commitments
+  technicalCommitments: CharterTechnicalCommitment[];
+  // 07. Major Milestones – Project Phases
+  milestones: CharterMilestone[];
+  // 08. Success Criteria
+  successCriteria: string[];
+}
+
 export interface Actor {
   role: AppRole;
   id: string | null;
@@ -149,6 +193,8 @@ export interface TaskTemplateItem {
   description: string;
   dayOffset: number;
   duration: number;
+  /** Default critical points — become the task's checklist when a project is generated. */
+  criticalPoints: string[];
   order: number;
 }
 export interface PhaseTemplateItem {
@@ -158,6 +204,17 @@ export interface PhaseTemplateItem {
   critical: boolean;
   discipline: PhaseDiscipline | null;
   tasks: TaskTemplateItem[];
+}
+
+/** One row of GET /project-templates — a named template with its counts. */
+export interface ProjectTemplateSummary {
+  id: string;
+  name: string;
+  description: string;
+  isDefault: boolean;
+  order: number;
+  phaseCount: number;
+  taskCount: number;
 }
 
 /** One item in the signed-in user's bell feed (GET /notifications). */
@@ -300,6 +357,8 @@ export interface ProjectMeta {
   warranty?: Warranty | null;
   /** Non-working days for this project's business-day calendar — at most 2, defaults to Sat+Sun. */
   weekOff: WeekDay[];
+  /** Standard Project Charter — present for Solution projects, null for Products / pre-feature rows. */
+  charter?: ProjectCharter | null;
 }
 
 export interface ProjectDetailData {
@@ -360,6 +419,8 @@ export interface ProjectWithLiveStats extends ProjectIndexRow {
 export interface CreateProjectInput {
   name: string;
   type: ProjectType;
+  /** Which named template to build from; omitted means the default. */
+  templateId?: string;
   /** Which disciplines' phases to generate; empty means every phase. */
   disciplines: PhaseDiscipline[];
   /** Financial year, e.g. "FY26-27". */
@@ -370,6 +431,8 @@ export interface CreateProjectInput {
   startDate: string;
   endDate: string;
   weekOff: WeekDay[];
+  /** Standard Project Charter — required for Solution projects, omitted for Products. */
+  charter?: ProjectCharter | null;
 }
 
 export interface UpdateProjectPatch {
@@ -437,6 +500,8 @@ export interface MiscTask {
   /** Planned start / end of the work. */
   startDate: string | null;
   endDate: string | null;
+  /** Optional estimate of hours to complete. */
+  estimatedHours: number | null;
   checklist: ChecklistItem[];
   createdAt: string;
   /** Employee id of the creator (the person who assigned the task). */
@@ -494,6 +559,7 @@ export interface MiscTaskInput {
   status: MiscTaskStatus;
   startDate: string | null;
   endDate: string | null;
+  estimatedHours: number | null;
   checklist: ChecklistItem[];
 }
 

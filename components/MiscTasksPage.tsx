@@ -27,6 +27,7 @@ import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
 import EditIcon from "@mui/icons-material/Edit";
 import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
+import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import TaskAltIcon from "@mui/icons-material/TaskAlt";
 import ScienceOutlinedIcon from "@mui/icons-material/ScienceOutlined";
 import Inventory2OutlinedIcon from "@mui/icons-material/Inventory2Outlined";
@@ -114,11 +115,13 @@ interface DraftForm {
   priority: Priority | "";
   startDate: string | null;
   endDate: string | null;
+  /** Kept as a string while editing (the raw text field); "" = not set. */
+  estimatedHours: string;
   checklist: ChecklistItem[];
 }
 const EMPTY_DRAFT: DraftForm = {
   title: "", description: "", assignees: [],
-  priority: "", startDate: null, endDate: null, checklist: [],
+  priority: "", startDate: null, endDate: null, estimatedHours: "", checklist: [],
 };
 
 function TaskDrawer({ open, initial, projects, busy, onClose, onSave }: {
@@ -145,6 +148,7 @@ function TaskDrawer({ open, initial, projects, busy, onClose, onSave }: {
         assignees: initial.assignees ?? [],
         priority: initial.priority,
         startDate: initial.startDate, endDate: initial.endDate,
+        estimatedHours: initial.estimatedHours != null ? String(initial.estimatedHours) : "",
         checklist: initial.checklist ?? [],
       });
       // An existing task always had a choice: a project id, or Other (null).
@@ -161,7 +165,10 @@ function TaskDrawer({ open, initial, projects, busy, onClose, onSave }: {
   // End date can't precede start date (both optional). Status isn't set here —
   // a new task is always "To Do" and moved later via the card's status control.
   const datesValid = !(form.startDate && form.endDate) || form.endDate >= form.startDate;
-  const canSave = form.title.trim().length > 0 && related !== "" && form.priority !== "" && datesValid;
+  // Estimated hours is optional; if filled it must be a non-negative number.
+  const hoursValid = form.estimatedHours.trim() === ""
+    || (!Number.isNaN(Number(form.estimatedHours)) && Number(form.estimatedHours) >= 0);
+  const canSave = form.title.trim().length > 0 && related !== "" && form.priority !== "" && datesValid && hoursValid;
 
   const addPoint = () =>
     set("checklist", [...form.checklist, { id: genId("mt"), text: "", done: false, createdAt: new Date().toISOString() }]);
@@ -243,6 +250,16 @@ function TaskDrawer({ open, initial, projects, busy, onClose, onSave }: {
               </Box>
             </Stack>
 
+            <Box>
+              <FieldLabel>Estimated Hours</FieldLabel>
+              <TextField type="number" value={form.estimatedHours}
+                onChange={e => set("estimatedHours", e.target.value)} fullWidth
+                placeholder="e.g. 8 (optional)"
+                error={!hoursValid}
+                helperText={!hoursValid ? "Enter a non-negative number" : undefined}
+                slotProps={{ htmlInput: { min: 0, step: "any" } }} />
+            </Box>
+
             {/* Checklist */}
             <Box>
               <FieldLabel>Checklist</FieldLabel>
@@ -283,6 +300,7 @@ function TaskDrawer({ open, initial, projects, busy, onClose, onSave }: {
               status: initial ? initial.status : "To Do",
               startDate: form.startDate,
               endDate: form.endDate,
+              estimatedHours: form.estimatedHours.trim() === "" ? null : Number(form.estimatedHours),
               checklist: form.checklist.filter(c => c.text.trim().length > 0),
             })}>
             {busy ? "Saving…" : "Save Task"}
@@ -382,12 +400,20 @@ function TaskRow({ task, canManage, canChangeStatus, onEdit, onDelete, onStatusC
                 {primaryName}{extra > 0 ? ` +${extra}` : ""}
               </Typography>
             </Stack>
-            {dateRange && (
-              <Stack direction="row" spacing={0.5} alignItems="center" sx={{ color: "text.secondary", flexShrink: 0 }}>
-                <CalendarMonthIcon sx={{ fontSize: 15 }} />
-                <Typography variant="caption" sx={{ fontSize: 12.5 }}>{dateRange}</Typography>
-              </Stack>
-            )}
+            <Stack direction="row" spacing={1.25} alignItems="center" sx={{ flexShrink: 0 }}>
+              {task.estimatedHours != null && (
+                <Stack direction="row" spacing={0.5} alignItems="center" sx={{ color: "text.secondary" }}>
+                  <AccessTimeIcon sx={{ fontSize: 15 }} />
+                  <Typography variant="caption" sx={{ fontSize: 12.5 }}>{task.estimatedHours}h</Typography>
+                </Stack>
+              )}
+              {dateRange && (
+                <Stack direction="row" spacing={0.5} alignItems="center" sx={{ color: "text.secondary" }}>
+                  <CalendarMonthIcon sx={{ fontSize: 15 }} />
+                  <Typography variant="caption" sx={{ fontSize: 12.5 }}>{dateRange}</Typography>
+                </Stack>
+              )}
+            </Stack>
           </Stack>
 
           {assignerName && (

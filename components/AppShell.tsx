@@ -369,7 +369,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           asset, the bar can be dark like everything else. */}
       <AppBar position="fixed" sx={{ zIndex: (t) => t.zIndex.drawer + 1, bgcolor: "background.paper", borderBottom: "1px solid", borderColor: "divider" }} elevation={0}>
         <Toolbar sx={{ gap: 3 }}>
-          <ConvergeNavbarLogo height={60} />
+          <Box component={Link} href="/" aria-label="Go to dashboard"
+            sx={{ display: "inline-flex", alignItems: "center", textDecoration: "none", cursor: "pointer", flexShrink: 0 }}>
+            <ConvergeNavbarLogo height={60} />
+          </Box>
 
           <Box sx={{ display: "flex", gap: 0.5 }}>
             {NAV_ITEMS.map(({ href, label, icon: Icon }) => {

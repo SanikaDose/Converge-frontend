@@ -50,7 +50,14 @@ export const apiRoutes = {
 
   projectTemplates: {
     root: 'project-templates',
-    get: '',
+    list: '',
+    create: '',
+    getOne: (templateId: string) => `${templateId}`,
+    updateTemplate: (templateId: string) => `${templateId}`,
+    deleteTemplate: (templateId: string) => `${templateId}`,
+    addPhase: (templateId: string) => `${templateId}/phases`,
+    updatePhase: (phaseId: string) => `phases/${phaseId}`,
+    deletePhase: (phaseId: string) => `phases/${phaseId}`,
     addTask: (phaseId: string) => `phases/${phaseId}/tasks`,
     reorderTasks: (phaseId: string) => `phases/${phaseId}/tasks/reorder`,
     updateTask: (taskId: string) => `tasks/${taskId}`,

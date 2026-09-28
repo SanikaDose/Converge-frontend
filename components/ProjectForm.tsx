@@ -24,10 +24,11 @@ import { TEMPLATE, WEEKDAY_SHORT, WEEKDAY_LABELS, MAX_WEEK_OFF_DAYS, PHASE_DISCI
 import { suggestedEndDate, guessEmployeeIdFromFreeText } from "@/lib/businessLogic";
 import { todayISO, DEFAULT_WEEK_OFF, addWorkingDays } from "@/lib/dateUtils";
 import { useOrgContext } from "@/context/OrgContext";
-import { useGetProjectTemplateQuery } from "@/store/api/projectTemplatesApi";
-import type { PhaseDiscipline, ProjectMeta, ProjectType, RelatedRepository, WeekDay } from "@/lib/types";
+import { useGetProjectTemplatesQuery, useGetTemplatePhasesQuery } from "@/store/api/projectTemplatesApi";
+import type { PhaseDiscipline, ProjectCharter, ProjectMeta, ProjectType, RelatedRepository, WeekDay } from "@/lib/types";
 import DeleteOutlineOutlined from "@mui/icons-material/DeleteOutlineOutlined";
 import { IconButton } from "@mui/material";
+import { ProjectCharterForm, charterFromInitial, isCharterValid } from "./ProjectCharterForm";
 
 /** A phase reduced to what the count preview needs, from either source. */
 interface PhaseCount { discipline: PhaseDiscipline | null; taskCount: number }
@@ -56,6 +57,10 @@ export interface ProjectFormPayload {
   endDate: string;
   weekOff: WeekDay[];
   relatedRepositories: RelatedRepository[];
+  /** Which named template to generate the project from. */
+  templateId?: string;
+  /** Standard Project Charter — set for Solution projects, null for Products. */
+  charter: ProjectCharter | null;
 }
 
 /**
@@ -67,6 +72,8 @@ export interface ProjectFormDefaults {
   type?: ProjectType;
   customer?: string;
   location?: string;
+  /** Preselect a specific template (e.g. from the "Use Template" action). */
+  templateId?: string;
 }
 
 /** Shared dialog for both "New project" and "Project settings" (edit). */
@@ -113,11 +120,30 @@ export function ProjectForm({
   const [endTouched, setEndTouched] = useState(!!initial?.endDate);
   const [showPreview, setShowPreview] = useState(false);
 
+  // Project Charter — a 2-step create flow (Project Information → Project
+  // Charter → Create) for NEW Solution projects. Products and the edit
+  // ("Project Settings") flow are single-step and skip the charter entirely.
+  const [charter, setCharter] = useState<ProjectCharter>(charterFromInitial(initial?.charter));
+  const [activeStep, setActiveStep] = useState(0);
+  const isCharterFlow = !initial && type !== "Product";
+
   // The live master template (admins may have edited it). Only needed when
   // creating — Project Settings doesn't show the count/discipline preview.
   // Falls back to the in-code TEMPLATE until the request resolves so the
   // preview never flashes empty.
-  const { data: templatePhases } = useGetProjectTemplateQuery(undefined, { skip: !!initial });
+  // Template selection (creation only) — pick which named template to build from.
+  const { data: templateList } = useGetProjectTemplatesQuery(undefined, { skip: !!initial });
+  const [templateId, setTemplateId] = useState<string>("");
+  useEffect(() => {
+    if (initial || !templateList?.length) return;
+    if (!templateId || !templateList.some(t => t.id === templateId)) {
+      const preferred = defaults?.templateId && templateList.some(t => t.id === defaults.templateId)
+        ? defaults.templateId
+        : (templateList.find(t => t.isDefault) ?? templateList[0]).id;
+      setTemplateId(preferred);
+    }
+  }, [templateList, initial, templateId, defaults?.templateId]);
+  const { data: templatePhases } = useGetTemplatePhasesQuery(templateId, { skip: !!initial || !templateId });
   const phaseCounts = useMemo<PhaseCount[]>(() => (
     templatePhases?.length
       ? templatePhases.map(p => ({ discipline: p.discipline, taskCount: p.tasks.length }))
@@ -204,10 +230,12 @@ export function ProjectForm({
   };
 
   return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open onClose={onClose} maxWidth={isCharterFlow ? "md" : "sm"} fullWidth>
       <DialogTitle>{title}</DialogTitle>
       <DialogContent dividers sx={{ display: "flex", flexDirection: "column", gap: 2.25 }}>
-        {/* {error && <Alert severity="error">{error}</Alert>} */}
+        {error && <Alert severity="error">{error}</Alert>}
+        {(!isCharterFlow || activeStep === 0) && (
+        <Stack spacing={2.25}>
         {/* Product/Solution toggle only when editing an existing project —
             on creation the type comes from which button was clicked (New
             Product vs New Project), so the toggle would just be redundant. */}
@@ -243,6 +271,22 @@ export function ProjectForm({
         >
           {FINANCIAL_YEAR_OPTIONS.map(fy => <MenuItem key={fy} value={fy}>{fy}</MenuItem>)}
         </TextField>
+
+        {/* Template picker — creation only. Chooses which named template's
+            phases/tasks the project is generated from. */}
+        {!initial && (templateList?.length ?? 0) > 0 && (
+          <TextField
+            select label="Template" fullWidth value={templateId}
+            onChange={(e) => setTemplateId(e.target.value)}
+            helperText="The phases and tasks this project starts with. Manage templates in Project templates."
+          >
+            {(templateList ?? []).map(t => (
+              <MenuItem key={t.id} value={t.id}>
+                {t.name}{t.isDefault ? " (default)" : ""} — {t.phaseCount} phases · {t.taskCount} tasks
+              </MenuItem>
+            ))}
+          </TextField>
+        )}
 
         <TextField label="Customer" fullWidth value={customer} disabled={readOnly} onChange={(e) => setCustomer(e.target.value)}
           placeholder="e.g. TE Connectivity" />
@@ -415,6 +459,12 @@ export function ProjectForm({
             Preview phases &amp; tasks
           </Button>
         )}
+        </Stack>
+        )}
+
+        {isCharterFlow && activeStep === 1 && (
+          <ProjectCharterForm value={charter} onChange={setCharter} />
+        )}
       </DialogContent>
 
       {showPreview && (
@@ -422,10 +472,26 @@ export function ProjectForm({
       )}
       <DialogActions sx={{ p: 2 }}>
         <Button onClick={onClose}>Cancel</Button>
-        {!readOnly && onSubmit && (
+
+        {/* Charter flow, step 1 → a Back button to return to the info step. */}
+        {isCharterFlow && activeStep === 1 && (
+          <Button onClick={() => setActiveStep(0)} color="inherit">Back</Button>
+        )}
+
+        {/* Charter flow, step 0 → Next (advance to the charter), no submit yet. */}
+        {!readOnly && onSubmit && isCharterFlow && activeStep === 0 && (
+          <Button variant="contained" disabled={!canSubmit}
+            onClick={() => setActiveStep(1)}>
+            Next → Project Charter
+          </Button>
+        )}
+
+        {/* Create — the single-step (product / edit) button, or the charter
+            flow's final step. The charter must be valid to create a project. */}
+        {!readOnly && onSubmit && (!isCharterFlow || activeStep === 1) && (
           <Button
             variant="contained"
-            disabled={!canSubmit || busy}
+            disabled={!canSubmit || busy || (isCharterFlow && !isCharterValid(charter))}
             startIcon={busy ? <CircularProgress size={16} /> : <AddIcon />}
             onClick={() =>
               onSubmit({
@@ -440,6 +506,8 @@ export function ProjectForm({
                 endDate,
                 weekOff,
                 relatedRepositories,
+                templateId: templateId || undefined,
+                charter: isCharterFlow ? charter : null,
               })
             }
           >

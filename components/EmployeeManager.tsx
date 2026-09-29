@@ -57,7 +57,7 @@ export function EmployeeManager() {
   const { user } = useAuth();
   const isAdmin = user?.appRole === "Admin";
 
-  const { data } = useGetEmployeesQuery();
+  const { data, isLoading } = useGetEmployeesQuery();
   const employees: Employee[] = useMemo(() => data?.employees ?? [], [data]);
   const teams = useMemo(() => data?.teams ?? [], [data]);
   const teamName = useMemo(() => Object.fromEntries(teams.map((t) => [t.id, t.name])), [teams]);
@@ -228,10 +228,19 @@ export function EmployeeManager() {
                 </TableRow>
               );
             })}
-            {rows.length === 0 && (
+            {isLoading && (
               <TableRow>
                 <TableCell colSpan={6}>
-                  <Box sx={{ textAlign: "center", py: 6, color: "text.secondary" }}>No employees match your search.</Box>
+                  <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}><CircularProgress /></Box>
+                </TableCell>
+              </TableRow>
+            )}
+            {!isLoading && rows.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={6}>
+                  <Box sx={{ textAlign: "center", py: 6, color: "text.secondary" }}>
+                    {employees.length === 0 ? "No employees yet." : "No employees match your search."}
+                  </Box>
                 </TableCell>
               </TableRow>
             )}

@@ -1,11 +1,8 @@
 /**
  * Every backend route the app calls, in one place — the frontend mirror of
- * `converge_backend/src/constants/routeConstants.ts` and the same
- * convention as the Scout frontend's `constants/apiRoutes.ts`.
- *
- * `main.root` is the backend's global prefix. Endpoint definitions build
- * their URLs from these rather than inlining path strings, so a route that
- * moves is one edit on each side instead of a search across components.
+ * `converge_backend/src/constants/routeConstants.ts`. `main.root` is the
+ * backend's global prefix. Endpoints build URLs from these instead of inlining
+ * strings, so a moved route is one edit on each side.
  */
 export const apiRoutes = {
   main: {

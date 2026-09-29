@@ -31,12 +31,9 @@ import type { HistoryEntry, MiscTask, ProjectDetailData, Task, TaskStatus, Ticke
 const ALL_USERS = "__all_users__";
 const ALL_PROJECTS = "__all_projects__";
 
-// "Not Required" (out-of-scope work) and "Pending Approval" (a task parked in
-// the approval workflow, not active work) are excluded by default, so the board
-// opens focused on the statuses someone would actually triage day to day. Both
-// are still tickable on. "Delayed" IS shown: it's a derived column (overdue
-// tasks land here — see allTasks), so hiding it would make overdue work vanish
-// from the board.
+// Open the board on the statuses worth triaging day to day: hide "Not Required"
+// and "Pending Approval" by default (both still tickable on). "Delayed" stays —
+// it's the derived overdue column (see allTasks).
 const DEFAULT_STATUSES: TaskStatus[] = STATUS_OPTIONS.filter(
   s => s !== "Not Required" && s !== "Pending Approval",
 ) as TaskStatus[];
@@ -78,9 +75,8 @@ export default function GlobalKanbanPage() {
   const loading = isFetching;
   const load = refetch;
   const [updateProjectMutation] = useUpdateProjectMutation();
-  // The board fetches trimmed tasks (no history/dependencies/etc.), so a drag
-  // can't build the full-sync PATCH from them — it would delete the omitted
-  // fields. Instead we load the one dragged project's *full* detail on demand.
+  // Board tasks are trimmed, so a drag loads the dragged project's full detail
+  // on demand — a full-sync PATCH built from trimmed tasks would drop fields.
   const [fetchProjectDetail] = useLazyGetProjectQuery();
 
   const productProjects = useMemo(() => projectsIndex.filter(p => p.type === "Product"), [projectsIndex]);
@@ -92,9 +88,8 @@ export default function GlobalKanbanPage() {
     const out: GlobalKanbanTask[] = [];
 
     // Defaults for the Task fields the board doesn't render and the trimmed
-    // board payload (and tickets/misc) don't carry, so a synthesized card still
-    // satisfies the board's Task-shaped type. The board never reads these; a
-    // drag reloads the project's full detail before persisting.
+    // payload (and tickets/misc) don't carry, so a card still satisfies the
+    // board's Task-shaped type.
     const blank = {
       order: 0, description: "", assignedTo: null as string | null, dependencies: [] as string[],
       dayOffset: 0, duration: 0, actualStart: null, actualFinish: null, pendingChange: null,
@@ -110,12 +105,9 @@ export default function GlobalKanbanPage() {
       // (liveProjectStats), so the board's Delayed total matches the KPI.
       const notRequiredPhaseIds = new Set(pd.phases.filter(ph => ph.notRequired).map(ph => ph.id));
       pd.tasks.forEach(t => {
-        // A task past its planned finish (and not done) shows as "Delayed" — the
-        // same overdue rule the dashboard KPI and the timeline use — so the
-        // Delayed column reflects real delays, not a literal status nobody sets.
-        // The real status is untouched in the DB; drag/drop re-reads it from
-        // the project's full detail (handleStatusChange), so moving a card still
-        // works. `blank` fills the Task fields the trimmed board task omits.
+        // Overdue tasks (not done, past planned finish, not in a not-required
+        // phase) display as "Delayed" — matching the dashboard KPI. The stored
+        // status is untouched; drag/drop re-reads it from the full detail.
         const overdue = isOverdue(t, today) && !notRequiredPhaseIds.has(t.phaseId);
         const status: TaskStatus = overdue ? "Delayed" : t.status;
         out.push({
@@ -167,22 +159,16 @@ export default function GlobalKanbanPage() {
     });
   }, [allTasks, selectedUserIds, selectedStatuses, projectFilter]);
 
-  // `selectedStatuses` reflects the order the checkboxes were *clicked*
-  // in (MUI's multi-select Select appends a newly-toggled value to the
-  // end of the array, it doesn't resort) — deselecting then reselecting a
-  // status would otherwise knock its column out of the canonical
-  // left-to-right order. Re-deriving from STATUS_OPTIONS keeps the board
-  // order fixed regardless of click order.
+  // MUI's multi-select appends newly-toggled values, so `selectedStatuses` is in
+  // click order. Re-derive from STATUS_OPTIONS to keep columns left-to-right.
   const orderedVisibleStatuses = useMemo(
     () => STATUS_OPTIONS.filter(s => selectedStatuses.includes(s)),
     [selectedStatuses],
   );
 
   const handleStatusChange = async (task: GlobalKanbanTask, status: TaskStatus) => {
-    // The board only holds trimmed tasks, so load this one project's full detail
-    // (all task fields) before building the full-sync PATCH — otherwise the
-    // omitted fields (history/dependencies/etc.) would be wiped. One request,
-    // only on an actual drag.
+    // Load the full detail before building the full-sync PATCH — the board's
+    // trimmed tasks would otherwise wipe the omitted fields.
     let pd: ProjectDetailData;
     try {
       pd = await fetchProjectDetail(task.projectId).unwrap();
@@ -208,10 +194,8 @@ export default function GlobalKanbanPage() {
       return merged;
     });
     try {
-      // The mutation invalidates "Projects", which this query provides, so
-      // the board refetches with the saved state. The card visibly moves on
-      // the drop either way because GlobalKanbanBoard renders from the
-      // returned data; a failure leaves the board on the server's truth.
+      // Invalidates "Projects", so the board refetches with the saved state;
+      // a failure leaves the board on the server's truth.
       await updateProjectMutation({ id: pd.id, patch: { tasks: updatedTasks } }).unwrap();
     } catch (e) {
       console.error(e);

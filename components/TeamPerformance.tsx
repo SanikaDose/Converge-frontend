@@ -42,17 +42,13 @@ const ROLE_COLOR: Record<OrgRole, string> = {
 };
 
 /**
- * Team Performance — every organization employee, with task counts
- * computed dynamically by the /api/team-performance route (which scans
- * every project's tasks for `assignedTo === employee.id`, see
- * lib/businessLogic.aggregateTeamPerformance). Uses MUI's DataGrid so
- * team/tasks sorting comes for free via column headers.
+ * Team Performance — every employee with task counts, computed by the backend's
+ * team-performance endpoint (see aggregateTeamPerformance). MUI DataGrid gives
+ * column sorting for free.
  *
- * Task counts get their own grouped "Tasks" header (Total/Done/Pending)
- * rather than one bare "Tasks" column, and a per-row overdue count rides
- * inside the Pending cell instead of a dedicated Delayed column — that
- * total already has a home in the KPI row above, so repeating it as a
- * full table column was pure duplication.
+ * Task counts share a grouped "Tasks" header (Total/Done/Pending); the per-row
+ * overdue count rides inside the Pending cell rather than a dedicated Delayed
+ * column, since that total already appears in the KPI row above.
  */
 export function TeamPerformance({ refreshKey }: { refreshKey: number }) {
   const router = useRouter();

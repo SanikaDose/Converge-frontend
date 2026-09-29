@@ -6,12 +6,9 @@ import type {
 } from '@/lib/types';
 
 /**
- * The trimmed task shape the Kanban board fetches (see the backend's
- * `toBoardTask`) — only the fields a card, the overdue/late math, and the
- * complete-blocked-by-checklist gate read. The heavy jsonb (history/
- * dependencies/pendingChange) and description/scheduling internals are omitted;
- * a drag reloads the one project's full detail before persisting, so nothing is
- * lost by trimming here.
+ * Trimmed task shape the Kanban board fetches (mirrors the backend's
+ * `toBoardTask`) — only what a card and the overdue/late/checklist logic read.
+ * A drag reloads the project's full detail before saving.
  */
 export interface BoardTaskData {
   id: string;
@@ -32,12 +29,8 @@ export interface BoardProjectData {
   phases: { id: string; name: string; notRequired: boolean }[];
   tasks: BoardTaskData[];
 }
-/**
- * The board's index is only used for the project-filter dropdowns and their
- * labels, so it carries just id/name/type — not the full portfolio stats +
- * `taskLite`/`phasesLite` the dashboard index (`ProjectIndexRow`) ships, which
- * were ~35% of the board payload and unused by the Kanban.
- */
+/** The board's index feeds only the project-filter dropdowns, so id/name/type
+ *  is all it needs — not the full stats + lite arrays the dashboard index ships. */
 export interface BoardIndexRow {
   id: string;
   name: string;
@@ -49,14 +42,9 @@ export interface BoardData {
 }
 
 /**
- * Projects endpoints, injected into the shared baseApi (Scout's
- * `injectEndpoints` convention).
- *
- * Invalidation is deliberately coarse: a project write touches the
- * portfolio index, that project's document, and the dashboard baseline's
- * inputs, so each mutation invalidates all three rather than trying to be
- * clever. These are small payloads and the refetch is what the manual
- * `refreshKey` prop-threading used to do by hand.
+ * Projects endpoints. Invalidation is coarse on purpose: a write touches the
+ * portfolio index, that project's document, and the dashboard baseline, so each
+ * mutation invalidates all three.
  */
 export const projectsApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
@@ -73,13 +61,9 @@ export const projectsApi = baseApi.injectEndpoints({
     }),
 
     /**
-     * The portfolio Kanban needs every project's full task list. This used to
-     * fetch the index and then one detail request per project — `1 + N` HTTP
-     * round trips (28 for 27 projects), each paying the remote-DB latency,
-     * which was the main reason the Kanban was slow to load. It now hits a
-     * single bulk endpoint (`GET /projects/board`) that returns the index and
-     * every project's details together, computed server-side from three DB
-     * queries. One request, one cache entry, one loading flag.
+     * Everything the Kanban board needs (index + per-project details) from one
+     * bulk endpoint, replacing the old fetch-index-then-one-request-per-project
+     * fan-out. See the backend's `findAllBoard`.
      */
     getProjectsWithDetails: builder.query<BoardData, void>({
       query: () => routePath(apiRoutes.projects.root, apiRoutes.projects.board),

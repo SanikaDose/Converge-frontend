@@ -1,8 +1,6 @@
 /**
- * Shared domain types for the mock data layer, business logic, and every
- * component that renders it. Kept framework-agnostic (no React imports)
- * so lib files and app/api route handlers can use them without pulling
- * in client-only dependencies.
+ * Shared domain types used by the API layer, business logic, and components.
+ * Framework-agnostic (no React imports) so any lib file can use them.
  */
 
 /** UI color scheme — independent of AppRole ("viewing as"), see AppContext. */

@@ -456,7 +456,7 @@ export function MiscTasksPage() {
   // Admins and leads may create/edit/delete tasks (matches the backend's
   // assertCanManage). Assignees can't manage, but can still change status.
   const canManage = user?.appRole === "Admin" || user?.appRole === "Lead";
-  const { data: tasksData } = useGetMiscTasksQuery();
+  const { data: tasksData, isLoading: tasksLoading } = useGetMiscTasksQuery();
   const { data: projectsData } = useGetProjectsQuery();
   const [createTask, { isLoading: creating }] = useCreateMiscTaskMutation();
   const [updateTask, { isLoading: updating }] = useUpdateMiscTaskMutation();
@@ -643,23 +643,27 @@ export function MiscTasksPage() {
       </Stack>
 
       {/* List */}
-      <Stack gap={1.5}>
-        {filtered.map(t => {
-          const isAssignee = !!user && (t.assignees ?? []).includes(user.id);
-          return (
-            <TaskRow key={t.id} task={t} canManage={canManage}
-              canChangeStatus={canManage || isAssignee}
-              onEdit={() => openEdit(t)} onDelete={() => remove(t.id)}
-              onStatusChange={(s) => changeStatus(t.id, s)} />
-          );
-        })}
-        {filtered.length === 0 && (
-          <Box sx={{ textAlign: "center", py: 8, color: "text.secondary" }}>
-            <TaskAltIcon sx={{ fontSize: 40, opacity: 0.4 }} />
-            <Typography sx={{ mt: 1 }}>{tasks.length === 0 ? "No tasks yet — add your first one." : "No tasks match your search."}</Typography>
-          </Box>
-        )}
-      </Stack>
+      {tasksLoading ? (
+        <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}><CircularProgress /></Box>
+      ) : (
+        <Stack gap={1.5}>
+          {filtered.map(t => {
+            const isAssignee = !!user && (t.assignees ?? []).includes(user.id);
+            return (
+              <TaskRow key={t.id} task={t} canManage={canManage}
+                canChangeStatus={canManage || isAssignee}
+                onEdit={() => openEdit(t)} onDelete={() => remove(t.id)}
+                onStatusChange={(s) => changeStatus(t.id, s)} />
+            );
+          })}
+          {filtered.length === 0 && (
+            <Box sx={{ textAlign: "center", py: 8, color: "text.secondary" }}>
+              <TaskAltIcon sx={{ fontSize: 40, opacity: 0.4 }} />
+              <Typography sx={{ mt: 1 }}>{tasks.length === 0 ? "No tasks yet — add your first one." : "No tasks match your search."}</Typography>
+            </Box>
+          )}
+        </Stack>
+      )}
 
       {filtered.length > 0 && (
         <Typography variant="body2" color="text.secondary" sx={{ mt: 2.5 }}>

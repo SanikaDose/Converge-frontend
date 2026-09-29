@@ -6,11 +6,9 @@
  * Query base query runs outside the component tree and can't call hooks, so
  * it needs a plain function to read from.
  *
- * Caveat worth knowing: localStorage is readable by any script on the page,
- * so a successful XSS can steal this token. An httpOnly cookie is the
- * stronger option, but needs CSRF protection and same-site/CORS handling
- * that this split-origin setup (Vercel frontend, Railway backend) doesn't
- * have yet.
+ * Caveat: localStorage is readable by any script on the page, so an XSS can
+ * steal this token. An httpOnly cookie is stronger but needs CSRF + same-site
+ * handling this split-origin setup (Vercel + the backend host) doesn't have yet.
  */
 const TOKEN_KEY = "converge_projects_token_v1";
 

@@ -489,12 +489,9 @@ function TicketRow({ ticket, canUpdate, onUpdate, focus }: {
 }
 
 /**
- * Tickets are loaded from /api/tickets on mount, then held in React
- * state; create/update calls hit the mock API (so the in-memory store
- * stays consistent for the process lifetime) and the local list updates
- * optimistically from the response. Grouped into two accordions — Raised
- * (Open + In Progress) and Completed (Resolved + Closed) — matching the
- * dashboard's binary project accordion pattern.
+ * Tickets panel, grouped into status accordions (Raised / In Progress /
+ * Closed). Data comes from the backend via RTK Query; create/update refetch
+ * through the tickets API and notify the parent via `onChanged`.
  */
 export function TicketsPanel({ actor, projects, refreshKey, onChanged }: {
   actor: Actor;

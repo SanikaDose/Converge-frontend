@@ -56,9 +56,8 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
   const { employeeLabel } = useOrgContext();
   const [detail, setDetail] = useState<ProjectDetailData | null>(null);
   const [activePhaseId, setActivePhaseId] = useState<string | null>(null);
-  // View is mirrored in the URL (?view=timeline|kanban) so switching views is a
-  // real history step: the browser Back button then returns to the previous
-  // view / this project instead of skipping straight out to the dashboard.
+  // View is mirrored in the URL (?view=timeline|kanban) so Back steps through
+  // views and returns to the project rather than exiting to the dashboard.
   const readViewFromUrl = (): ViewMode => {
     if (typeof window === "undefined") return "phases";
     const v = new URLSearchParams(window.location.search).get("view");
@@ -76,9 +75,8 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
   // Which task PhaseTaskPanel should open expanded, set when arriving from a
   // Kanban card, a Timeline bar, or a ?task= link off the portfolio Kanban.
   const [focusTask, setFocusTask] = useState<{ id: string; seq: number } | null>(null);
-  // Which Kanban status columns are shown — Delayed + Not Required start off
-  // (see defaultKanbanVisible). Lives here so the checkbox row can sit inline
-  // in the view-toggle toolbar rather than adding a second row.
+  // Visible Kanban status columns (see defaultKanbanVisible). Held here so the
+  // checkbox row can sit inline in the view-toggle toolbar.
   const [kanbanVisible, setKanbanVisible] = useState<Set<TaskStatus>>(defaultKanbanVisible);
   const toggleKanbanStatus = (s: TaskStatus) => setKanbanVisible(prev => {
     const next = new Set(prev);
@@ -100,9 +98,7 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
     setFocusTask(prev => ({ id: taskId, seq: (prev?.seq ?? 0) + 1 }));
   }, [projectId]);
 
-  // Manual view switch (the Phases/Timeline/Kanban toggle): mirror it into the
-  // URL as a real history push, so the browser Back button steps back through
-  // views and returns to the project rather than exiting to the dashboard.
+  // Phases/Timeline/Kanban toggle: push the view to the URL (see readViewFromUrl).
   const changeView = useCallback((v: ViewMode) => {
     setViewMode(v);
     const url = v === "phases" ? `/projects/${projectId}` : `/projects/${projectId}?view=${v}`;
@@ -116,7 +112,6 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
     return () => window.removeEventListener("popstate", onPop);
   }, []);
 
-  const canViewProjectSettings = true;
   const canEditProjectSettings = roleCan(role, "editProjectSettings");
   const canDeleteProject = roleCan(role, "deleteProject");
   const canManagePhases = roleCan(role, "managePhases");
@@ -124,14 +119,9 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
   const canEditScheduleDirectly = roleCan(role, "editScheduleDirectly");
   const canApprove = roleCan(role, "approveChanges");
 
-  /**
-   * The fetch moves to RTK Query, but the *editing* model deliberately does
-   * not: this screen holds the whole project document in `detail` and
-   * mutates it locally before PATCHing the full thing back (see `persist`).
-   * Driving that off the cache directly would mean re-deriving the document
-   * on every keystroke, so the query seeds local state and local state stays
-   * the source of truth while the page is open.
-   */
+  // The query seeds `detail`, but local state is the source of truth while the
+  // page is open: edits mutate `detail` and PATCH the whole document back (see
+  // `persist`), rather than re-deriving from the cache on every keystroke.
   const { data: fetchedProject, isFetching, isError } = useGetProjectQuery(projectId);
   const [updateProjectMutation] = useUpdateProjectMutation();
   const loading = isFetching && !detail;
@@ -180,10 +170,9 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
     }
   }, [detail, canEditProjectSettings]);
 
-  // Full project detail (meta + phases + tasks) is PATCHed to the mock
-  // API as one document; the API recomputes the dashboard's lightweight
-  // index row (bucket/delayed/etc) from this on every GET /api/projects,
-  // so there's no separate index to keep in sync here.
+  // The whole detail (meta + phases + tasks) is PATCHed as one document; the
+  // backend recomputes the dashboard index row from it, so there's nothing else
+  // to keep in sync here.
   const persist = async (next: ProjectDetailData) => {
     setDetail(next);
     try { await updateProjectMutation({ id: projectId, patch: { meta: next.meta, phases: next.phases, tasks: next.tasks } }).unwrap(); }
@@ -191,18 +180,11 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
   };
 
   /**
-   * Applies a task-list change and persists it.
-   *
-   * The next state is computed *outside* any updater on purpose. This used
-   * to run `fn` and call `persist` inside `setDetail(prev => …)`, which
-   * makes the updater impure — it fired a network request and a nested
-   * setState. React invokes updaters twice in development to surface
-   * exactly that, and the doubled run was appending a newly created task
-   * twice, producing "Encountered two children with the same key".
-   *
-   * `persist` already calls `setDetail(next)`, so state still updates
-   * immediately; every caller is a discrete user action, so reading
-   * `detail` from the closure is safe here.
+   * Apply a task-list change and persist it. `fn` runs outside any setState
+   * updater on purpose: doing it inside `setDetail(prev => …)` makes the updater
+   * impure (a network call + nested setState), which React's dev double-invoke
+   * turns into duplicate tasks. Callers are discrete user actions, so reading
+   * `detail` from the closure is safe.
    */
   const mutateTasks = (fn: (tasks: Task[]) => Task[]) => {
     if (!detail) return;
@@ -297,23 +279,12 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
   };
   const handleCommitDescription = (taskId: string, description: string) => commitField(taskId, "description", description);
 
-  // Checklist edits deliberately bypass commitField: they'd push an entry
-  // into the task's change history on every single checkbox tick, drowning
-  // the genuinely notable status/scheduling changes it exists to surface.
   /**
-   * Checklist edits, plus the rule that a Completed task can't quietly hold
-   * new unfinished work: adding an unticked critical point to a Completed
-   * task reopens it as In Progress.
-   *
-   * This is the mirror of TaskCard's "can't complete with open points" guard.
-   * Without it the two rules disagree — you couldn't reach Completed with an
-   * open point, but you could add one afterwards and the task would sit there
-   * claiming to be done.
-   *
-   * Scoped to *newly added* points on purpose. Unticking an existing point
-   * still doesn't reopen the task (a long-standing decision — see the task
-   * checklist notes in CLAUDE.md); this only fires for work that wasn't part
-   * of the task when it was signed off.
+   * Checklist edits. Bypasses commitField (a history entry per checkbox tick
+   * would drown the status/scheduling changes). Adding an unticked point to a
+   * Completed task reopens it as In Progress — the mirror of TaskCard's
+   * "can't complete with open points" guard. Only *newly added* points trigger
+   * this; unticking an existing one doesn't (see CLAUDE.md).
    */
   const handleChecklistChange = (taskId: string, checklist: ChecklistItem[]) => {
     mutateTasks(tasks => tasks.map(t => {
@@ -338,13 +309,10 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
   };
 
   /**
-   * Scheduling fields (day offset / planned start / duration) go through
-   * the approval branch point: direct apply for roles with
-   * editScheduleDirectly, otherwise a Pending Approval change request.
-   *
-   * `reason` is always supplied now — TaskCard collects it up front via
-   * ScheduleReasonDialog before calling any of these, so both branches
-   * record *why* the date moved rather than only that it did.
+   * Scheduling fields (day offset / planned start / duration) hit the approval
+   * branch point: direct apply for roles with editScheduleDirectly, else a
+   * Pending Approval request. `reason` is always supplied (TaskCard collects it
+   * via ScheduleReasonDialog first), so both branches record why the date moved.
    */
   const commitSchedule = (taskId: string, scheduleChanges: Partial<Task>, reason: string) => {
     mutateTasks(tasks => tasks.map(t => {
@@ -370,15 +338,9 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
     const { plannedStart, plannedFinish } = computePlanned(detail.meta.startDate, offset, task.duration, detail.meta.weekOff);
     commitSchedule(taskId, { dayOffset: offset, plannedStart, plannedFinish }, reason);
   };
-  /**
-   * Commits a start/finish pair from the reschedule dialog.
-   *
-   * `duration` is derived here rather than sent by the card: the two dates
-   * are the source of truth now, and dayOffset/duration are the stored
-   * representation the template maths runs on. Both are recomputed so the
-   * Gantt, the phase window, and "day from start" all stay consistent with
-   * whatever the user picked.
-   */
+  // Commit a start/finish pair from the reschedule dialog. The dates are the
+  // source of truth; dayOffset/duration (the stored representation) are derived
+  // here so the Gantt, phase window, and "day from start" stay consistent.
   const handleCommitDates = (taskId: string, plannedStart: string, plannedFinish: string, reason: string) => {
     const task = detail?.tasks.find(t => t.id === taskId);
     if (!task || !detail || !plannedStart || !plannedFinish) return;
@@ -490,12 +452,10 @@ export function ProjectDetail({ projectId, actor, onBack, initialTaskId = null }
                 </span>
               </Tooltip>
             )}
-            {/* Both stay visible and go disabled for a read-only User. */}
+            {/* Settings opens for everyone (the form itself gates editing);
+                delete is disabled for a read-only User. */}
             <Tooltip title="Project settings">
-              <IconButton
-                size="small"
-                onClick={() => setShowSettings(true)}
-              >
+              <IconButton size="small" onClick={() => setShowSettings(true)}>
                 <SettingsIcon fontSize="small" />
               </IconButton>
             </Tooltip>

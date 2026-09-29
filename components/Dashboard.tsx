@@ -37,7 +37,7 @@ import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 import { ProjectCard } from "./ProjectCard";
 import { StatCard, computeStatTrend } from "./common";
 import { DonutChart, TrendLineChart } from "./charts";
-import { useGetProjectsQuery } from "@/store/api/projectsApi";
+import { useGetProjectsQuery, projectsApi } from "@/store/api/projectsApi";
 import { useGetDashboardBaselineQuery } from "@/store/api/dashboardApi";
 import { withLiveStats } from "@/lib/businessLogic";
 import { todayISO, addDays, diffDays } from "@/lib/dateUtils";
@@ -148,6 +148,9 @@ export function Dashboard({ actor, onOpen }: {
 }) {
   const { role } = actor;
   const router = useRouter();
+  const prefetchDetail = projectsApi.usePrefetch("getProject");
+  // Warm the detail route + data on hover so opening a project is instant.
+  const warmProject = (id: string) => { prefetchDetail(id); router.prefetch(`/projects/${id}`); };
   const theme = useTheme();
   const [query, setQuery] = useState("");
   const [myOnly, setMyOnly] = useState(false);
@@ -403,7 +406,7 @@ export function Dashboard({ actor, onOpen }: {
                   const badge = dateBadge(d.plannedFinish);
                   const chip = deadlineChip(d.plannedFinish, today);
                   return (
-                    <Box key={i} onClick={() => onOpen(d.projectId)} sx={{
+                    <Box key={i} onClick={() => onOpen(d.projectId)} onMouseEnter={() => warmProject(d.projectId)} sx={{
                       display: "flex", alignItems: "center", gap: 1.5, cursor: "pointer",
                       p: 1, borderRadius: 2, "&:hover": { bgcolor: "action.hover" },
                     }}>

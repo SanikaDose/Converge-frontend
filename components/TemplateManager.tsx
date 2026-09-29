@@ -134,12 +134,13 @@ function TaskRow({ task, canEdit, accent, onSave, onDelete, drag }: {
       onDrop={drag ? (e) => { e.preventDefault(); drag.onDrop(); } : undefined}
       sx={{
         position: "relative",
-        py: 0.75, px: 1, borderRadius: 1.5,
+        py: 1, px: 1, mb: 1, borderRadius: 2,
+        border: "1px solid", borderColor: "divider", bgcolor: "background.paper",
         opacity: drag?.dragging ? 0.4 : 1,
-        "&:hover": { bgcolor: "action.hover" },
-        transition: "background-color .12s ease, opacity .12s ease",
-        ...(drag?.dropEdge === "top" ? { "&::before": { ...dropLine, top: -1 } } : {}),
-        ...(drag?.dropEdge === "bottom" ? { "&::after": { ...dropLine, bottom: -1 } } : {}),
+        "&:hover": { borderColor: alpha(accent, 0.55) },
+        transition: "border-color .12s ease, opacity .12s ease",
+        ...(drag?.dropEdge === "top" ? { "&::before": { ...dropLine, top: -2 } } : {}),
+        ...(drag?.dropEdge === "bottom" ? { "&::after": { ...dropLine, bottom: -2 } } : {}),
       }}>
       {canEdit ? (
         <Tooltip title="Drag to reorder">
@@ -180,21 +181,22 @@ function TaskRow({ task, canEdit, accent, onSave, onDelete, drag }: {
           sx={{ "& textarea": { color: "text.secondary" } }}
         />
 
-        {/* Critical points — seed the generated task's checklist. */}
+        {/* Critical points — seed the generated task's checklist. Given a
+            tinted, left-accented sub-block so it's clearly a per-task section. */}
         {(points.length > 0 || canEdit) && (
-          <Box sx={{ mt: 0.5 }}>
-            <Typography variant="caption" sx={{ display: "block", fontSize: 9.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: "text.disabled", mb: 0.25 }}>
-              Critical points
+          <Box sx={{ mt: 0.75, pl: 1.25, py: 0.5, borderLeft: "2px solid", borderColor: alpha(accent, 0.35), bgcolor: alpha(accent, 0.04), borderRadius: "0 6px 6px 0" }}>
+            <Typography variant="caption" sx={{ display: "block", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary", mb: 0.25 }}>
+              Critical points{points.length ? ` · ${points.length}` : ""}
             </Typography>
             {points.map((p, i) => (
-              <Stack key={i} direction="row" alignItems="center" gap={0.5}>
-                <Box sx={{ width: 4, height: 4, borderRadius: "50%", bgcolor: alpha(accent, 0.7), flexShrink: 0 }} />
+              <Stack key={i} direction="row" alignItems="center" gap={0.75}>
+                <Box sx={{ width: 5, height: 5, borderRadius: "50%", bgcolor: alpha(accent, 0.8), flexShrink: 0 }} />
                 <TextField
                   variant="standard" size="small" value={p} disabled={!canEdit} fullWidth
                   onChange={(e) => setPoints(points.map((x, idx) => idx === i ? e.target.value : x))}
                   onBlur={() => commitPoint(i)}
-                  slotProps={{ input: { disableUnderline: true }, htmlInput: { style: { fontSize: 11.5 } } }}
-                  sx={{ "& input": { color: "text.secondary" } }}
+                  slotProps={{ input: { disableUnderline: true }, htmlInput: { style: { fontSize: 12 } } }}
+                  sx={{ "& input": { color: "text.primary" } }}
                 />
                 {canEdit && (
                   <IconButton size="small" onClick={() => removePoint(i)} sx={{ p: 0.25, color: "text.disabled", "&:hover": { color: DASHBOARD_COLORS.red } }}>
@@ -204,14 +206,14 @@ function TaskRow({ task, canEdit, accent, onSave, onDelete, drag }: {
               </Stack>
             ))}
             {canEdit && (
-              <Stack direction="row" alignItems="center" gap={0.5}>
-                <AddIcon sx={{ fontSize: 13, color: "text.disabled", flexShrink: 0 }} />
+              <Stack direction="row" alignItems="center" gap={0.75} sx={{ mt: points.length ? 0.25 : 0, borderRadius: 1, "&:hover": { bgcolor: alpha(accent, 0.07) } }}>
+                <AddIcon sx={{ fontSize: 14, color: alpha(accent, 0.8), flexShrink: 0 }} />
                 <TextField
                   variant="standard" size="small" placeholder="Add critical point…" value={newPoint} fullWidth
                   onChange={(e) => setNewPoint(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addPoint(); } }}
                   onBlur={addPoint}
-                  slotProps={{ input: { disableUnderline: true }, htmlInput: { style: { fontSize: 11.5 } } }}
+                  slotProps={{ input: { disableUnderline: true }, htmlInput: { style: { fontSize: 12 } } }}
                 />
               </Stack>
             )}
@@ -242,43 +244,97 @@ function TaskRow({ task, canEdit, accent, onSave, onDelete, drag }: {
   );
 }
 
-/** Inline "add task" form under each phase. */
-function AddTaskRow({ canEdit, onAdd }: { canEdit: boolean; onAdd: (t: { name: string; description: string; dayOffset: number; duration: number }) => void }) {
+/** Inline "add task" form under each phase — mirrors the task-row layout and
+ *  lets critical points be set up front, before the task is created. */
+function AddTaskRow({ canEdit, accent, onAdd }: {
+  canEdit: boolean;
+  accent: string;
+  onAdd: (t: { name: string; description: string; dayOffset: number; duration: number; criticalPoints: string[] }) => void;
+}) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [dayOffset, setDayOffset] = useState("0");
   const [duration, setDuration] = useState("1");
+  const [points, setPoints] = useState<string[]>([]);
+  const [newPoint, setNewPoint] = useState("");
+
+  const addPoint = () => { const v = newPoint.trim(); if (!v) return; setPoints([...points, v]); setNewPoint(""); };
+  const removePoint = (i: number) => setPoints(points.filter((_, idx) => idx !== i));
+
   const valid = name.trim() && Number(dayOffset) >= 0 && Number(duration) >= 1;
-  const submit = () => { if (!valid) return; onAdd({ name: name.trim(), description: description.trim(), dayOffset: Number(dayOffset), duration: Number(duration) }); setName(""); setDescription(""); setDayOffset("0"); setDuration("1"); };
+  const submit = () => {
+    if (!valid) return;
+    onAdd({ name: name.trim(), description: description.trim(), dayOffset: Number(dayOffset), duration: Number(duration), criticalPoints: points });
+    setName(""); setDescription(""); setDayOffset("0"); setDuration("1"); setPoints([]); setNewPoint("");
+  };
   if (!canEdit) return null;
+
+  // Same column widths as TaskRow (drag 18 · flex · 84 · 84 · action 34) so the
+  // Start Day / Required Days inputs line up with the task rows above.
   const numSx = { width: 84, "& input": { textAlign: "center" as const } };
   return (
-    <Stack direction="row" gap={1} alignItems="flex-start" sx={{ mt: 1, pt: 1.25, px: 1, borderTop: "1px dashed", borderColor: "divider" }}>
-      <AddIcon sx={{ fontSize: 16, color: "text.disabled", ml: "-2px", mt: 0.5 }} />
-      <Stack sx={{ flex: 1, minWidth: 0 }} gap={0.25}>
-        <TextField size="small" placeholder="Add a task…" value={name} fullWidth variant="standard"
-          onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
-          slotProps={{ htmlInput: { style: { fontSize: 13 } } }} />
-        <TextField size="small" placeholder="Description (optional)" value={description} fullWidth multiline variant="standard"
-          onChange={(e) => setDescription(e.target.value)}
-          slotProps={{ htmlInput: { style: { fontSize: 12 } } }} sx={{ "& textarea": { color: "text.secondary" } }} />
+    <Stack gap={1}
+      sx={{ mt: 0.5, py: 1, px: 1, borderRadius: 2, border: "1px dashed", borderColor: "divider", "&:hover": { borderColor: "text.disabled" }, transition: "border-color .12s ease" }}>
+      <Stack direction="row" gap={1} alignItems="flex-start">
+        <Box sx={{ width: 18, flexShrink: 0, display: "flex", justifyContent: "center", pt: 0.5 }}>
+          <AddIcon sx={{ fontSize: 16, color: "text.disabled" }} />
+        </Box>
+        <Stack sx={{ flex: 1, minWidth: 0 }} gap={0.25}>
+          <TextField size="small" placeholder="Add a task…" value={name} fullWidth variant="standard"
+            onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
+            slotProps={{ htmlInput: { style: { fontSize: 13, fontWeight: 500 } } }} />
+          <TextField size="small" placeholder="Description (optional)" value={description} fullWidth multiline variant="standard"
+            onChange={(e) => setDescription(e.target.value)}
+            slotProps={{ htmlInput: { style: { fontSize: 12 } } }} sx={{ "& textarea": { color: "text.secondary" } }} />
+
+          {/* Critical points builder — same look as an existing task's block. */}
+          <Box sx={{ mt: 0.75, pl: 1.25, py: 0.5, borderLeft: "2px solid", borderColor: alpha(accent, 0.35), bgcolor: alpha(accent, 0.04), borderRadius: "0 6px 6px 0" }}>
+            <Typography variant="caption" sx={{ display: "block", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary", mb: 0.25 }}>
+              Critical points{points.length ? ` · ${points.length}` : ""}
+            </Typography>
+            {points.map((p, i) => (
+              <Stack key={i} direction="row" alignItems="center" gap={0.75}>
+                <Box sx={{ width: 5, height: 5, borderRadius: "50%", bgcolor: alpha(accent, 0.8), flexShrink: 0 }} />
+                <Typography sx={{ flex: 1, fontSize: 12, color: "text.primary" }}>{p}</Typography>
+                <IconButton size="small" onClick={() => removePoint(i)} sx={{ p: 0.25, color: "text.disabled", "&:hover": { color: DASHBOARD_COLORS.red } }}>
+                  <DeleteOutlineIcon sx={{ fontSize: 14 }} />
+                </IconButton>
+              </Stack>
+            ))}
+            <Stack direction="row" alignItems="center" gap={0.75} sx={{ mt: points.length ? 0.25 : 0 }}>
+              <AddIcon sx={{ fontSize: 14, color: alpha(accent, 0.8), flexShrink: 0 }} />
+              <TextField variant="standard" size="small" placeholder="Add critical point…" value={newPoint} fullWidth
+                onChange={(e) => setNewPoint(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addPoint(); } }}
+                onBlur={addPoint}
+                slotProps={{ input: { disableUnderline: true }, htmlInput: { style: { fontSize: 12 } } }} />
+            </Stack>
+          </Box>
+        </Stack>
+        <TextField size="small" type="number" value={dayOffset} sx={numSx}
+          slotProps={{ htmlInput: { min: 0, style: { fontSize: 13 } } }} onChange={(e) => setDayOffset(e.target.value)} />
+        <TextField size="small" type="number" value={duration} sx={numSx}
+          slotProps={{ htmlInput: { min: 1, style: { fontSize: 13 } } }} onChange={(e) => setDuration(e.target.value)} />
+        <Box sx={{ width: 34, flexShrink: 0 }} />
       </Stack>
-      <TextField size="small" type="number" value={dayOffset} sx={numSx}
-        slotProps={{ htmlInput: { min: 0, style: { fontSize: 13 } } }} onChange={(e) => setDayOffset(e.target.value)} />
-      <TextField size="small" type="number" value={duration} sx={numSx}
-        slotProps={{ htmlInput: { min: 1, style: { fontSize: 13 } } }} onChange={(e) => setDuration(e.target.value)} />
-      <Button size="small" variant="text" disabled={!valid} onClick={submit} sx={{ flexShrink: 0, minWidth: 56 }}>Add</Button>
+      <Stack direction="row" justifyContent="flex-end">
+        <Button size="small" variant="contained" disableElevation disabled={!valid} onClick={submit} startIcon={<AddIcon />} sx={{ borderRadius: 1.5 }}>
+          Add task
+        </Button>
+      </Stack>
     </Stack>
   );
 }
 
 /** A collapsible phase card. */
-function PhaseCard({ phase, canEdit, expanded, onToggle, onAdd, onSave, onDelete, onReorder, onEditPhase, onDeletePhase }: {
+function PhaseCard({ phase, canEdit, seq, expanded, onToggle, onAdd, onSave, onDelete, onReorder, onEditPhase, onDeletePhase }: {
   phase: PhaseTemplateItem;
   canEdit: boolean;
+  /** 1-based position, used to number the phase when its name has no "NN ·" prefix. */
+  seq: number;
   expanded: boolean;
   onToggle: () => void;
-  onAdd: (t: { name: string; description: string; dayOffset: number; duration: number }) => void;
+  onAdd: (t: { name: string; description: string; dayOffset: number; duration: number; criticalPoints: string[] }) => void;
   onSave: (taskId: string, patch: { name?: string; description?: string; dayOffset?: number; duration?: number; criticalPoints?: string[] }) => void;
   onDelete: (taskId: string) => void;
   onReorder: (taskIds: string[]) => void;
@@ -287,6 +343,9 @@ function PhaseCard({ phase, canEdit, expanded, onToggle, onAdd, onSave, onDelete
 }) {
   const accent = accentFor(phase.discipline);
   const { num, title } = splitPhaseName(phase.name);
+  // Fall back to the phase's position when the name carries no "NN ·" prefix,
+  // so every template numbers its phases (not just the seeded "Standard" one).
+  const displayNum = num || String(seq).padStart(2, "0");
 
   // Drag-to-reorder state, scoped to this phase's task list.
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -313,7 +372,7 @@ function PhaseCard({ phase, canEdit, expanded, onToggle, onAdd, onSave, onDelete
         <Box sx={{
           width: 30, height: 30, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
           bgcolor: alpha(accent, 0.14), color: accent, fontWeight: 800, fontSize: 12,
-        }}>{num}</Box>
+        }}>{displayNum}</Box>
         <Box sx={{ minWidth: 0, flex: 1 }}>
           <Typography sx={{ fontWeight: 700, fontSize: 14.5, lineHeight: 1.2 }} noWrap>{title}</Typography>
           <Typography variant="caption" color="text.secondary">{phase.tasks.length} task{phase.tasks.length === 1 ? "" : "s"}</Typography>
@@ -361,7 +420,7 @@ function PhaseCard({ phase, canEdit, expanded, onToggle, onAdd, onSave, onDelete
                 onDrop: () => commitReorder(index),
               } : undefined} />
           ))}
-          <AddTaskRow canEdit={canEdit} onAdd={onAdd} />
+          <AddTaskRow canEdit={canEdit} accent={accent} onAdd={onAdd} />
         </Box>
       </Collapse>
     </Paper>
@@ -642,6 +701,7 @@ export function TemplateManager() {
   const phaseCards = (list: PhaseTemplateItem[]) => list.map((phase) => (
     <PhaseCard
       key={phase.id} phase={phase} canEdit={isAdmin}
+      seq={phases.findIndex(p => p.id === phase.id) + 1}
       expanded={expanded.has(phase.id)} onToggle={() => toggle(phase.id)}
       onAdd={(t) => run(addTask({ phaseId: phase.id, ...t }).unwrap())}
       onSave={(taskId, patch) => run(updateTask({ taskId, ...patch }).unwrap())}

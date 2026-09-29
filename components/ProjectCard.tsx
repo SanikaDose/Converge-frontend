@@ -1,5 +1,6 @@
 "use client";
 import React from "react";
+import { useRouter } from "next/navigation";
 import Box from "@mui/material/Box";
 import Stack from "./Stack";
 import Typography from "@mui/material/Typography";
@@ -14,18 +15,33 @@ import HistoryIcon from "@mui/icons-material/History";
 import { fmt, fmtDateTime } from "@/lib/dateUtils";
 import { DASHBOARD_COLORS } from "@/lib/theme";
 import { useOrgContext } from "@/context/OrgContext";
+import { projectsApi } from "@/store/api/projectsApi";
 import type { ProjectWithLiveStats } from "@/lib/types";
 
 /** Unchanged card content from the original build — now an MUI Paper-ish Box, inside the status accordions. */
 export function ProjectCard({ project, onOpen }: { project: ProjectWithLiveStats; onOpen: (id: string) => void }) {
   const { employeeLabel } = useOrgContext();
+  const router = useRouter();
+  const prefetchDetail = projectsApi.usePrefetch("getProject");
   const delayed = project.delayed > 0;
   const completed = project.pct >= 100;
   // Vivid, mode-independent palette so the ring's amber stays amber (not the
   // light-mode brown) and matches the phase bars + the dashboard donut.
   const ringHex = completed ? DASHBOARD_COLORS.green : delayed ? DASHBOARD_COLORS.red : DASHBOARD_COLORS.amber;
+
+  // Warm the detail page on hover/focus — once per card — so a click opens
+  // instantly instead of downloading the route bundle and fetching the project
+  // only after the click. Prefetches both the route chunk and the query cache.
+  const warmed = React.useRef(false);
+  const warm = () => {
+    if (warmed.current) return;
+    warmed.current = true;
+    prefetchDetail(project.id);
+    router.prefetch(`/projects/${project.id}`);
+  };
+
   return (
-    <Box onClick={() => onOpen(project.id)} sx={{
+    <Box onClick={() => onOpen(project.id)} onMouseEnter={warm} onFocus={warm} sx={{
       position: "relative",
       bgcolor: "background.default", border: "1px solid", borderColor: "divider", borderRadius: 2.5, p: 2.25,
       cursor: "pointer", transition: "border-color .15s ease, transform .15s ease",

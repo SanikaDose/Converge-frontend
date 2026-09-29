@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import Box from "@mui/material/Box";
 import Stack from "./Stack";
 import Typography from "@mui/material/Typography";
@@ -26,8 +27,14 @@ import { CompletionRing } from "./CompletionRing";
 import { PhaseNavList, AddTaskDialog, PhaseTaskPanel, type NewTaskPayload } from "./PhaseManager";
 import { TaskDetailsDialog, type TaskDetailsPatch } from "./TaskDetailsDialog";
 import { TaskHistoryDialog } from "./TaskHistoryDialog";
-import { TimelineView } from "./TimelineView";
-import { KanbanView } from "./KanbanView";
+// Timeline (Gantt) and Kanban aren't shown on the default Phases view, so load
+// them on demand — keeps the detail page's initial bundle (and open time) small.
+const TimelineView = dynamic(() => import("./TimelineView").then(m => m.TimelineView), {
+  loading: () => <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}><CircularProgress /></Box>,
+});
+const KanbanView = dynamic(() => import("./KanbanView").then(m => m.KanbanView), {
+  loading: () => <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}><CircularProgress /></Box>,
+});
 import { ProjectForm, type ProjectFormPayload } from "./ProjectForm";
 import { DeleteProjectDialog } from "./DeleteProjectDialog";
 import { WarrantyDialog } from "./WarrantyDialog";

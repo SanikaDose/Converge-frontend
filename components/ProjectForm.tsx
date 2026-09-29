@@ -22,7 +22,7 @@ import { OrgSelect } from "./common";
 import { TemplatePreviewDialog } from "./TemplatePreviewDialog";
 import { TEMPLATE, WEEKDAY_SHORT, WEEKDAY_LABELS, MAX_WEEK_OFF_DAYS, PHASE_DISCIPLINE_OPTIONS, FINANCIAL_YEAR_OPTIONS } from "@/lib/data";
 import { suggestedEndDate, guessEmployeeIdFromFreeText } from "@/lib/businessLogic";
-import { todayISO, DEFAULT_WEEK_OFF, addWorkingDays } from "@/lib/dateUtils";
+import { todayISO, DEFAULT_WEEK_OFF, addWorkingDays, nextWorkingDay } from "@/lib/dateUtils";
 import { useOrgContext } from "@/context/OrgContext";
 import { useGetProjectTemplatesQuery, useGetTemplatePhasesQuery } from "@/store/api/projectTemplatesApi";
 import type { PhaseDiscipline, ProjectCharter, ProjectMeta, ProjectType, RelatedRepository, WeekDay } from "@/lib/types";
@@ -111,7 +111,10 @@ export function ProjectForm({
   const [owner, setOwner] = useState<string | null>(
     initial?.owner && employeeById[initial.owner] ? initial.owner : null,
   );
-  const [startDate, setStartDate] = useState(initial?.startDate || todayISO());
+  // A new project defaults to today, snapped to the next working day so a
+  // weekend never becomes the start date (Sat/Sun → Monday). An existing
+  // project keeps its stored start date as-is.
+  const [startDate, setStartDate] = useState(initial?.startDate || nextWorkingDay(todayISO()));
   const [weekOff, setWeekOff] = useState<WeekDay[]>(initial?.weekOff?.length ? initial.weekOff : DEFAULT_WEEK_OFF);
 
   const initialRelatedRepositories = ((initial as Partial<ProjectMeta> & { relatedRepositories?: RelatedRepository[] } | null)?.relatedRepositories ?? []) as RelatedRepository[];
@@ -330,7 +333,9 @@ export function ProjectForm({
 
         <Stack direction="row" spacing={2}>
           <TextField label={`${noun} start`} type="date" disabled={readOnly} fullWidth slotProps={{ inputLabel: { shrink: true } }}
-            value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            value={startDate}
+            // Snap a weekend selection forward to the next working day (Sat/Sun → Monday).
+            onChange={(e) => setStartDate(e.target.value ? nextWorkingDay(e.target.value, weekOff) : e.target.value)} />
           <TextField label={`${noun} end`} type="date" disabled={readOnly} fullWidth slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: startDate } }}
             value={endDate} onChange={(e) => { setEndDate(e.target.value); setEndTouched(true); }}
             error={endBeforeStart} helperText={endBeforeStart ? "End date can't be before the start date" : " "} />

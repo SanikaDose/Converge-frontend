@@ -19,7 +19,6 @@ export const apiRoutes = {
     verifyOtp: 'verify-otp',
     resetPassword: 'reset-password',
   },
-
   projects: {
     root: 'projects',
     getList: '',

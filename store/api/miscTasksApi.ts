@@ -1,6 +1,6 @@
 import { baseApi } from './baseApi';
 import { apiRoutes, routePath } from '@/constants/apiRoutes';
-import type { MiscTask, MiscTaskInput } from '@/lib/types';
+import type { MiscTask, MiscTaskInput, MiscTaskStatus } from '@/lib/types';
 
 /**
  * Miscellaneous (ad-hoc) tasks — full CRUD. A standalone resource; it doesn't
@@ -32,6 +32,17 @@ export const miscTasksApi = baseApi.injectEndpoints({
       invalidatesTags: ['MiscTasks'],
     }),
 
+    // Status-only change — allowed for a lead OR the assigned employee (the
+    // backend authorizes). Separate from the full, manager-only update.
+    updateMiscTaskStatus: builder.mutation<MiscTask, { id: string; status: MiscTaskStatus }>({
+      query: ({ id, status }) => ({
+        url: routePath(apiRoutes.miscTasks.root, apiRoutes.miscTasks.updateStatusById(id)),
+        method: 'PATCH',
+        body: { status },
+      }),
+      invalidatesTags: ['MiscTasks', 'Notifications'],
+    }),
+
     deleteMiscTask: builder.mutation<{ id: string }, string>({
       query: (id) => ({
         url: routePath(apiRoutes.miscTasks.root, apiRoutes.miscTasks.deleteById(id)),
@@ -46,5 +57,6 @@ export const {
   useGetMiscTasksQuery,
   useCreateMiscTaskMutation,
   useUpdateMiscTaskMutation,
+  useUpdateMiscTaskStatusMutation,
   useDeleteMiscTaskMutation,
 } = miscTasksApi;

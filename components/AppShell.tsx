@@ -22,6 +22,7 @@ import DashboardIcon from "@mui/icons-material/SpaceDashboard";
 import GroupsIcon from "@mui/icons-material/Groups";
 import ConfirmationNumberIcon from "@mui/icons-material/ConfirmationNumber";
 import ViewKanbanIcon from "@mui/icons-material/ViewKanban";
+import Diversity3Icon from "@mui/icons-material/Diversity3";
 import TaskAltIcon from "@mui/icons-material/TaskAlt";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
@@ -39,7 +40,7 @@ import { initials, avatarColor, roleCan, VIEW_ONLY_HINT } from "@/lib/data";
 import { recordNavigation } from "@/lib/navHistory";
 import { useGetProjectsQuery, useCreateProjectMutation } from "@/store/api/projectsApi";
 import { useCreateTicketMutation } from "@/store/api/ticketsApi";
-import { useGetNotificationsQuery } from "@/store/api/notificationsApi";
+import { useGetNotificationsQuery, useMarkNotificationsReadMutation } from "@/store/api/notificationsApi";
 import { useAppContext } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
 import type { CreateTicketInput, NotificationItem, ProjectIndexRow } from "@/lib/types";
@@ -52,11 +53,18 @@ const NAV_ITEMS = [
   { href: "/tickets", label: "Tickets", icon: ConfirmationNumberIcon },
   { href: "/tasks", label: "Tasks", icon: TaskAltIcon },
   { href: "/kanban", label: "Kanban", icon: ViewKanbanIcon },
+  { href: "/scrum", label: "Scrum", icon: Diversity3Icon },
 ];
 
 /** Small dot icon per notification kind, keyed to the dashboard palette. */
 function KindDot({ kind }: { kind: NotificationItem["kind"] }) {
-  const color = kind === "task" ? DASHBOARD_COLORS.blue : kind === "project" ? DASHBOARD_COLORS.violet : DASHBOARD_COLORS.orange;
+  const colorByKind: Record<NotificationItem["kind"], string> = {
+    task: DASHBOARD_COLORS.blue,
+    project: DASHBOARD_COLORS.violet,
+    ticket: DASHBOARD_COLORS.orange,
+    "misc-task": DASHBOARD_COLORS.green,
+  };
+  const color = colorByKind[kind] ?? DASHBOARD_COLORS.blue;
   return <Box sx={{ mt: 0.65, width: 8, height: 8, borderRadius: "50%", bgcolor: color, flexShrink: 0 }} />;
 }
 
@@ -68,16 +76,53 @@ function KindDot({ kind }: { kind: NotificationItem["kind"] }) {
  */
 function NotificationsMenu() {
   const router = useRouter();
+  const { user } = useAuth();
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
 
   // Opening the bell refetches so a freshly assigned task/ticket shows up
   // without a full page reload.
   const { data, refetch } = useGetNotificationsQuery();
+  const [markRead] = useMarkNotificationsReadMutation();
   const items: NotificationItem[] = useMemo(() => data ?? [], [data]);
+
+  // Derived items (task/project/ticket) have no server-side `read` flag, so
+  // they'd count forever. To behave like a normal bell — viewing clears the
+  // count, a *new* item brings it back — we remember the ids already seen (per
+  // user, persisted so it survives reloads) and treat only unseen items as
+  // unread. Stored events (misc-task) also honor their server `read` flag.
+  const seenKey = user?.id ? `converge_notif_seen_v1:${user.id}` : null;
+  const [seenIds, setSeenIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (!seenKey) { setSeenIds(new Set()); return; }
+    try {
+      const raw = localStorage.getItem(seenKey);
+      setSeenIds(new Set(raw ? (JSON.parse(raw) as string[]) : []));
+    } catch { setSeenIds(new Set()); }
+  }, [seenKey]);
+
+  const unreadCount = useMemo(
+    () => items.filter(i => !i.read && !seenIds.has(i.id)).length,
+    [items, seenIds],
+  );
+
+  const openBell = (e: React.MouseEvent<HTMLElement>) => {
+    setAnchorEl(e.currentTarget);
+    refetch();
+    // Clear the unread badge on stored notifications — opening = seeing them.
+    if (items.some(i => i.read === false)) markRead();
+    // Mark everything currently shown as seen so the badge drops to zero; a
+    // later assignment (a new id) is not in this set, so it counts again.
+    const ids = items.map(i => i.id);
+    setSeenIds(new Set(ids));
+    if (seenKey) { try { localStorage.setItem(seenKey, JSON.stringify(ids)); } catch { /* storage unavailable */ } }
+  };
 
   const go = (item: NotificationItem) => {
     setAnchorEl(null);
-    if (item.kind === "ticket") {
+    if (item.link) {
+      // Stored events (misc-task) carry an explicit deep link.
+      router.push(item.link);
+    } else if (item.kind === "ticket") {
       // item.id is "ticket:<ticketId>" — deep-link so the page opens that row.
       const ticketId = item.id.split(":")[1];
       router.push(ticketId ? `/tickets?ticket=${ticketId}` : "/tickets");
@@ -89,8 +134,8 @@ function NotificationsMenu() {
   return (
     <>
       <Tooltip title="Notifications">
-        <IconButton size="small" onClick={(e) => { setAnchorEl(e.currentTarget); refetch(); }} sx={{ color: "text.secondary" }}>
-          <Badge badgeContent={items.length} color="error" max={99}>
+        <IconButton size="small" onClick={openBell} sx={{ color: "text.secondary" }}>
+          <Badge badgeContent={unreadCount} color="error" max={99}>
             <NotificationsNoneIcon fontSize="small" />
           </Badge>
         </IconButton>
@@ -159,6 +204,12 @@ function AccountMenu() {
           <ListItemIcon><PersonOutlineIcon fontSize="small" /></ListItemIcon>
           My profile
         </MenuItem>
+        {user?.appRole === "Admin" && (
+          <MenuItem onClick={() => { setAnchorEl(null); router.push("/employees"); }}>
+            <ListItemIcon><GroupsIcon fontSize="small" /></ListItemIcon>
+            Manage employees
+          </MenuItem>
+        )}
         {user?.appRole === "Admin" && (
           <MenuItem onClick={() => { setAnchorEl(null); router.push("/template"); }}>
             <ListItemIcon><TuneIcon fontSize="small" /></ListItemIcon>
@@ -282,14 +333,14 @@ function ProjectQuickActions() {
 
       {showNewProject && roleCan(role, "createProject") && (
         <ProjectForm
-          title="New project" initial={null} submitLabel="Create project" busy={projectBusy}
+          title="New project" initial={undefined} submitLabel="Create project" busy={projectBusy}
           defaults={{ type: "Solution" }} error={createError}
           onClose={() => { setShowNewProject(false); setCreateError(""); }} onSubmit={createProject}
         />
       )}
       {showNewProduct && roleCan(role, "createProject") && (
         <ProjectForm
-          title="New product" initial={null} submitLabel="Create product" busy={projectBusy}
+          title="New product" initial={undefined} submitLabel="Create product" busy={projectBusy}
           defaults={{ type: "Product", customer: "Elansol Technologies", location: "Pune, Maharashtra, India" }} error={createError}
           onClose={() => { setShowNewProduct(false); setCreateError(""); }} onSubmit={createProject}
         />
@@ -318,7 +369,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           asset, the bar can be dark like everything else. */}
       <AppBar position="fixed" sx={{ zIndex: (t) => t.zIndex.drawer + 1, bgcolor: "background.paper", borderBottom: "1px solid", borderColor: "divider" }} elevation={0}>
         <Toolbar sx={{ gap: 3 }}>
-          <ConvergeNavbarLogo height={60} />
+          <Box component={Link} href="/" aria-label="Go to dashboard"
+            sx={{ display: "inline-flex", alignItems: "center", textDecoration: "none", cursor: "pointer", flexShrink: 0 }}>
+            <ConvergeNavbarLogo height={60} />
+          </Box>
 
           <Box sx={{ display: "flex", gap: 0.5 }}>
             {NAV_ITEMS.map(({ href, label, icon: Icon }) => {

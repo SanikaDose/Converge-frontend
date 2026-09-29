@@ -1,14 +1,9 @@
 /**
- * Core static data: the 12-phase project template and role/permission
- * tables. Nothing in this file is React — it's the same kind of plain-data
- * module the original app used for TEMPLATE, kept as the single source of
- * truth for business logic (business-day math, task generation).
+ * Core static data: the 12-phase project template, status/priority palettes,
+ * and the role/permission tables. Plain data, no React.
  *
- * The organization's team/employee directory used to live here too, as
- * static TEAMS/EMPLOYEES constants — it's now real data owned by the
- * backend (Postgres, via GET /employees) and fetched through
- * context/OrgContext.tsx instead, so it reflects the actual DB rather
- * than a hardcoded snapshot. Use `useOrgContext()` for teams/employees.
+ * The team/employee directory is NOT here — it's backend data fetched via
+ * `useOrgContext()` (GET /employees).
  */
 import type { AppRole, PermissionAction, TemplatePhase, WeekDay } from "./types";
 
@@ -21,12 +16,8 @@ import type { AppRole, PermissionAction, TemplatePhase, WeekDay } from "./types"
 ------------------------------------------------------------------------ */
 export const TEMPLATE: TemplatePhase[] = [
   { phase: "01 · Project Initialization", critical: true, tasks: [
-    // Kickoff first (sequential). Requirement gathering and the on-site
-    // survey are independent workstreams, so they run in parallel right
-    // after. Planning needs both finished as inputs, and scope freeze
-    // needs planning finished — those two stay sequential. This fills
-    // the full week (day 0 → day 6) so Engineering starts immediately
-    // on day 7 with no idle gap in between.
+    // Kickoff → (requirement gathering ‖ site survey, in parallel) → planning →
+    // scope freeze. Fills day 0–6 so Engineering can start on day 7 with no gap.
     ["Project Kick-off Meeting", 0, 1],
     ["Requirement Gathering & Analysis", 1, 2],
     ["Site Survey & Feasibility Study", 1, 2],
@@ -171,12 +162,10 @@ export function avatarColor(name: string | null | undefined): string {
    Admin sees — every project, task, ticket, board and breakdown — but
    cannot create, edit, delete, move a Kanban card, or raise a ticket.
 
-   IMPORTANT — this is a UI gate, not a security boundary. The backend has
-   no auth guards (see converge_backend: every data endpoint is open, and
-   the session is an unsigned localStorage record), so a read-only user who
-   opens devtools can still call the API directly. Making "view only"
-   actually enforceable means issuing a real session token at login and
-   checking it in a Nest guard on every mutating route.
+   This gates the UI. The backend authenticates every request (global
+   JwtAuthGuard), but does not yet enforce Admin-only *writes* on every
+   mutating route, so full "view only" enforcement still needs a role check
+   server-side. See converge_frontend/CLAUDE.md → "Roles".
 ------------------------------------------------------------------------ */
 export const ROLES: AppRole[] = ["Admin", "User"];
 const ALL_ROLES = ROLES;
@@ -204,34 +193,20 @@ export function roleCan(role: AppRole, action: PermissionAction): boolean {
   return (PERMISSIONS[action] || []).includes(role);
 }
 
-/**
- * Tooltip shown on every control a read-only User can see but not use.
- *
- * Write controls are deliberately rendered *disabled* rather than removed:
- * a User should see the same interface an Admin does, so the app reads the
- * same for everyone and it's obvious what exists and why it's unavailable —
- * rather than silently missing buttons that look like a broken page.
- */
+/** Tooltip on controls a read-only User can see but not use. Write controls are
+ *  disabled (not hidden) so the UI reads the same for everyone. */
 export const VIEW_ONLY_HINT = "View-only access — ask an admin to make changes.";
 
 export const SCHEDULING_FIELDS = ["dayOffset", "plannedStart", "plannedFinish", "duration"] as const;
 
-/**
- * A real v4 UUID, for anything that becomes a database primary key —
- * currently a task created from the "Add task" dialog, which reaches
- * Postgres via the full-sync PATCH. Must match the backend's `newId()`:
- * the `tasks.id` column is a native `uuid`, so the old
- * `${prefix}_${Date.now()}_${random}` format would now be rejected.
- */
+/** A real v4 UUID for anything that becomes a DB primary key (e.g. a new task).
+ *  Must match the backend's `newId()` — `tasks.id` is a native `uuid` column. */
 export function newId(): string {
   return crypto.randomUUID();
 }
 
-/**
- * Prefixed id for items that live *inside* a jsonb column (checklist
- * points, ticket action points) rather than as their own row. These are
- * never primary keys, so a readable prefix is more useful here than a UUID.
- */
+/** Prefixed id for items living inside a jsonb column (checklist points, ticket
+ *  action points) — never a primary key, so a readable prefix beats a UUID. */
 export function genId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }

@@ -307,8 +307,10 @@ export function computeStatTrend(current: number, base: number, unit: string, go
  * just the icon chip, for KPIs that deserve to stand out (e.g. delayed
  * tasks > 0).
  */
-export function StatCard({ icon: Icon, label, value, color = "primary.light", trend, tint }: {
+export function StatCard({ icon: Icon, label, value, color = "primary.light", trend, tint, onClick }: {
   icon: ElementType; label: string; value: ReactNode; color?: string; trend?: StatTrend; tint?: boolean;
+  /** When set, the card becomes a button (pointer + hover) — e.g. drill into a filtered view. */
+  onClick?: () => void;
 }) {
   const theme = useTheme();
   const [group, shade] = color.split(".");
@@ -317,10 +319,14 @@ export function StatCard({ icon: Icon, label, value, color = "primary.light", tr
   const toneColor = trend?.tone === "negative" ? theme.palette.error.main : trend?.tone === "positive" ? theme.palette.success.main : theme.palette.text.secondary;
   const TrendIcon = trend?.direction === "up" ? ArrowUpwardIcon : trend?.direction === "down" ? ArrowDownwardIcon : RemoveIcon;
   return (
-    <Box sx={{
+    <Box onClick={onClick} sx={{
       display: "flex", alignItems: "center", gap: 1.5, p: 1.75, height: "100%", boxSizing: "border-box",
       bgcolor: tint ? alpha(resolved, 0.07) : "background.paper", border: "1px solid",
       borderColor: tint ? alpha(resolved, 0.3) : "divider", borderRadius: 1.25,
+      ...(onClick ? {
+        cursor: "pointer", transition: "border-color .15s ease, box-shadow .15s ease",
+        "&:hover": { borderColor: alpha(resolved, 0.6), boxShadow: `0 2px 10px ${alpha(resolved, 0.18)}` },
+      } : {}),
     }}>
       <Box sx={{
         width: 40, height: 40, borderRadius: 2, flexShrink: 0,

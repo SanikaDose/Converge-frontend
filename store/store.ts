@@ -2,14 +2,9 @@ import { configureStore } from '@reduxjs/toolkit';
 import { baseApi } from './api/baseApi';
 
 /**
- * Redux store, following the Scout frontend's `app/store/store.ts`.
- *
- * There are no hand-written slices: Converge's non-server state (session,
- * theme, role) already lives in React context and is unrelated to data
- * fetching, so moving it here would be churn with no benefit and would
- * change behaviour the UI depends on. This store exists to host RTK
- * Query's cache — slices can be added alongside the reducer below if that
- * ever changes.
+ * Redux store. Its only job is to host RTK Query's cache — there are no
+ * hand-written slices, since non-server state (session, theme, role) lives in
+ * React context. Add slices alongside the reducer below if that changes.
  */
 export const store = configureStore({
   reducer: {

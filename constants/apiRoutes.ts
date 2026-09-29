@@ -1,11 +1,8 @@
 /**
  * Every backend route the app calls, in one place — the frontend mirror of
- * `converge_backend/src/constants/routeConstants.ts` and the same
- * convention as the Scout frontend's `constants/apiRoutes.ts`.
- *
- * `main.root` is the backend's global prefix. Endpoint definitions build
- * their URLs from these rather than inlining path strings, so a route that
- * moves is one edit on each side instead of a search across components.
+ * `converge_backend/src/constants/routeConstants.ts`. `main.root` is the
+ * backend's global prefix. Endpoints build URLs from these instead of inlining
+ * strings, so a moved route is one edit on each side.
  */
 export const apiRoutes = {
   main: {
@@ -22,10 +19,11 @@ export const apiRoutes = {
     verifyOtp: 'verify-otp',
     resetPassword: 'reset-password',
   },
-
   projects: {
     root: 'projects',
     getList: '',
+    // Bulk board fetch: index + full details for every project in one request.
+    board: 'board',
     create: '',
     getById: (id: string) => id,
     updateById: (id: string) => id,
@@ -44,12 +42,20 @@ export const apiRoutes = {
     getList: '',
     create: '',
     updateById: (id: string) => id,
+    updateStatusById: (id: string) => `${id}/status`,
     deleteById: (id: string) => id,
   },
 
   projectTemplates: {
     root: 'project-templates',
-    get: '',
+    list: '',
+    create: '',
+    getOne: (templateId: string) => `${templateId}`,
+    updateTemplate: (templateId: string) => `${templateId}`,
+    deleteTemplate: (templateId: string) => `${templateId}`,
+    addPhase: (templateId: string) => `${templateId}/phases`,
+    updatePhase: (phaseId: string) => `phases/${phaseId}`,
+    deletePhase: (phaseId: string) => `phases/${phaseId}`,
     addTask: (phaseId: string) => `phases/${phaseId}/tasks`,
     reorderTasks: (phaseId: string) => `phases/${phaseId}/tasks/reorder`,
     updateTask: (taskId: string) => `tasks/${taskId}`,
@@ -59,6 +65,9 @@ export const apiRoutes = {
   employees: {
     root: 'employees',
     getList: '',
+    create: '',
+    updateById: (id: string) => id,
+    deleteById: (id: string) => id,
   },
 
   teamPerformance: {
@@ -74,6 +83,13 @@ export const apiRoutes = {
   notifications: {
     root: 'notifications',
     getList: '',
+    markRead: 'mark-read',
+  },
+
+  scrum: {
+    root: 'scrum',
+    getByDate: '',
+    save: '',
   },
 } as const;
 

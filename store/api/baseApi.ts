@@ -16,19 +16,13 @@ const rawBaseQuery = fetchBaseQuery({
 });
 
 /**
- * Signs the user out when the backend rejects the token — expired, revoked,
- * or forged. Without this a stale token leaves the app rendering its shell
- * over a wall of failed requests instead of returning to /login.
+ * Signs the user out when the backend rejects the token (expired/revoked/forged).
+ * The token is cleared here, then a DOM event is dispatched: this runs outside
+ * React, so it can't call `signOut()` directly, and importing AuthContext would
+ * create a cycle — AuthContext listens for the event and drops its user.
  *
- * The token is cleared here (this module owns it) and the rest is announced
- * as a DOM event: this base query runs outside React and can't call
- * `signOut()` directly, and importing AuthContext here would make the
- * context and the store import each other. `AuthContext` listens for the
- * event and drops its user, which is what `AuthGate` already redirects on.
- *
- * The login request itself is exempt — a 401 there means "wrong password",
- * and it belongs to the login form's error banner, not to a session that
- * doesn't exist yet.
+ * `login` is exempt: a 401 there means "wrong password" and belongs to the login
+ * form, not a session that doesn't exist yet.
  */
 const baseQueryWithAuth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> = async (
   args,
@@ -48,24 +42,15 @@ const baseQueryWithAuth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQuery
 };
 
 /**
- * The single RTK Query API, following Scout's `baseProtectedApi` shape:
- * an empty `createApi` that feature slices extend via `injectEndpoints`,
- * plus the `tagTypes` those slices use for cache invalidation.
- *
- * Scout splits this into a public and a protected API because its backend
- * requires a JWT. Converge's backend does too now — a global JwtAuthGuard
- * rejects everything except POST /auth/login. One instance still covers
- * both: `prepareHeaders` simply omits the header when no token is stored,
- * which is exactly what the one public endpoint needs.
+ * The single RTK Query API: an empty `createApi` that feature slices extend via
+ * `injectEndpoints`. One instance serves both authed and public endpoints —
+ * `prepareHeaders` just omits the header when no token is stored (POST
+ * /auth/login is the only public route).
  */
 export const baseApi = createApi({
   reducerPath: 'convergeApi',
   baseQuery: baseQueryWithAuth,
-  /**
-   * One tag per collection. Mutations invalidate the tags their write
-   * touches, which is what replaced the manual `refreshKey` counters the
-   * components used to thread through props to force a refetch.
-   */
-  tagTypes: ['Projects', 'Project', 'Tickets', 'Employees', 'TeamPerformance', 'DashboardBaseline', 'Profile', 'ProjectTemplate', 'Notifications', 'MiscTasks'],
+  // One tag per collection; mutations invalidate the tags they touch to trigger refetches.
+  tagTypes: ['Projects', 'Project', 'Tickets', 'Employees', 'TeamPerformance', 'DashboardBaseline', 'Profile', 'ProjectTemplate', 'Notifications', 'MiscTasks', 'Scrum'],
   endpoints: () => ({}),
 });

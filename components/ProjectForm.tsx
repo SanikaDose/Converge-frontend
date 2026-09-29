@@ -24,8 +24,11 @@ import { TEMPLATE, WEEKDAY_SHORT, WEEKDAY_LABELS, MAX_WEEK_OFF_DAYS, PHASE_DISCI
 import { suggestedEndDate, guessEmployeeIdFromFreeText } from "@/lib/businessLogic";
 import { todayISO, DEFAULT_WEEK_OFF, addWorkingDays } from "@/lib/dateUtils";
 import { useOrgContext } from "@/context/OrgContext";
-import { useGetProjectTemplateQuery } from "@/store/api/projectTemplatesApi";
-import type { PhaseDiscipline, ProjectMeta, ProjectType, WeekDay } from "@/lib/types";
+import { useGetProjectTemplatesQuery, useGetTemplatePhasesQuery } from "@/store/api/projectTemplatesApi";
+import type { PhaseDiscipline, ProjectCharter, ProjectMeta, ProjectType, RelatedRepository, WeekDay } from "@/lib/types";
+import DeleteOutlineOutlined from "@mui/icons-material/DeleteOutlineOutlined";
+import { IconButton } from "@mui/material";
+import { ProjectCharterForm, charterFromInitial, isCharterValid } from "./ProjectCharterForm";
 
 /** A phase reduced to what the count preview needs, from either source. */
 interface PhaseCount { discipline: PhaseDiscipline | null; taskCount: number }
@@ -53,6 +56,11 @@ export interface ProjectFormPayload {
   startDate: string;
   endDate: string;
   weekOff: WeekDay[];
+  relatedRepositories: RelatedRepository[];
+  /** Which named template to generate the project from. */
+  templateId?: string;
+  /** Standard Project Charter — set for Solution projects, null for Products. */
+  charter: ProjectCharter | null;
 }
 
 /**
@@ -64,19 +72,31 @@ export interface ProjectFormDefaults {
   type?: ProjectType;
   customer?: string;
   location?: string;
+  /** Preselect a specific template (e.g. from the "Use Template" action). */
+  templateId?: string;
 }
 
 /** Shared dialog for both "New project" and "Project settings" (edit). */
-export function ProjectForm({ title, initial, defaults, error, onClose, onSubmit, busy, submitLabel }: {
+export function ProjectForm({
+  title,
+  initial,
+  defaults,
+  submitLabel,
+  busy,
+  error,
+  readOnly = false,
+  onClose,
+  onSubmit,
+}: {
   title: string;
-  initial?: ProjectMeta | null;
+  initial?: ProjectMeta;
   defaults?: ProjectFormDefaults;
-  /** Server-side error to surface (e.g. duplicate name). */
+  submitLabel?: string;
+  busy?: boolean;
   error?: string;
+  readOnly?: boolean;
   onClose: () => void;
-  onSubmit: (payload: ProjectFormPayload) => void;
-  busy: boolean;
-  submitLabel: string;
+  onSubmit?: (payload: ProjectFormPayload) => void;
 }) {
   const { employeeById, employees } = useOrgContext();
   const [name, setName] = useState(initial?.name || "");
@@ -93,15 +113,37 @@ export function ProjectForm({ title, initial, defaults, error, onClose, onSubmit
   );
   const [startDate, setStartDate] = useState(initial?.startDate || todayISO());
   const [weekOff, setWeekOff] = useState<WeekDay[]>(initial?.weekOff?.length ? initial.weekOff : DEFAULT_WEEK_OFF);
+
+  const initialRelatedRepositories = ((initial as Partial<ProjectMeta> & { relatedRepositories?: RelatedRepository[] } | null)?.relatedRepositories ?? []) as RelatedRepository[];
+  const [relatedRepositories, setRelatedRepositories] = useState<RelatedRepository[]>(initialRelatedRepositories);
   const [endDate, setEndDate] = useState(initial?.endDate || suggestedEndDate(initial?.startDate || todayISO(), weekOff));
   const [endTouched, setEndTouched] = useState(!!initial?.endDate);
   const [showPreview, setShowPreview] = useState(false);
+
+  // Project Charter — a 2-step create flow (Project Information → Project
+  // Charter → Create) for NEW Solution projects. Products and the edit
+  // ("Project Settings") flow are single-step and skip the charter entirely.
+  const [charter, setCharter] = useState<ProjectCharter>(charterFromInitial(initial?.charter));
+  const [activeStep, setActiveStep] = useState(0);
+  const isCharterFlow = !initial && type !== "Product";
 
   // The live master template (admins may have edited it). Only needed when
   // creating — Project Settings doesn't show the count/discipline preview.
   // Falls back to the in-code TEMPLATE until the request resolves so the
   // preview never flashes empty.
-  const { data: templatePhases } = useGetProjectTemplateQuery(undefined, { skip: !!initial });
+  // Template selection (creation only) — pick which named template to build from.
+  const { data: templateList } = useGetProjectTemplatesQuery(undefined, { skip: !!initial });
+  const [templateId, setTemplateId] = useState<string>("");
+  useEffect(() => {
+    if (initial || !templateList?.length) return;
+    if (!templateId || !templateList.some(t => t.id === templateId)) {
+      const preferred = defaults?.templateId && templateList.some(t => t.id === defaults.templateId)
+        ? defaults.templateId
+        : (templateList.find(t => t.isDefault) ?? templateList[0]).id;
+      setTemplateId(preferred);
+    }
+  }, [templateList, initial, templateId, defaults?.templateId]);
+  const { data: templatePhases } = useGetTemplatePhasesQuery(templateId, { skip: !!initial || !templateId });
   const phaseCounts = useMemo<PhaseCount[]>(() => (
     templatePhases?.length
       ? templatePhases.map(p => ({ discipline: p.discipline, taskCount: p.tasks.length }))
@@ -157,36 +199,102 @@ export function ProjectForm({ title, initial, defaults, error, onClose, onSubmit
     });
   };
 
+  const addRepository = () => {
+    setRelatedRepositories(prev => [
+      ...prev,
+      {
+        name: "",
+        url: "",
+      },
+    ]);
+  };
+
+  const updateRepository = (
+    index: number,
+    field: "name" | "url",
+    value: string,
+  ) => {
+    setRelatedRepositories(prev =>
+      prev.map((repository, i) =>
+        i === index
+          ? { ...repository, [field]: value }
+          : repository,
+      ),
+    );
+  };
+
+  const removeRepository = (index: number) => {
+    setRelatedRepositories(prev =>
+      prev.filter((_, i) => i !== index),
+    );
+  };
+
   return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open onClose={onClose} maxWidth={isCharterFlow ? "md" : "sm"} fullWidth>
       <DialogTitle>{title}</DialogTitle>
       <DialogContent dividers sx={{ display: "flex", flexDirection: "column", gap: 2.25 }}>
         {error && <Alert severity="error">{error}</Alert>}
+        {(!isCharterFlow || activeStep === 0) && (
+        <Stack spacing={2.25}>
         {/* Product/Solution toggle only when editing an existing project —
             on creation the type comes from which button was clicked (New
             Product vs New Project), so the toggle would just be redundant. */}
         {initial && (
-          <ToggleButtonGroup exclusive value={type} onChange={(_e, v: ProjectType | null) => v && setType(v)} size="small">
+          <ToggleButtonGroup
+            exclusive
+            value={type}
+            disabled={readOnly}
+            onChange={(_e, v: ProjectType | null) => v && setType(v)}
+            size="small"
+          >
+
             <ToggleButton value="Product">Product</ToggleButton>
             <ToggleButton value="Solution">Solution</ToggleButton>
           </ToggleButtonGroup>
         )}
 
-        <TextField label={`${noun} name`} fullWidth value={name} onChange={(e) => setName(e.target.value)}
+        <TextField
+          label={`${noun} name`}
+          fullWidth
+          value={name}
+          disabled={readOnly}
+          onChange={(e) => setName(e.target.value)}
           placeholder={type === "Product" ? "e.g. Bin Inspection AI Vision System" : "e.g. TE Connectivity — Robotic Connector Inspection Cell"} />
 
-        <TextField select label="Financial year" fullWidth value={financialYear}
-          onChange={(e) => setFinancialYear(e.target.value)}>
+        <TextField
+          select
+          label="Financial year"
+          fullWidth
+          value={financialYear}
+          disabled={readOnly}
+          onChange={(e) => setFinancialYear(e.target.value)}
+        >
           {FINANCIAL_YEAR_OPTIONS.map(fy => <MenuItem key={fy} value={fy}>{fy}</MenuItem>)}
         </TextField>
 
-        <TextField label="Customer" fullWidth value={customer} onChange={(e) => setCustomer(e.target.value)}
+        {/* Template picker — creation only. Chooses which named template's
+            phases/tasks the project is generated from. */}
+        {!initial && (templateList?.length ?? 0) > 0 && (
+          <TextField
+            select label="Template" fullWidth value={templateId}
+            onChange={(e) => setTemplateId(e.target.value)}
+            helperText="The phases and tasks this project starts with. Manage templates in Project templates."
+          >
+            {(templateList ?? []).map(t => (
+              <MenuItem key={t.id} value={t.id}>
+                {t.name}{t.isDefault ? " (default)" : ""} — {t.phaseCount} phases · {t.taskCount} tasks
+              </MenuItem>
+            ))}
+          </TextField>
+        )}
+
+        <TextField label="Customer" fullWidth value={customer} disabled={readOnly} onChange={(e) => setCustomer(e.target.value)}
           placeholder="e.g. TE Connectivity" />
 
-        <TextField label="Location" fullWidth value={location} onChange={(e) => setLocation(e.target.value)}
+        <TextField label="Location" fullWidth value={location} disabled={readOnly} onChange={(e) => setLocation(e.target.value)}
           placeholder="e.g. Pune, India" />
 
-        <OrgSelect label={`${noun} lead / owner`} value={owner} onChange={setOwner} />
+        <OrgSelect label={`${noun} lead / owner`} value={owner} disabled={readOnly} onChange={setOwner} />
 
         {/* Discipline multi-picker — creation only. Filters which phases get
             built: e.g. selecting only Software excludes the Vision and
@@ -221,11 +329,96 @@ export function ProjectForm({ title, initial, defaults, error, onClose, onSubmit
         )}
 
         <Stack direction="row" spacing={2}>
-          <TextField label={`${noun} start`} type="date" fullWidth slotProps={{ inputLabel: { shrink: true } }}
+          <TextField label={`${noun} start`} type="date" disabled={readOnly} fullWidth slotProps={{ inputLabel: { shrink: true } }}
             value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-          <TextField label={`${noun} end`} type="date" fullWidth slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: startDate } }}
+          <TextField label={`${noun} end`} type="date" disabled={readOnly} fullWidth slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: startDate } }}
             value={endDate} onChange={(e) => { setEndDate(e.target.value); setEndTouched(true); }}
             error={endBeforeStart} helperText={endBeforeStart ? "End date can't be before the start date" : " "} />
+        </Stack>
+
+        <Stack spacing={1}>
+          <Stack
+            direction="row"
+            justifyContent="space-between"
+            alignItems="left"
+          >
+            {!readOnly && (
+              <Button
+                size="small"
+                variant="text"
+                startIcon={<AddIcon fontSize="small" />}
+                onClick={addRepository}
+                sx={{
+                  textTransform: "none",
+                  minWidth: "auto",
+                  px: 1,
+                }}
+              >
+                Add Repository
+              </Button>
+            )}
+
+            {/* <Button
+              size="small"
+              variant="text"
+              startIcon={<AddIcon fontSize="small" />}
+              onClick={addRepository}
+            >
+              Add Repository
+            </Button> */}
+          </Stack>
+
+          {relatedRepositories.map((repository, index) => (
+            <Stack
+              key={index}
+              direction="row"
+              spacing={1}
+              alignItems="center"
+              sx={{ width: "100%" }}
+            >
+              <TextField
+                label="Repository name"
+                size="small"
+                value={repository.name}
+                disabled={readOnly}
+                onChange={(e) =>
+                  updateRepository(index, "name", e.target.value)
+                }
+                placeholder="e.g. Backend"
+                sx={{ flex: "0 0 32%" }}
+              />
+
+              <TextField
+                label="Repository link"
+                size="small"
+                value={repository.url}
+                disabled={readOnly}
+                onChange={(e) =>
+
+                  updateRepository(index, "url", e.target.value)
+                }
+                placeholder="https://github.com/..."
+                sx={{ flex: 1 }}
+              />
+
+              {!readOnly && (
+                <IconButton
+                  color="error"
+                  size="small"
+                  onClick={() => removeRepository(index)}
+                  aria-label="Delete repository"
+                  sx={{
+                    flexShrink: 0,
+                    width: 36,
+                    height: 36,
+                  }}
+                >
+                  <DeleteOutlineOutlined fontSize="small" />
+                </IconButton>
+              )}
+            </Stack>
+          ))}
+
         </Stack>
 
         <Stack spacing={0.75}>
@@ -239,7 +432,7 @@ export function ProjectForm({ title, initial, defaults, error, onClose, onSubmit
                 <Tooltip key={day} title={WEEKDAY_LABELS[day]}>
                   <ToggleButton
                     value={day} selected={selected} size="small"
-                    disabled={!selected && weekOff.length >= MAX_WEEK_OFF_DAYS}
+                    disabled={readOnly || (!selected && weekOff.length >= MAX_WEEK_OFF_DAYS)}
                     onChange={() => toggleWeekOffDay(day)}
                     sx={{ width: 52, px: 0 }}
                   >
@@ -266,6 +459,12 @@ export function ProjectForm({ title, initial, defaults, error, onClose, onSubmit
             Preview phases &amp; tasks
           </Button>
         )}
+        </Stack>
+        )}
+
+        {isCharterFlow && activeStep === 1 && (
+          <ProjectCharterForm value={charter} onChange={setCharter} />
+        )}
       </DialogContent>
 
       {showPreview && (
@@ -273,10 +472,48 @@ export function ProjectForm({ title, initial, defaults, error, onClose, onSubmit
       )}
       <DialogActions sx={{ p: 2 }}>
         <Button onClick={onClose}>Cancel</Button>
-        <Button variant="contained" disabled={!canSubmit || busy} startIcon={busy ? <CircularProgress size={16} /> : <AddIcon />}
-          onClick={() => onSubmit({ name: name.trim(), type, disciplines, financialYear, customer: customer.trim(), location: location.trim(), owner, startDate, endDate, weekOff })}>
-          {busy ? "Saving…" : submitLabel}
-        </Button>
+
+        {/* Charter flow, step 1 → a Back button to return to the info step. */}
+        {isCharterFlow && activeStep === 1 && (
+          <Button onClick={() => setActiveStep(0)} color="inherit">Back</Button>
+        )}
+
+        {/* Charter flow, step 0 → Next (advance to the charter), no submit yet. */}
+        {!readOnly && onSubmit && isCharterFlow && activeStep === 0 && (
+          <Button variant="contained" disabled={!canSubmit}
+            onClick={() => setActiveStep(1)}>
+            Next → Project Charter
+          </Button>
+        )}
+
+        {/* Create — the single-step (product / edit) button, or the charter
+            flow's final step. The charter must be valid to create a project. */}
+        {!readOnly && onSubmit && (!isCharterFlow || activeStep === 1) && (
+          <Button
+            variant="contained"
+            disabled={!canSubmit || busy || (isCharterFlow && !isCharterValid(charter))}
+            startIcon={busy ? <CircularProgress size={16} /> : <AddIcon />}
+            onClick={() =>
+              onSubmit({
+                name: name.trim(),
+                type,
+                disciplines,
+                financialYear,
+                customer: customer.trim(),
+                location: location.trim(),
+                owner,
+                startDate,
+                endDate,
+                weekOff,
+                relatedRepositories,
+                templateId: templateId || undefined,
+                charter: isCharterFlow ? charter : null,
+              })
+            }
+          >
+            {busy ? "Saving…" : submitLabel}
+          </Button>
+        )}
       </DialogActions>
     </Dialog>
   );

@@ -1,8 +1,6 @@
 /**
- * Shared domain types for the mock data layer, business logic, and every
- * component that renders it. Kept framework-agnostic (no React imports)
- * so lib files and app/api route handlers can use them without pulling
- * in client-only dependencies.
+ * Shared domain types used by the API layer, business logic, and components.
+ * Framework-agnostic (no React imports) so any lib file can use them.
  */
 
 /** UI color scheme — independent of AppRole ("viewing as"), see AppContext. */
@@ -16,7 +14,7 @@ export type ThemeMode = "light" | "dark";
  * directory now distinguishes only who administers the app from everyone
  * else, so the two roles line up 1:1 with AppRole.
  */
-export type OrgRole = "Admin" | "User";
+export type OrgRole = "Admin" | "User" | "Lead";
 
 export interface TeamMember {
   id: string;
@@ -30,15 +28,32 @@ export interface Team {
   members: TeamMember[];
 }
 
+export type EmployeeStatus = "active" | "inactive";
 export interface Employee extends TeamMember {
   team: string;
   teamId: string;
+  /** Directory lifecycle + scrum participation (present from GET /employees). */
+  status?: EmployeeStatus;
+  scrumEnabled?: boolean;
+  email?: string | null;
+  phoneNumber?: string | null;
+}
+
+/** Body for POST /employees and PATCH /employees/:id (partial). */
+export interface EmployeeInput {
+  name: string;
+  teamId: string;
+  role?: OrgRole;
+  email?: string;
+  phoneNumber?: string;
+  status?: EmployeeStatus;
+  scrumEnabled?: boolean;
 }
 
 /* ---------------------------------------------------------------------
    ROLES & PERMISSIONS ("viewing as" simulation)
 ------------------------------------------------------------------------ */
-export type AppRole = "Admin" | "User";
+export type AppRole = "Admin" | "User" | "Lead";
 
 export type PermissionAction =
   | "createProject"
@@ -88,6 +103,54 @@ export interface ChangePasswordInput {
   currentPassword: string;
   newPassword: string;
 }
+export interface RelatedRepository {
+  name: string;
+  url: string;
+}
+
+/* ---------------------------------------------------------------------
+   PROJECT CHARTER — Converge "Standard Charter" (sections 02–08), captured
+   at creation for Solution projects only (Products skip it). Section 01
+   "Project Information" is the base project form itself.
+------------------------------------------------------------------------ */
+/** 06. Key Technical Commitments — one table row. */
+export interface CharterTechnicalCommitment {
+  parameter: string;
+  commitment: string;
+  reference: string;
+  remarks: string;
+}
+/** 07. Major Milestones — one high-level phase/milestone. */
+export interface CharterMilestone {
+  name: string;
+  targetDate: string | null;
+}
+export interface ProjectCharter {
+  // 02. Sales / Pre-Sales Information
+  proposalNo: string;
+  proposalRevision: string;
+  proposalDate: string | null;
+  poNo: string;
+  poDate: string | null;
+  salesOwner: string;
+  proposalDocument: string;
+  poDocument: string;
+  // 03. Project Objective
+  objective: string;
+  // 04. Solution Offered
+  solutionOffered: string;
+  // 05. Project Conditions
+  scope: string[];
+  outOfScope: string[];
+  assumptions: string[];
+  constraints: string[];
+  // 06. Key Technical Commitments
+  technicalCommitments: CharterTechnicalCommitment[];
+  // 07. Major Milestones – Project Phases
+  milestones: CharterMilestone[];
+  // 08. Success Criteria
+  successCriteria: string[];
+}
 
 export interface Actor {
   role: AppRole;
@@ -128,6 +191,8 @@ export interface TaskTemplateItem {
   description: string;
   dayOffset: number;
   duration: number;
+  /** Default critical points — become the task's checklist when a project is generated. */
+  criticalPoints: string[];
   order: number;
 }
 export interface PhaseTemplateItem {
@@ -139,8 +204,19 @@ export interface PhaseTemplateItem {
   tasks: TaskTemplateItem[];
 }
 
+/** One row of GET /project-templates — a named template with its counts. */
+export interface ProjectTemplateSummary {
+  id: string;
+  name: string;
+  description: string;
+  isDefault: boolean;
+  order: number;
+  phaseCount: number;
+  taskCount: number;
+}
+
 /** One item in the signed-in user's bell feed (GET /notifications). */
-export type NotificationKind = "task" | "project" | "ticket";
+export type NotificationKind = "task" | "project" | "ticket" | "misc-task";
 export interface NotificationItem {
   id: string;
   kind: NotificationKind;
@@ -148,6 +224,10 @@ export interface NotificationItem {
   context: string;
   projectId: string;
   createdAt: string | null;
+  /** Stored events (misc-task) carry a read flag; derived items are always unread. */
+  read?: boolean;
+  /** Explicit in-app deep link for stored events, e.g. "/tasks?task=<id>". */
+  link?: string | null;
 }
 
 export interface HistoryEntry {
@@ -275,6 +355,8 @@ export interface ProjectMeta {
   warranty?: Warranty | null;
   /** Non-working days for this project's business-day calendar — at most 2, defaults to Sat+Sun. */
   weekOff: WeekDay[];
+  /** Standard Project Charter — present for Solution projects, null for Products / pre-feature rows. */
+  charter?: ProjectCharter | null;
 }
 
 export interface ProjectDetailData {
@@ -335,6 +417,8 @@ export interface ProjectWithLiveStats extends ProjectIndexRow {
 export interface CreateProjectInput {
   name: string;
   type: ProjectType;
+  /** Which named template to build from; omitted means the default. */
+  templateId?: string;
   /** Which disciplines' phases to generate; empty means every phase. */
   disciplines: PhaseDiscipline[];
   /** Financial year, e.g. "FY26-27". */
@@ -345,6 +429,8 @@ export interface CreateProjectInput {
   startDate: string;
   endDate: string;
   weekOff: WeekDay[];
+  /** Standard Project Charter — required for Solution projects, omitted for Products. */
+  charter?: ProjectCharter | null;
 }
 
 export interface UpdateProjectPatch {
@@ -356,7 +442,7 @@ export interface UpdateProjectPatch {
 /* ---------------------------------------------------------------------
    TICKETS
 ------------------------------------------------------------------------ */
-export type TicketStatus = "Open" | "In Progress" | "Resolved" | "Closed" | "Reopened";
+export type TicketStatus = "Open" | "In Progress" | "Closed" | "Reopened";
 
 export interface Ticket {
   id: string;
@@ -409,12 +495,56 @@ export interface MiscTask {
   priority: Priority;
   status: MiscTaskStatus;
   dueDate: string | null;
+  /** Planned start / end of the work. */
+  startDate: string | null;
+  endDate: string | null;
+  /** Optional estimate of hours to complete. */
+  estimatedHours: number | null;
   checklist: ChecklistItem[];
   createdAt: string;
-  /** Employee id of the creator — audit only, not rendered. */
+  /** Employee id of the creator (the person who assigned the task). */
   createdBy?: string | null;
   updatedAt: string | null;
   history: HistoryEntry[];
+}
+
+/* ---------------------------------------------------------------------
+   DAILY SCRUM
+------------------------------------------------------------------------ */
+/** Where an employee worked on a given day — the scrum "Work Mode". */
+export type WorkMode = "Office" | "Onsite" | "Both" | "WFH" | "Leave";
+
+/** A generic reference to a project / task / ticket worked on (not assignment-scoped). */
+export type ScrumReferenceType = "project" | "task" | "ticket" | "na" | "other";
+export interface ScrumReference {
+  type: ScrumReferenceType;
+  id: string;
+  label: string;
+}
+
+/** One saved scrum update (GET /scrum, PUT /scrum). */
+export interface ScrumEntry {
+  id: string;
+  employeeId: string;
+  date: string;
+  workPerformed: string;
+  workMode: WorkMode;
+  references: ScrumReference[];
+  updatedAt: string;
+}
+
+/** One row in the save payload. */
+export interface ScrumSaveEntry {
+  employeeId: string;
+  workPerformed: string;
+  workMode: WorkMode;
+  references: ScrumReference[];
+}
+
+/** Body for PUT /scrum — the whole day at once. */
+export interface ScrumSavePayload {
+  date: string;
+  entries: ScrumSaveEntry[];
 }
 
 /** Body for POST /misc-tasks and PATCH /misc-tasks/:id (partial). */
@@ -425,7 +555,9 @@ export interface MiscTaskInput {
   assignees: string[];
   priority: Priority;
   status: MiscTaskStatus;
-  dueDate: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  estimatedHours: number | null;
   checklist: ChecklistItem[];
 }
 

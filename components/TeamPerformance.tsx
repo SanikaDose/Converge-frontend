@@ -26,6 +26,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import FilterAltIcon from "@mui/icons-material/FilterAlt";
+import { useRouter } from "next/navigation";
 import { EmployeeAvatar, StatCard } from "./common";
 import { useGetTeamPerformanceQuery } from "@/store/api/teamPerformanceApi";
 import { avatarColor } from "@/lib/data";
@@ -37,22 +38,20 @@ type StatusFilter = "all" | "delayed" | "unassigned";
 const ROLE_COLOR: Record<OrgRole, string> = {
   "Admin": DASHBOARD_COLORS.violet,
   "User": DASHBOARD_COLORS.blue,
+  "Lead": DASHBOARD_COLORS.blue,
 };
 
 /**
- * Team Performance — every organization employee, with task counts
- * computed dynamically by the /api/team-performance route (which scans
- * every project's tasks for `assignedTo === employee.id`, see
- * lib/businessLogic.aggregateTeamPerformance). Uses MUI's DataGrid so
- * team/tasks sorting comes for free via column headers.
+ * Team Performance — every employee with task counts, computed by the backend's
+ * team-performance endpoint (see aggregateTeamPerformance). MUI DataGrid gives
+ * column sorting for free.
  *
- * Task counts get their own grouped "Tasks" header (Total/Done/Pending)
- * rather than one bare "Tasks" column, and a per-row overdue count rides
- * inside the Pending cell instead of a dedicated Delayed column — that
- * total already has a home in the KPI row above, so repeating it as a
- * full table column was pure duplication.
+ * Task counts share a grouped "Tasks" header (Total/Done/Pending); the per-row
+ * overdue count rides inside the Pending cell rather than a dedicated Delayed
+ * column, since that total already appears in the KPI row above.
  */
 export function TeamPerformance({ refreshKey }: { refreshKey: number }) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [teamFilter, setTeamFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -176,7 +175,7 @@ export function TeamPerformance({ refreshKey }: { refreshKey: number }) {
       width: 64, align: "center", headerAlign: "center",
       renderCell: (params: GridRenderCellParams<TeamPerformanceRow>) => (
         <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
-          <IconButton size="small" onClick={(e) => setActionMenu({ el: e.currentTarget, row: params.row })}>
+          <IconButton size="small" onClick={(e) => { e.stopPropagation(); setActionMenu({ el: e.currentTarget, row: params.row }); }}>
             <MoreVertIcon fontSize="small" />
           </IconButton>
         </Box>
@@ -235,6 +234,8 @@ export function TeamPerformance({ refreshKey }: { refreshKey: number }) {
             getRowId={(r) => r.id} rowHeight={62} columnHeaderHeight={40} columnGroupHeaderHeight={30}
             initialState={{ sorting: { sortModel: [{ field: "name", sort: "asc" }] } }}
             disableRowSelectionOnClick
+            // Click a member → open the Kanban board filtered to their tasks.
+            onRowClick={(params) => router.push(`/kanban?user=${params.row.id}`)}
             showColumnVerticalBorder
             slotProps={{ noRowsOverlay: { sx: { color: "text.secondary" } } }}
             localeText={{ noRowsLabel: "No team members match these filters." }}
@@ -277,7 +278,7 @@ export function TeamPerformance({ refreshKey }: { refreshKey: number }) {
               },
               "& .MuiDataGrid-cell": { lineHeight: "normal !important", alignItems: "center", borderColor: "divider" },
               "& .MuiDataGrid-cell:focus, & .MuiDataGrid-cell:focus-within": { outline: "none" },
-              "& .MuiDataGrid-row": { transition: "background-color .12s ease" },
+              "& .MuiDataGrid-row": { transition: "background-color .12s ease", cursor: "pointer" },
               "& .MuiDataGrid-row:nth-of-type(even)": { bgcolor: "action.hover" },
               "& .MuiDataGrid-row:hover": { bgcolor: "action.selected" },
               "& .MuiDataGrid-footerContainer": { borderColor: "divider" },

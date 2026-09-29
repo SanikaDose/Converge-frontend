@@ -1,16 +1,50 @@
 import { baseApi } from './baseApi';
 import { apiRoutes, routePath } from '@/constants/apiRoutes';
-import type { CreateProjectInput, ProjectDetailData, ProjectIndexRow, UpdateProjectPatch } from '@/lib/types';
+import type {
+  Achievement, ChecklistItem, CreateProjectInput, Priority, ProjectDetailData, ProjectIndexRow,
+  ProjectType, TaskStatus, UpdateProjectPatch, WeekDay,
+} from '@/lib/types';
 
 /**
- * Projects endpoints, injected into the shared baseApi (Scout's
- * `injectEndpoints` convention).
- *
- * Invalidation is deliberately coarse: a project write touches the
- * portfolio index, that project's document, and the dashboard baseline's
- * inputs, so each mutation invalidates all three rather than trying to be
- * clever. These are small payloads and the refetch is what the manual
- * `refreshKey` prop-threading used to do by hand.
+ * Trimmed task shape the Kanban board fetches (mirrors the backend's
+ * `toBoardTask`) — only what a card and the overdue/late/checklist logic read.
+ * A drag reloads the project's full detail before saving.
+ */
+export interface BoardTaskData {
+  id: string;
+  phaseId: string;
+  name: string;
+  status: TaskStatus;
+  priority: Priority;
+  assignees: string[];
+  plannedStart: string;
+  plannedFinish: string;
+  actualFinish: string | null;
+  achievement: Achievement | null;
+  checklist: ChecklistItem[];
+}
+export interface BoardProjectData {
+  id: string;
+  meta: { name: string; type: ProjectType; weekOff: WeekDay[] };
+  phases: { id: string; name: string; notRequired: boolean }[];
+  tasks: BoardTaskData[];
+}
+/** The board's index feeds only the project-filter dropdowns, so id/name/type
+ *  is all it needs — not the full stats + lite arrays the dashboard index ships. */
+export interface BoardIndexRow {
+  id: string;
+  name: string;
+  type: ProjectType;
+}
+export interface BoardData {
+  index: BoardIndexRow[];
+  details: BoardProjectData[];
+}
+
+/**
+ * Projects endpoints. Invalidation is coarse on purpose: a write touches the
+ * portfolio index, that project's document, and the dashboard baseline, so each
+ * mutation invalidates all three.
  */
 export const projectsApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
@@ -27,27 +61,12 @@ export const projectsApi = baseApi.injectEndpoints({
     }),
 
     /**
-     * The portfolio Kanban needs every project's full task list, which is
-     * the index plus one detail fetch per project. `queryFn` keeps that
-     * fan-out as a single cached query rather than a `Promise.all` living
-     * in the page's effect — same requests, but one cache entry, one
-     * loading flag, and a refetch that the Refresh button and tag
-     * invalidation can both drive.
+     * Everything the Kanban board needs (index + per-project details) from one
+     * bulk endpoint, replacing the old fetch-index-then-one-request-per-project
+     * fan-out. See the backend's `findAllBoard`.
      */
-    getProjectsWithDetails: builder.query<{ index: ProjectIndexRow[]; details: ProjectDetailData[] }, void>({
-      async queryFn(_arg, _api, _opts, fetchWithBQ) {
-        const indexResult = await fetchWithBQ(routePath(apiRoutes.projects.root, apiRoutes.projects.getList));
-        if (indexResult.error) return { error: indexResult.error };
-        const index = indexResult.data as ProjectIndexRow[];
-
-        const detailResults = await Promise.all(
-          index.map((p) => fetchWithBQ(routePath(apiRoutes.projects.root, apiRoutes.projects.getById(p.id)))),
-        );
-        const failed = detailResults.find((r) => r.error);
-        if (failed?.error) return { error: failed.error };
-
-        return { data: { index, details: detailResults.map((r) => r.data as ProjectDetailData) } };
-      },
+    getProjectsWithDetails: builder.query<BoardData, void>({
+      query: () => routePath(apiRoutes.projects.root, apiRoutes.projects.board),
       providesTags: ['Projects'],
     }),
 

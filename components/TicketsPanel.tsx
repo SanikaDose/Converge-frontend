@@ -49,8 +49,8 @@ function fmtStamp(iso: string): string {
   return d.toLocaleString(undefined, { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
-const TICKET_STATUS: TicketStatus[] = ["Open", "In Progress", "Resolved", "Closed", "Reopened"];
-const TICKET_STATUS_COLOR: Record<TicketStatus, StatusColorKey> = { Open: "red", "In Progress": "amber", Resolved: "green", Closed: "slate", Reopened: "violet" };
+const TICKET_STATUS: TicketStatus[] = ["Open", "In Progress", "Closed", "Reopened"];
+const TICKET_STATUS_COLOR: Record<TicketStatus, StatusColorKey> = { Open: "red", "In Progress": "amber", Closed: "slate", Reopened: "violet" };
 
 // Urgency, as a color — drives each row's left accent bar so a list of
 // tickets can be triaged by edge color before reading a single word.
@@ -67,7 +67,7 @@ type BucketKey = "Raised" | "Reopened" | "Completed";
 const BUCKETS: { key: BucketKey; label: string; hint: string; icon: ElementType; tone: StatusColorKey; match: (t: Ticket) => boolean }[] = [
   { key: "Raised", label: "Raised Tickets", hint: "Still need action", icon: FlagCircleIcon, tone: "red", match: (t) => t.status === "Open" || t.status === "In Progress" },
   { key: "Reopened", label: "Reopened", hint: "Closed, then reopened", icon: ReplayCircleFilledIcon, tone: "violet", match: (t) => t.status === "Reopened" },
-  { key: "Completed", label: "Completed", hint: "Resolved & closed", icon: CheckCircleIcon, tone: "green", match: (t) => t.status === "Resolved" || t.status === "Closed" },
+  { key: "Completed", label: "Closed", hint: "Done", icon: CheckCircleIcon, tone: "green", match: (t) => t.status === "Closed" },
 ];
 
 export interface ProjectOption { id: string; name: string }
@@ -226,7 +226,16 @@ function TicketRow({ ticket, canUpdate, onUpdate, focus }: {
   const priorityHex = STATUS_HEX[PRIORITY_COLOR[ticket.priority]];
   const priorityFill = DASHBOARD_COLORS[PRIORITY_COLOR[ticket.priority]];
   const urgent = ticket.priority === "High" || ticket.priority === "Critical";
-  const settled = ticket.status === "Resolved" || ticket.status === "Closed";
+  const settled = ticket.status === "Closed";
+
+  // Status options in the dropdown depend on the current status:
+  //  - Reopened: can only go to Closed (its own value shown so the select reads
+  //    correctly). Closed itself is handled below with a dedicated Reopen action.
+  //  - Anything else: the normal flow, minus "Reopened" (only reachable by
+  //    reopening a closed ticket, never picked directly).
+  const statusOptions: TicketStatus[] = ticket.status === "Reopened"
+    ? ["Reopened", "Closed"]
+    : TICKET_STATUS.filter(s => s !== "Reopened");
 
   return (
     <Accordion
@@ -249,14 +258,14 @@ function TicketRow({ ticket, canUpdate, onUpdate, focus }: {
         "&.Mui-expanded": { borderColor: tint(priorityFill, 45), boxShadow: `0 3px 14px ${tint(priorityFill, 15)}` },
       }}
     >
-      <AccordionSummary
-        expandIcon={<ExpandMoreIcon fontSize="small" />}
-        sx={{
-          px: 1.75, minHeight: 58,
-          "& .MuiAccordionSummary-content": { display: "flex", alignItems: "center", gap: 1.5, minWidth: 0, my: 1, flexWrap: "wrap" },
-        }}
-      >
-        <Box sx={{ minWidth: 0, flex: 1 }}>
+      {/* Custom header instead of AccordionSummary: the header holds interactive
+          controls (Edit / Reopen / status Select), and MUI's AccordionSummary
+          renders a <button>, which can't legally contain nested buttons (that
+          caused a hydration error). As the Accordion's first child it stays
+          visible while the details collapse; the title area toggles expand, and
+          the actions + chevron are plain siblings, not nested in a button. */}
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.75, minHeight: 58, py: 1 }}>
+        <Box onClick={() => setExpanded(v => !v)} sx={{ minWidth: 0, flex: 1, cursor: "pointer" }}>
           <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
             {/* Status as a dot: color without spending a chip's worth of width. */}
             <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: statusFill, boxShadow: `0 0 0 3px ${tint(statusFill, 20)}`, flexShrink: 0 }} />
@@ -284,10 +293,10 @@ function TicketRow({ ticket, canUpdate, onUpdate, focus }: {
           </Stack>
           <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.4 }}>
             {ticket.projectName} · Raised {fmt(ticket.createdAt)}
-            {ticket.resolvedAt ? ` · ${ticket.status === "Closed" ? "Closed" : "Resolved"} ${fmt(ticket.resolvedAt)}` : ""}
+            {ticket.resolvedAt ? ` · Closed ${fmt(ticket.resolvedAt)}` : ""}
           </Typography>
         </Box>
-        <Box onClick={(e) => e.stopPropagation()} sx={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 0.5 }}>
+        <Box sx={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 0.5 }}>
           {/* Edit (re-assign people, retitle, re-prioritise). A Closed ticket
               is final, so no edits once closed. */}
           {canUpdate && ticket.status !== "Closed" && (
@@ -319,13 +328,15 @@ function TicketRow({ ticket, canUpdate, onUpdate, focus }: {
                 "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: tint(statusHex, 60) },
                 "& .MuiSelect-icon": { color: statusHex },
               }}>
-              {/* "Reopened" is only offered while the ticket is actually reopened
-                  (to display its own value); you don't pick it for an open ticket. */}
-              {TICKET_STATUS.filter(s => s !== "Reopened" || ticket.status === "Reopened").map(s => <MenuItem key={s} value={s}>{s}</MenuItem>)}
+              {statusOptions.map(s => <MenuItem key={s} value={s} disabled={s === ticket.status}>{s}</MenuItem>)}
             </Select>
           ) : <StatusChip label={ticket.status} color={color} />}
         </Box>
-      </AccordionSummary>
+        <IconButton size="small" onClick={() => setExpanded(v => !v)} aria-label={expanded ? "Collapse" : "Expand"}
+          sx={{ flexShrink: 0, color: "text.secondary", transform: expanded ? "rotate(180deg)" : "none", transition: "transform .2s ease" }}>
+          <ExpandMoreIcon fontSize="small" />
+        </IconButton>
+      </Box>
 
       {editOpen && (
         <EditTicketDialog
@@ -349,8 +360,8 @@ function TicketRow({ ticket, canUpdate, onUpdate, focus }: {
         <Stack direction="row" gap={1.5} flexWrap="wrap" sx={{ mb: 2, fontSize: 11.5, color: "text.secondary" }}>
           <span>Raised {fmt(ticket.createdAt)}</span>
           {ticket.resolvedAt && (
-            <span style={{ color: ticket.status === "Closed" ? STATUS_HEX.slate : STATUS_HEX.green }}>
-              {ticket.status === "Closed" ? "Closed" : "Resolved"} {fmt(ticket.resolvedAt)}
+            <span style={{ color: STATUS_HEX.slate }}>
+              Closed {fmt(ticket.resolvedAt)}
             </span>
           )}
         </Stack>
@@ -478,12 +489,9 @@ function TicketRow({ ticket, canUpdate, onUpdate, focus }: {
 }
 
 /**
- * Tickets are loaded from /api/tickets on mount, then held in React
- * state; create/update calls hit the mock API (so the in-memory store
- * stays consistent for the process lifetime) and the local list updates
- * optimistically from the response. Grouped into two accordions — Raised
- * (Open + In Progress) and Completed (Resolved + Closed) — matching the
- * dashboard's binary project accordion pattern.
+ * Tickets panel, grouped into status accordions (Raised / In Progress /
+ * Closed). Data comes from the backend via RTK Query; create/update refetch
+ * through the tickets API and notify the parent via `onChanged`.
  */
 export function TicketsPanel({ actor, projects, refreshKey, onChanged }: {
   actor: Actor;
@@ -541,7 +549,7 @@ export function TicketsPanel({ actor, projects, refreshKey, onChanged }: {
   // One tally per status, so the header can show the actual mix rather than
   // a single "n open" number that hides where everything is sitting.
   const byStatus = useMemo(() => {
-    const counts: Record<TicketStatus, number> = { Open: 0, "In Progress": 0, Resolved: 0, Closed: 0, Reopened: 0 };
+    const counts: Record<TicketStatus, number> = { Open: 0, "In Progress": 0, Closed: 0, Reopened: 0 };
     tickets.forEach(t => { counts[t.status] += 1; });
     return counts;
   }, [tickets]);
@@ -599,7 +607,7 @@ export function TicketsPanel({ actor, projects, refreshKey, onChanged }: {
                 {([
                   ["Open", byStatus.Open, DASHBOARD_COLORS.red],
                   ["In progress", byStatus["In Progress"], DASHBOARD_COLORS.amber],
-                  ["Done", byStatus.Resolved + byStatus.Closed, DASHBOARD_COLORS.green],
+                  ["Done", byStatus.Closed, DASHBOARD_COLORS.green],
                 ] as const).map(([label, n, hex]) => (
                   <Stack key={label} direction="row" alignItems="center" gap={0.6}>
                     <Box sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: n ? hex : "text.disabled" }} />

@@ -17,7 +17,7 @@ import PeopleAltOutlinedIcon from "@mui/icons-material/PeopleAltOutlined";
 import FolderOutlinedIcon from "@mui/icons-material/FolderOutlined";
 import FlagOutlinedIcon from "@mui/icons-material/FlagOutlined";
 import { GlobalKanbanBoard, type GlobalKanbanTask } from "@/components/GlobalKanbanBoard";
-import { useGetProjectsWithDetailsQuery, useUpdateProjectMutation } from "@/store/api/projectsApi";
+import { useGetProjectsWithDetailsQuery, useUpdateProjectMutation, useLazyGetProjectQuery, type BoardProjectData, type BoardIndexRow } from "@/store/api/projectsApi";
 import { computeAchievement, isOverdue } from "@/lib/businessLogic";
 import { todayISO, DEFAULT_WEEK_OFF } from "@/lib/dateUtils";
 import { useGetMiscTasksQuery } from "@/store/api/miscTasksApi";
@@ -26,7 +26,7 @@ import { miscStatusToKanban, ticketStatusToKanban } from "@/lib/kanbanStatus";
 import { roleCan, STATUS_OPTIONS } from "@/lib/data";
 import { useAppContext } from "@/context/AppContext";
 import { useOrgContext } from "@/context/OrgContext";
-import type { HistoryEntry, MiscTask, ProjectDetailData, ProjectIndexRow, Task, TaskStatus, Ticket } from "@/lib/types";
+import type { HistoryEntry, MiscTask, ProjectDetailData, Task, TaskStatus, Ticket } from "@/lib/types";
 
 const ALL_USERS = "__all_users__";
 const ALL_PROJECTS = "__all_projects__";
@@ -69,8 +69,8 @@ export default function GlobalKanbanPage() {
   // Index + every project's detail as one cached query — see
   // getProjectsWithDetails. Refresh maps to its refetch.
   const { data, isFetching, refetch } = useGetProjectsWithDetailsQuery();
-  const projectsIndex: ProjectIndexRow[] = useMemo(() => data?.index ?? [], [data]);
-  const projectDetails: ProjectDetailData[] = useMemo(() => data?.details ?? [], [data]);
+  const projectsIndex: BoardIndexRow[] = useMemo(() => data?.index ?? [], [data]);
+  const projectDetails: BoardProjectData[] = useMemo(() => data?.details ?? [], [data]);
   // Tickets + misc tasks also show on the overall board, mapped into the kanban
   // columns (see kanbanStatus.ts). Cached queries reused from other pages.
   const { data: miscTasksData } = useGetMiscTasksQuery();
@@ -78,6 +78,10 @@ export default function GlobalKanbanPage() {
   const loading = isFetching;
   const load = refetch;
   const [updateProjectMutation] = useUpdateProjectMutation();
+  // The board fetches trimmed tasks (no history/dependencies/etc.), so a drag
+  // can't build the full-sync PATCH from them — it would delete the omitted
+  // fields. Instead we load the one dragged project's *full* detail on demand.
+  const [fetchProjectDetail] = useLazyGetProjectQuery();
 
   const productProjects = useMemo(() => projectsIndex.filter(p => p.type === "Product"), [projectsIndex]);
   const solutionProjects = useMemo(() => projectsIndex.filter(p => p.type === "Solution"), [projectsIndex]);
@@ -86,6 +90,18 @@ export default function GlobalKanbanPage() {
   // project/phase context so a card makes sense outside its project page.
   const allTasks = useMemo<GlobalKanbanTask[]>(() => {
     const out: GlobalKanbanTask[] = [];
+
+    // Defaults for the Task fields the board doesn't render and the trimmed
+    // board payload (and tickets/misc) don't carry, so a synthesized card still
+    // satisfies the board's Task-shaped type. The board never reads these; a
+    // drag reloads the project's full detail before persisting.
+    const blank = {
+      order: 0, description: "", assignedTo: null as string | null, dependencies: [] as string[],
+      dayOffset: 0, duration: 0, actualStart: null, actualFinish: null, pendingChange: null,
+      achievement: null, history: [] as HistoryEntry[], checklist: [], phaseId: "",
+      weekOff: DEFAULT_WEEK_OFF, projectType: "Product" as const,
+    };
+
     projectDetails.forEach(pd => {
       const phaseNameById: Record<string, string> = {};
       pd.phases.forEach(ph => { phaseNameById[ph.id] = ph.name; });
@@ -98,24 +114,16 @@ export default function GlobalKanbanPage() {
         // same overdue rule the dashboard KPI and the timeline use — so the
         // Delayed column reflects real delays, not a literal status nobody sets.
         // The real status is untouched in the DB; drag/drop re-reads it from
-        // project data (handleStatusChange), so moving a card still works.
+        // the project's full detail (handleStatusChange), so moving a card still
+        // works. `blank` fills the Task fields the trimmed board task omits.
         const overdue = isOverdue(t, today) && !notRequiredPhaseIds.has(t.phaseId);
         const status: TaskStatus = overdue ? "Delayed" : t.status;
         out.push({
-          ...t, status, source: "task", projectId: pd.id, projectName: pd.meta.name, projectType: pd.meta.type,
-          phaseName: phaseNameById[t.phaseId] || "—", weekOff: pd.meta.weekOff,
+          ...blank, ...t, status, source: "task", projectId: pd.id, projectName: pd.meta.name,
+          projectType: pd.meta.type, phaseName: phaseNameById[t.phaseId] || "—", weekOff: pd.meta.weekOff,
         });
       });
     });
-
-    // Defaults for the Task fields tickets/misc don't have, so a synthesized
-    // card still satisfies the board's Task-shaped type.
-    const blank = {
-      order: 0, description: "", dependencies: [] as string[], dayOffset: 0, duration: 0,
-      actualStart: null, actualFinish: null, pendingChange: null, achievement: null,
-      history: [] as HistoryEntry[], checklist: [], phaseId: "", weekOff: DEFAULT_WEEK_OFF,
-      projectType: "Product" as const,
-    };
 
     // Misc tasks → kanban columns (forward map). Overdue (past endDate, not done)
     // promotes to "Delayed", same rule as tasks.
@@ -171,8 +179,18 @@ export default function GlobalKanbanPage() {
   );
 
   const handleStatusChange = async (task: GlobalKanbanTask, status: TaskStatus) => {
-    const pd = projectDetails.find(p => p.id === task.projectId);
-    if (!pd) return;
+    // The board only holds trimmed tasks, so load this one project's full detail
+    // (all task fields) before building the full-sync PATCH — otherwise the
+    // omitted fields (history/dependencies/etc.) would be wiped. One request,
+    // only on an actual drag.
+    let pd: ProjectDetailData;
+    try {
+      pd = await fetchProjectDetail(task.projectId).unwrap();
+    } catch (e) {
+      console.error(e);
+      load();
+      return;
+    }
     const updatedTasks = pd.tasks.map(t => {
       if (t.id !== task.id) return t;
       const updates: Partial<Task> = { status };
@@ -332,7 +350,7 @@ export default function GlobalKanbanPage() {
   );
 }
 
-function projectFilterItemLabel(value: string, projects: ProjectIndexRow[]): string {
+function projectFilterItemLabel(value: string, projects: BoardIndexRow[]): string {
   if (value === "type:Product") return "All Product";
   if (value === "type:Solution") return "All Project/Solution";
   if (value.startsWith("proj:")) return projects.find(p => p.id === value.slice(5))?.name || "Project";

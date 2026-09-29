@@ -26,6 +26,8 @@ export const apiRoutes = {
   projects: {
     root: 'projects',
     getList: '',
+    // Bulk board fetch: index + full details for every project in one request.
+    board: 'board',
     create: '',
     getById: (id: string) => id,
     updateById: (id: string) => id,

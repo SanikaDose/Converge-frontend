@@ -1,6 +1,52 @@
 import { baseApi } from './baseApi';
 import { apiRoutes, routePath } from '@/constants/apiRoutes';
-import type { CreateProjectInput, ProjectDetailData, ProjectIndexRow, UpdateProjectPatch } from '@/lib/types';
+import type {
+  Achievement, ChecklistItem, CreateProjectInput, Priority, ProjectDetailData, ProjectIndexRow,
+  ProjectType, TaskStatus, UpdateProjectPatch, WeekDay,
+} from '@/lib/types';
+
+/**
+ * The trimmed task shape the Kanban board fetches (see the backend's
+ * `toBoardTask`) — only the fields a card, the overdue/late math, and the
+ * complete-blocked-by-checklist gate read. The heavy jsonb (history/
+ * dependencies/pendingChange) and description/scheduling internals are omitted;
+ * a drag reloads the one project's full detail before persisting, so nothing is
+ * lost by trimming here.
+ */
+export interface BoardTaskData {
+  id: string;
+  phaseId: string;
+  name: string;
+  status: TaskStatus;
+  priority: Priority;
+  assignees: string[];
+  plannedStart: string;
+  plannedFinish: string;
+  actualFinish: string | null;
+  achievement: Achievement | null;
+  checklist: ChecklistItem[];
+}
+export interface BoardProjectData {
+  id: string;
+  meta: { name: string; type: ProjectType; weekOff: WeekDay[] };
+  phases: { id: string; name: string; notRequired: boolean }[];
+  tasks: BoardTaskData[];
+}
+/**
+ * The board's index is only used for the project-filter dropdowns and their
+ * labels, so it carries just id/name/type — not the full portfolio stats +
+ * `taskLite`/`phasesLite` the dashboard index (`ProjectIndexRow`) ships, which
+ * were ~35% of the board payload and unused by the Kanban.
+ */
+export interface BoardIndexRow {
+  id: string;
+  name: string;
+  type: ProjectType;
+}
+export interface BoardData {
+  index: BoardIndexRow[];
+  details: BoardProjectData[];
+}
 
 /**
  * Projects endpoints, injected into the shared baseApi (Scout's
@@ -27,27 +73,16 @@ export const projectsApi = baseApi.injectEndpoints({
     }),
 
     /**
-     * The portfolio Kanban needs every project's full task list, which is
-     * the index plus one detail fetch per project. `queryFn` keeps that
-     * fan-out as a single cached query rather than a `Promise.all` living
-     * in the page's effect — same requests, but one cache entry, one
-     * loading flag, and a refetch that the Refresh button and tag
-     * invalidation can both drive.
+     * The portfolio Kanban needs every project's full task list. This used to
+     * fetch the index and then one detail request per project — `1 + N` HTTP
+     * round trips (28 for 27 projects), each paying the remote-DB latency,
+     * which was the main reason the Kanban was slow to load. It now hits a
+     * single bulk endpoint (`GET /projects/board`) that returns the index and
+     * every project's details together, computed server-side from three DB
+     * queries. One request, one cache entry, one loading flag.
      */
-    getProjectsWithDetails: builder.query<{ index: ProjectIndexRow[]; details: ProjectDetailData[] }, void>({
-      async queryFn(_arg, _api, _opts, fetchWithBQ) {
-        const indexResult = await fetchWithBQ(routePath(apiRoutes.projects.root, apiRoutes.projects.getList));
-        if (indexResult.error) return { error: indexResult.error };
-        const index = indexResult.data as ProjectIndexRow[];
-
-        const detailResults = await Promise.all(
-          index.map((p) => fetchWithBQ(routePath(apiRoutes.projects.root, apiRoutes.projects.getById(p.id)))),
-        );
-        const failed = detailResults.find((r) => r.error);
-        if (failed?.error) return { error: failed.error };
-
-        return { data: { index, details: detailResults.map((r) => r.data as ProjectDetailData) } };
-      },
+    getProjectsWithDetails: builder.query<BoardData, void>({
+      query: () => routePath(apiRoutes.projects.root, apiRoutes.projects.board),
       providesTags: ['Projects'],
     }),
 

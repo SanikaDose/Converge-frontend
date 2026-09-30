@@ -2,8 +2,31 @@ import { baseApi } from './baseApi';
 import { apiRoutes, routePath } from '@/constants/apiRoutes';
 import type {
   Achievement, ChecklistItem, CreateProjectInput, Priority, ProjectDetailData, ProjectIndexRow,
-  ProjectType, TaskStatus, UpdateProjectPatch, WeekDay,
+  ProjectType, ProjectWithLiveStats, TaskStatus, UpdateProjectPatch, WeekDay,
 } from '@/lib/types';
+
+/** One row of the dashboard's Upcoming/Overdue deadlines widget. */
+export interface DashboardDeadline {
+  taskName: string;
+  projectId: string;
+  projectName: string;
+  plannedFinish: string;
+}
+/**
+ * The dashboard's data, computed server-side (see the backend's
+ * `findAllDashboard`). Lean by design: `projects` carries live stats + the
+ * phase rows the cards render, but no per-task list — the trend chart and the
+ * deadlines widget are pre-computed into `taskCompletions`/`deadlines`.
+ */
+export interface DashboardData {
+  projects: ProjectWithLiveStats[];
+  /** Every task's actual-finish date, for the % complete trend line. */
+  taskCompletions: string[];
+  /** Denominator for the trend line (all tasks in the portfolio). */
+  totalTaskCount: number;
+  /** Nearest open deadlines (bounded), sorted ascending by planned finish. */
+  deadlines: DashboardDeadline[];
+}
 
 /**
  * Trimmed task shape the Kanban board fetches (mirrors the backend's
@@ -50,6 +73,13 @@ export const projectsApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     getProjects: builder.query<ProjectIndexRow[], void>({
       query: () => routePath(apiRoutes.projects.root, apiRoutes.projects.getList),
+      providesTags: ['Projects'],
+    }),
+
+    // Lean, server-computed payload for the dashboard — replaces reusing the
+    // heavy portfolio index (which shipped every task for client-side compute).
+    getDashboard: builder.query<DashboardData, void>({
+      query: () => routePath(apiRoutes.projects.root, apiRoutes.projects.dashboard),
       providesTags: ['Projects'],
     }),
 
@@ -101,6 +131,7 @@ export const projectsApi = baseApi.injectEndpoints({
 export const {
   useGetProjectsQuery,
   useLazyGetProjectsQuery,
+  useGetDashboardQuery,
   useGetProjectQuery,
   useLazyGetProjectQuery,
   useGetProjectsWithDetailsQuery,

@@ -67,6 +67,14 @@ export const ticketsApi = baseApi.injectEndpoints({
       },
       invalidatesTags: ['DashboardBaseline', 'Notifications'],
     }),
+
+    deleteTicket: builder.mutation<{ id: string }, string>({
+      query: (id) => ({
+        url: routePath(apiRoutes.tickets.root, apiRoutes.tickets.deleteById(id)),
+        method: 'DELETE',
+      }),
+      invalidatesTags: ['Tickets', 'DashboardBaseline', 'Notifications'],
+    }),
   }),
 });
 
@@ -74,4 +82,5 @@ export const {
   useGetTicketsQuery,
   useCreateTicketMutation,
   useUpdateTicketMutation,
+  useDeleteTicketMutation,
 } = ticketsApi;

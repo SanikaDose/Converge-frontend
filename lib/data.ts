@@ -171,6 +171,8 @@ export const ROLES: AppRole[] = ["Admin", "User"];
 const ALL_ROLES = ROLES;
 /** Write access — Admin only. */
 const ADMIN_ONLY: AppRole[] = ["Admin"];
+/** Ticket management — Admin and Lead (Leads run the ticket section). */
+const ADMIN_LEAD: AppRole[] = ["Admin", "Lead"];
 export const PERMISSIONS: Record<PermissionAction, AppRole[]> = {
   createProject: ADMIN_ONLY,
   deleteProject: ADMIN_ONLY,
@@ -182,8 +184,8 @@ export const PERMISSIONS: Record<PermissionAction, AppRole[]> = {
   // read-only means read-only, not "edit by request".
   editScheduleDirectly: ADMIN_ONLY,
   approveChanges: ADMIN_ONLY,
-  raiseTicket: ADMIN_ONLY,
-  updateTicketStatus: ADMIN_ONLY,
+  raiseTicket: ADMIN_LEAD,
+  updateTicketStatus: ADMIN_LEAD,
   // Viewing is unrestricted — a User sees every breakdown an Admin does.
   seeFullBreakdowns: ALL_ROLES,
   seeStatusBreakdown: ALL_ROLES,

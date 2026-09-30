@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import Box from "@mui/material/Box";
 import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
@@ -123,12 +124,14 @@ export function ProjectForm({
   const [endTouched, setEndTouched] = useState(!!initial?.endDate);
   const [showPreview, setShowPreview] = useState(false);
 
-  // Project Charter — a 2-step create flow (Project Information → Project
-  // Charter → Create) for NEW Solution projects. Products and the edit
-  // ("Project Settings") flow are single-step and skip the charter entirely.
+  // Project Charter. NEW Solution projects use a 2-step create wizard
+  // (Project Information → Project Charter → Create). In the edit ("Project
+  // Settings") flow the charter is shown inline instead, so it can be viewed
+  // and edited after creation. Products have no charter in either flow.
   const [charter, setCharter] = useState<ProjectCharter>(charterFromInitial(initial?.charter));
   const [activeStep, setActiveStep] = useState(0);
   const isCharterFlow = !initial && type !== "Product";
+  const showCharterInline = !!initial && type !== "Product";
 
   // The live master template (admins may have edited it). Only needed when
   // creating — Project Settings doesn't show the count/discipline preview.
@@ -233,7 +236,7 @@ export function ProjectForm({
   };
 
   return (
-    <Dialog open onClose={onClose} maxWidth={isCharterFlow ? "md" : "sm"} fullWidth>
+    <Dialog open onClose={onClose} maxWidth={isCharterFlow || showCharterInline ? "md" : "sm"} fullWidth>
       <DialogTitle>{title}</DialogTitle>
       <DialogContent dividers sx={{ display: "flex", flexDirection: "column", gap: 2.25 }}>
         {error && <Alert severity="error">{error}</Alert>}
@@ -464,6 +467,15 @@ export function ProjectForm({
             Preview phases &amp; tasks
           </Button>
         )}
+
+        {/* Charter shown inline in the settings (edit) flow for Solution
+            projects, so it can be viewed and edited after creation. */}
+        {showCharterInline && (
+          <Box sx={{ mt: 1, pt: 2, borderTop: "1px solid", borderColor: "divider" }}>
+            <Typography sx={{ fontWeight: 700, fontSize: 15, mb: 1.5 }}>Project Charter</Typography>
+            <ProjectCharterForm value={charter} onChange={setCharter} />
+          </Box>
+        )}
         </Stack>
         )}
 
@@ -512,7 +524,7 @@ export function ProjectForm({
                 weekOff,
                 relatedRepositories,
                 templateId: templateId || undefined,
-                charter: isCharterFlow ? charter : null,
+                charter: (isCharterFlow || showCharterInline) ? charter : null,
               })
             }
           >

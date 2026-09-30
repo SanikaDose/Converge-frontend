@@ -37,12 +37,11 @@ import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 import { ProjectCard } from "./ProjectCard";
 import { StatCard, computeStatTrend } from "./common";
 import { DonutChart, TrendLineChart } from "./charts";
-import { useGetProjectsQuery, projectsApi } from "@/store/api/projectsApi";
+import { useGetDashboardQuery, projectsApi } from "@/store/api/projectsApi";
 import { useGetDashboardBaselineQuery } from "@/store/api/dashboardApi";
-import { withLiveStats } from "@/lib/businessLogic";
 import { todayISO, addDays, diffDays } from "@/lib/dateUtils";
 import { DASHBOARD_COLORS } from "@/lib/theme";
-import type { Actor, DashboardBaseline, ProjectIndexRow, ProjectType, ProjectWithLiveStats } from "@/lib/types";
+import type { Actor, DashboardBaseline, ProjectType, ProjectWithLiveStats } from "@/lib/types";
 
 type BucketKey = "In Progress" | "Completed";
 
@@ -161,10 +160,10 @@ export function Dashboard({ actor, onOpen }: {
   const [deadlineFilter, setDeadlineFilter] = useState<"upcoming" | "overdue">("upcoming");
   const today = todayISO();
 
-  // Refresh maps to RTK Query's refetch; an error still yields an empty
-  // list so the empty-state renders rather than the page breaking.
-  const { data: projectsData, isFetching, refetch } = useGetProjectsQuery();
-  const projectsRaw: ProjectIndexRow[] = useMemo(() => projectsData ?? [], [projectsData]);
+  // Dedicated, server-computed dashboard payload (stats + phase rows + trend +
+  // deadlines) — lean, so the browser doesn't crunch every task. Refresh maps
+  // to RTK Query's refetch; an error yields empty data so the empty-state shows.
+  const { data: dashboardData, isFetching, refetch } = useGetDashboardQuery();
   const loading = isFetching;
   const load = refetch;
 
@@ -174,11 +173,9 @@ export function Dashboard({ actor, onOpen }: {
   const { data: baselineData } = useGetDashboardBaselineQuery();
   const baseline: DashboardBaseline | null = baselineData ?? null;
 
-  // Recompute bucket/delayed-count against *today's* date on every render
-  // instead of trusting the write-time snapshot — see businessLogic's
-  // withLiveStats for why (a task can silently cross its deadline without
-  // anyone touching the project).
-  const projects = useMemo<ProjectWithLiveStats[]>(() => projectsRaw.map(p => withLiveStats(p, today)), [projectsRaw, today]);
+  // Stats/bucket/phase rows are computed server-side (against the server's
+  // "today") and returned ready to render — no client recompute over per-task data.
+  const projects = useMemo<ProjectWithLiveStats[]>(() => dashboardData?.projects ?? [], [dashboardData]);
 
   // Roles from an earlier 5-role simulation (Project Manager/Team Lead/
   // Team Member) that no longer exist in the current Admin/Developer set
@@ -239,12 +236,12 @@ export function Dashboard({ actor, onOpen }: {
   // that date. No fabricated numbers — derived entirely from stored task
   // completion dates.
   const trendPoints = useMemo(() => {
-    const totalTasks = projects.reduce((a, p) => a + (p.taskLite?.length || 0), 0);
+    const totalTasks = dashboardData?.totalTaskCount ?? 0;
+    const completions = dashboardData?.taskCompletions ?? [];
     if (!totalTasks) return [];
     const pad = (n: number) => String(n).padStart(2, "0");
     const pctAt = (checkpoint: string) => {
-      let done = 0;
-      projects.forEach(p => (p.taskLite || []).forEach(t => { if (t.actualFinish && t.actualFinish <= checkpoint) done += 1; }));
+      const done = completions.reduce((n, finish) => (finish <= checkpoint ? n + 1 : n), 0);
       return Math.round((done / totalTasks) * 100);
     };
     const out: { label: string; value: number }[] = [];
@@ -274,16 +271,10 @@ export function Dashboard({ actor, onOpen }: {
       out.push({ label: formatCheckpoint(checkpoint, cfg.fmt), value: pctAt(checkpoint) });
     }
     return out;
-  }, [projects, today, trendRange]);
+  }, [dashboardData, today, trendRange]);
 
-  const upcomingDeadlines = useMemo(() => {
-    const items: { taskName: string; projectId: string; projectName: string; plannedFinish: string }[] = [];
-    projects.forEach(p => (p.taskLite || []).forEach(t => {
-      if (t.status !== "Completed") items.push({ taskName: t.name, projectId: p.id, projectName: p.name, plannedFinish: t.plannedFinish });
-    }));
-    items.sort((a, b) => a.plannedFinish.localeCompare(b.plannedFinish));
-    return items;
-  }, [projects]);
+  // Server returns the nearest open deadlines already sorted ascending.
+  const upcomingDeadlines = useMemo(() => dashboardData?.deadlines ?? [], [dashboardData]);
 
   const overdueDeadlines = useMemo(
     () => upcomingDeadlines.filter(d => diffDays(d.plannedFinish, today) < 0),

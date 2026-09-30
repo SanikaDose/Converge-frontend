@@ -24,6 +24,8 @@ export const apiRoutes = {
     getList: '',
     // Bulk board fetch: index + full details for every project in one request.
     board: 'board',
+    // Lean, server-computed payload for the dashboard.
+    dashboard: 'dashboard',
     create: '',
     getById: (id: string) => id,
     updateById: (id: string) => id,
@@ -35,6 +37,7 @@ export const apiRoutes = {
     getList: '',
     create: '',
     updateById: (id: string) => id,
+    deleteById: (id: string) => id,
   },
 
   miscTasks: {

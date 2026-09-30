@@ -37,7 +37,7 @@ import ConfirmationNumberIcon from "@mui/icons-material/ConfirmationNumberOutlin
 import { OrgSelect, OrgMultiSelect, StatusChip, EmployeeAvatar, EmployeeAvatarStack } from "./common";
 import { roleCan, genId, VIEW_ONLY_HINT } from "@/lib/data";
 import { fmt } from "@/lib/dateUtils";
-import { useGetTicketsQuery, useCreateTicketMutation, useUpdateTicketMutation } from "@/store/api/ticketsApi";
+import { useGetTicketsQuery, useCreateTicketMutation, useUpdateTicketMutation, useDeleteTicketMutation } from "@/store/api/ticketsApi";
 import { useStatusHex, DASHBOARD_COLORS } from "@/lib/theme";
 import type { CreateTicketInput } from "@/lib/types";
 import type { Actor, ChecklistItem, Priority, StatusColorKey, Ticket, TicketStatus } from "@/lib/types";
@@ -162,10 +162,12 @@ function EditTicketDialog({ ticket, onClose, onSave }: {
  * and behaved exactly like TaskCard's description field + "Critical
  * points" section so both features read as one consistent pattern.
  */
-function TicketRow({ ticket, canUpdate, onUpdate, focus }: {
+function TicketRow({ ticket, canUpdate, canDelete, onUpdate, onDelete, focus }: {
   ticket: Ticket;
   canUpdate: boolean;
+  canDelete: boolean;
   onUpdate: (id: string, updates: Partial<Ticket>) => void;
+  onDelete: (id: string) => void;
   /** Deep-linked from a notification — open the row and flash a highlight. */
   focus?: boolean;
 }) {
@@ -303,6 +305,17 @@ function TicketRow({ ticket, canUpdate, onUpdate, focus }: {
             <Tooltip title="Edit ticket">
               <IconButton size="small" onClick={() => setEditOpen(true)} sx={{ color: "text.secondary" }}>
                 <EditIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
+          {canDelete && (
+            <Tooltip title="Delete ticket">
+              <IconButton
+                size="small"
+                onClick={() => { if (window.confirm(`Delete ticket TKT-${ticket.seq}? This can't be undone.`)) onDelete(ticket.id); }}
+                sx={{ color: "text.secondary", "&:hover": { color: "error.main" } }}
+              >
+                <DeleteOutlineIcon fontSize="small" />
               </IconButton>
             </Tooltip>
           )}
@@ -514,6 +527,7 @@ export function TicketsPanel({ actor, projects, refreshKey, onChanged }: {
 
   const [createTicketMutation, { isLoading: busy }] = useCreateTicketMutation();
   const [updateTicketMutation] = useUpdateTicketMutation();
+  const [deleteTicketMutation] = useDeleteTicketMutation();
 
   const addTicket = async (payload: CreateTicketInput) => {
     if (!roleCan(role, "raiseTicket")) return;
@@ -533,6 +547,16 @@ export function TicketsPanel({ actor, projects, refreshKey, onChanged }: {
     if (!roleCan(role, "updateTicketStatus")) return;
     try {
       await updateTicketMutation({ id, patch: updates }).unwrap();
+      onChanged?.();
+    } catch (e) { console.error(e); }
+  };
+
+  // Delete is admin-only (gated on raiseTicket, which is ADMIN_ONLY) and matches
+  // the backend's admin check on DELETE /tickets/:id.
+  const removeTicket = async (id: string) => {
+    if (!roleCan(role, "raiseTicket")) return;
+    try {
+      await deleteTicketMutation(id).unwrap();
       onChanged?.();
     } catch (e) { console.error(e); }
   };
@@ -674,7 +698,7 @@ export function TicketsPanel({ actor, projects, refreshKey, onChanged }: {
                     <Typography variant="body2" color="text.disabled" sx={{ py: 1.5, textAlign: "center" }}>No tickets here.</Typography>
                   ) : (
                     <Stack spacing={1}>
-                      {grouped[key].map(t => <TicketRow key={t.id} ticket={t} canUpdate={roleCan(role, "updateTicketStatus")} onUpdate={updateTicket} focus={t.id === focusId} />)}
+                      {grouped[key].map(t => <TicketRow key={t.id} ticket={t} canUpdate={roleCan(role, "updateTicketStatus")} canDelete={roleCan(role, "raiseTicket")} onUpdate={updateTicket} onDelete={removeTicket} focus={t.id === focusId} />)}
                     </Stack>
                   )}
                 </AccordionDetails>

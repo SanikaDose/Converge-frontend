@@ -33,8 +33,11 @@ import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import WorkOutlinedIcon from "@mui/icons-material/WorkOutlined";
 import DonutLargeIcon from "@mui/icons-material/DonutLarge";
 import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
+import GridViewRoundedIcon from "@mui/icons-material/GridViewRounded";
+import ViewListRoundedIcon from "@mui/icons-material/ViewListRounded";
 
 import { ProjectCard } from "./ProjectCard";
+import { ProjectList } from "./ProjectList";
 import { StatCard, computeStatTrend } from "./common";
 import { DonutChart, TrendLineChart } from "./charts";
 import { useGetDashboardQuery, projectsApi } from "@/store/api/projectsApi";
@@ -44,6 +47,10 @@ import { DASHBOARD_COLORS } from "@/lib/theme";
 import type { Actor, DashboardBaseline, ProjectType, ProjectWithLiveStats } from "@/lib/types";
 
 type BucketKey = "In Progress" | "Completed";
+type ViewMode = "card" | "list";
+// Remembers the user's Card/List choice across visits (per browser). Read after
+// mount, not during render, so server and first client render always agree.
+const VIEW_MODE_KEY = "converge_projects_view_mode_v1";
 
 // Two accordions: In Progress (everything not finished yet — delayed or
 // not, that distinction still shows via each ProjectCard's own "delayed"
@@ -158,6 +165,18 @@ export function Dashboard({ actor, onOpen }: {
   const [expanded, setExpanded] = useState<Record<BucketKey, boolean>>({ "In Progress": true, "Completed": true });
   const [trendRange, setTrendRange] = useState<TrendRange>("month");
   const [deadlineFilter, setDeadlineFilter] = useState<"upcoming" | "overdue">("upcoming");
+  // Card (default) vs List view for the project groups. Restored from
+  // localStorage after mount; a null read (private window, cleared storage)
+  // just keeps the Card default.
+  const [viewMode, setViewMode] = useState<ViewMode>("card");
+  useEffect(() => {
+    try { const v = localStorage.getItem(VIEW_MODE_KEY); if (v === "list" || v === "card") setViewMode(v); } catch { /* storage unavailable */ }
+  }, []);
+  const changeView = (v: ViewMode | null) => {
+    if (!v) return;
+    setViewMode(v);
+    try { localStorage.setItem(VIEW_MODE_KEY, v); } catch { /* storage unavailable */ }
+  };
   const today = todayISO();
 
   // Dedicated, server-computed dashboard payload (stats + phase rows + trend +
@@ -454,6 +473,18 @@ export function Dashboard({ actor, onOpen }: {
             <Checkbox size="small" checked={myOnly} disabled={!actor.id} onChange={(e) => setMyOnly(e.target.checked)} />
           } label="My projects" />
         )}
+        {/* Card / List view switcher (Google-Drive style). */}
+        <ToggleButtonGroup
+          size="small" exclusive value={viewMode} onChange={(_e, v: ViewMode | null) => changeView(v)}
+          sx={{ flexShrink: 0, "& .MuiToggleButton-root": { px: 1, py: 0.5 } }}
+        >
+          <ToggleButton value="card" aria-label="Card view">
+            <Tooltip title="Card view"><GridViewRoundedIcon fontSize="small" /></Tooltip>
+          </ToggleButton>
+          <ToggleButton value="list" aria-label="List view">
+            <Tooltip title="List view"><ViewListRoundedIcon fontSize="small" /></Tooltip>
+          </ToggleButton>
+        </ToggleButtonGroup>
         <Tooltip title="Refresh"><IconButton onClick={load}><RefreshIcon fontSize="small" /></IconButton></Tooltip>
       </Stack>
 
@@ -477,11 +508,13 @@ export function Dashboard({ actor, onOpen }: {
                   <Box sx={{ flex: 1 }} />
                 </Stack>
               </AccordionSummary>
-              <AccordionDetails>
+              <AccordionDetails sx={viewMode === "list" ? { p: 0 } : undefined}>
                 {grouped[key].length === 0 ? (
-                  <Typography color="text.secondary" sx={{ py: 1.5 }}>
+                  <Typography color="text.secondary" sx={{ py: 1.5, px: viewMode === "list" ? 2 : 0 }}>
                     {query || myOnly ? "No projects match your filters." : `No ${label.toLowerCase()}.`}
                   </Typography>
+                ) : viewMode === "list" ? (
+                  <ProjectList projects={grouped[key]} onOpen={onOpen} />
                 ) : (
                   <Grid container spacing={1.75}>
                     {grouped[key].map(p => (

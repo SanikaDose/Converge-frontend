@@ -96,6 +96,7 @@ function TaskRow({ task, canEdit, accent, onSave, onDelete, drag }: {
 }) {
   const [name, setName] = useState(task.name);
   const [description, setDescription] = useState(task.description ?? "");
+  // Day from the phase's week start + duration, both in working days.
   const [dayOffset, setDayOffset] = useState(String(task.dayOffset));
   const [duration, setDuration] = useState(String(task.duration));
   // Critical points — plain text lines that seed each generated task's checklist.
@@ -107,6 +108,16 @@ function TaskRow({ task, canEdit, accent, onSave, onDelete, drag }: {
   useEffect(() => { setDayOffset(String(task.dayOffset)); }, [task.dayOffset]);
   useEffect(() => { setDuration(String(task.duration)); }, [task.duration]);
   useEffect(() => { setPoints(task.criticalPoints ?? []); }, [task.criticalPoints]);
+
+  const commitDayOffset = () => {
+    const n = Math.max(0, Math.trunc(Number(dayOffset) || 0));
+    if (n !== task.dayOffset) onSave({ dayOffset: n }); else setDayOffset(String(task.dayOffset));
+  };
+  const commitDuration = () => {
+    const n = Math.max(1, Math.trunc(Number(duration) || 1));
+    if (n !== task.duration) onSave({ duration: n }); else setDuration(String(task.duration));
+  };
+  const numSx = { width: 58, "& input": { textAlign: "center" as const } };
 
   const addPoint = () => {
     const v = newPoint.trim();
@@ -126,7 +137,6 @@ function TaskRow({ task, canEdit, accent, onSave, onDelete, drag }: {
     setPoints(next); onSave({ criticalPoints: next });
   };
 
-  const numSx = { width: 84, "& input": { textAlign: "center" as const } };
   const dropLine = { content: '""', position: "absolute" as const, left: 8, right: 8, height: 2, borderRadius: 2, bgcolor: accent };
   return (
     <Stack direction="row" gap={1} alignItems="flex-start"
@@ -220,18 +230,23 @@ function TaskRow({ task, canEdit, accent, onSave, onDelete, drag }: {
           </Box>
         )}
       </Stack>
-      <TextField
-        size="small" type="number" value={dayOffset} disabled={!canEdit} sx={numSx}
-        slotProps={{ htmlInput: { min: 0, style: { fontSize: 13 } } }}
-        onChange={(e) => setDayOffset(e.target.value)}
-        onBlur={() => { const n = Number(dayOffset); if (Number.isFinite(n) && n >= 0 && n !== task.dayOffset) onSave({ dayOffset: n }); else setDayOffset(String(task.dayOffset)); }}
-      />
-      <TextField
-        size="small" type="number" value={duration} disabled={!canEdit} sx={numSx}
-        slotProps={{ htmlInput: { min: 1, style: { fontSize: 13 } } }}
-        onChange={(e) => setDuration(e.target.value)}
-        onBlur={() => { const n = Number(duration); if (Number.isFinite(n) && n >= 1 && n !== task.duration) onSave({ duration: n }); else setDuration(String(task.duration)); }}
-      />
+      {/* Day from the phase's week start + duration, in working days. */}
+      {canEdit ? (
+        <Stack direction="row" alignItems="center" gap={0.75} sx={{ flexShrink: 0, pt: 0.25 }}>
+          <Tooltip title="Day from week start">
+            <TextField size="small" type="number" value={dayOffset} onChange={(e) => setDayOffset(e.target.value)} onBlur={commitDayOffset}
+              sx={numSx} slotProps={{ htmlInput: { min: 0, style: { fontSize: 13 } } }} />
+          </Tooltip>
+          <Tooltip title="Duration (days)">
+            <TextField size="small" type="number" value={duration} onChange={(e) => setDuration(e.target.value)} onBlur={commitDuration}
+              sx={numSx} slotProps={{ htmlInput: { min: 1, style: { fontSize: 13 } } }} />
+          </Tooltip>
+        </Stack>
+      ) : (
+        <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0, pt: 0.5, whiteSpace: "nowrap" }}>
+          Day {task.dayOffset} · {task.duration}d
+        </Typography>
+      )}
       <Tooltip title={canEdit ? "Delete task" : VIEW_ONLY_HINT}>
         <span>
           <IconButton size="small" disabled={!canEdit} onClick={onDelete}
@@ -261,17 +276,20 @@ function AddTaskRow({ canEdit, accent, onAdd }: {
   const addPoint = () => { const v = newPoint.trim(); if (!v) return; setPoints([...points, v]); setNewPoint(""); };
   const removePoint = (i: number) => setPoints(points.filter((_, idx) => idx !== i));
 
-  const valid = name.trim() && Number(dayOffset) >= 0 && Number(duration) >= 1;
+  const numSx = { width: 58, "& input": { textAlign: "center" as const } };
+  const valid = !!name.trim();
   const submit = () => {
     if (!valid) return;
-    onAdd({ name: name.trim(), description: description.trim(), dayOffset: Number(dayOffset), duration: Number(duration), criticalPoints: points });
+    onAdd({
+      name: name.trim(), description: description.trim(),
+      dayOffset: Math.max(0, Math.trunc(Number(dayOffset) || 0)),
+      duration: Math.max(1, Math.trunc(Number(duration) || 1)),
+      criticalPoints: points,
+    });
     setName(""); setDescription(""); setDayOffset("0"); setDuration("1"); setPoints([]); setNewPoint("");
   };
   if (!canEdit) return null;
 
-  // Same column widths as TaskRow (drag 18 · flex · 84 · 84 · action 34) so the
-  // Start Day / Required Days inputs line up with the task rows above.
-  const numSx = { width: 84, "& input": { textAlign: "center" as const } };
   return (
     <Stack gap={1}
       sx={{ mt: 0.5, py: 1, px: 1, borderRadius: 2, border: "1px dashed", borderColor: "divider", "&:hover": { borderColor: "text.disabled" }, transition: "border-color .12s ease" }}>
@@ -311,10 +329,16 @@ function AddTaskRow({ canEdit, accent, onAdd }: {
             </Stack>
           </Box>
         </Stack>
-        <TextField size="small" type="number" value={dayOffset} sx={numSx}
-          slotProps={{ htmlInput: { min: 0, style: { fontSize: 13 } } }} onChange={(e) => setDayOffset(e.target.value)} />
-        <TextField size="small" type="number" value={duration} sx={numSx}
-          slotProps={{ htmlInput: { min: 1, style: { fontSize: 13 } } }} onChange={(e) => setDuration(e.target.value)} />
+        <Stack direction="row" alignItems="center" gap={0.75} sx={{ flexShrink: 0, pt: 0.5 }}>
+          <Tooltip title="Day from week start">
+            <TextField size="small" type="number" value={dayOffset} onChange={(e) => setDayOffset(e.target.value)}
+              sx={numSx} slotProps={{ htmlInput: { min: 0, style: { fontSize: 13 } } }} />
+          </Tooltip>
+          <Tooltip title="Duration (days)">
+            <TextField size="small" type="number" value={duration} onChange={(e) => setDuration(e.target.value)}
+              sx={numSx} slotProps={{ htmlInput: { min: 1, style: { fontSize: 13 } } }} />
+          </Tooltip>
+        </Stack>
         <Box sx={{ width: 34, flexShrink: 0 }} />
       </Stack>
       <Stack direction="row" justifyContent="flex-end">
@@ -327,7 +351,7 @@ function AddTaskRow({ canEdit, accent, onAdd }: {
 }
 
 /** A collapsible phase card. */
-function PhaseCard({ phase, canEdit, seq, expanded, onToggle, onAdd, onSave, onDelete, onReorder, onEditPhase, onDeletePhase }: {
+function PhaseCard({ phase, canEdit, seq, expanded, onToggle, onAdd, onSave, onSavePhase, onDelete, onReorder, onEditPhase, onDeletePhase }: {
   phase: PhaseTemplateItem;
   canEdit: boolean;
   /** 1-based position, used to number the phase when its name has no "NN ·" prefix. */
@@ -336,6 +360,8 @@ function PhaseCard({ phase, canEdit, seq, expanded, onToggle, onAdd, onSave, onD
   onToggle: () => void;
   onAdd: (t: { name: string; description: string; dayOffset: number; duration: number; criticalPoints: string[] }) => void;
   onSave: (taskId: string, patch: { name?: string; description?: string; dayOffset?: number; duration?: number; criticalPoints?: string[] }) => void;
+  /** Persist a change to the phase's week window (Week Start / Duration). */
+  onSavePhase: (patch: { weekStart?: number; durationWeeks?: number }) => void;
   onDelete: (taskId: string) => void;
   onReorder: (taskIds: string[]) => void;
   onEditPhase: () => void;
@@ -346,6 +372,31 @@ function PhaseCard({ phase, canEdit, seq, expanded, onToggle, onAdd, onSave, onD
   // Fall back to the phase's position when the name carries no "NN ·" prefix,
   // so every template numbers its phases (not just the seeded "Standard" one).
   const displayNum = num || String(seq).padStart(2, "0");
+
+  // Editable week window (commit on blur, only if changed).
+  const [weekStart, setWeekStart] = useState(String(phase.weekStart));
+  const [durationWeeks, setDurationWeeks] = useState(String(phase.durationWeeks));
+  useEffect(() => { setWeekStart(String(phase.weekStart)); }, [phase.weekStart]);
+  useEffect(() => { setDurationWeeks(String(phase.durationWeeks)); }, [phase.durationWeeks]);
+  const commitWeekStart = () => {
+    const n = Math.max(1, Math.trunc(Number(weekStart) || 1));
+    if (n !== phase.weekStart) onSavePhase({ weekStart: n }); else setWeekStart(String(phase.weekStart));
+  };
+  const commitDuration = () => {
+    const n = Math.max(1, Math.trunc(Number(durationWeeks) || 1));
+    if (n !== phase.durationWeeks) onSavePhase({ durationWeeks: n }); else setDurationWeeks(String(phase.durationWeeks));
+  };
+  const weekEnd = phase.weekStart + phase.durationWeeks - 1;
+  const availableWeeks = weekEnd > phase.weekStart ? `Week ${phase.weekStart} – ${weekEnd}` : `Week ${phase.weekStart}`;
+  const weekSx = { "& .MuiOutlinedInput-root": { borderRadius: 1.5 } };
+  // Tiny column caption + the view-only value, shared by the fixed columns so
+  // every phase card lines its schedule controls up in the same place.
+  const colLabelSx = {
+    display: "block", fontSize: 9, fontWeight: 700, letterSpacing: 0.4, textTransform: "uppercase" as const,
+    color: "text.disabled", lineHeight: 1, mb: 0.5, textAlign: "center" as const, whiteSpace: "nowrap" as const,
+  };
+  const colValSx = { fontSize: 14, fontWeight: 700, textAlign: "center" as const, color: "text.primary", py: 0.5 };
+  const stop = (e: React.MouseEvent) => e.stopPropagation();
 
   // Drag-to-reorder state, scoped to this phase's task list.
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -377,12 +428,53 @@ function PhaseCard({ phase, canEdit, seq, expanded, onToggle, onAdd, onSave, onD
           <Typography sx={{ fontWeight: 700, fontSize: 14.5, lineHeight: 1.2 }} noWrap>{title}</Typography>
           <Typography variant="caption" color="text.secondary">{phase.tasks.length} task{phase.tasks.length === 1 ? "" : "s"}</Typography>
         </Box>
-        {phase.discipline
-          ? <Chip label={phase.discipline} size="small" sx={{ height: 20, fontSize: 10.5, fontWeight: 700, bgcolor: alpha(accent, 0.14), color: accent }} />
-          : <Chip label="Common" size="small" variant="outlined" sx={{ height: 20, fontSize: 10.5, color: "text.secondary" }} />}
-        {phase.critical && <Tooltip title="Critical phase"><Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: DASHBOARD_COLORS.red, flexShrink: 0 }} /></Tooltip>}
+        {/* Fixed-width columns from here on, so the fields, chips and dot line
+            up vertically across every phase card regardless of label widths. */}
+        {/* Week Start + Duration (weeks) — the phase's schedule window. */}
+        <Stack direction="row" gap={1} onClick={stop} alignItems="flex-start" sx={{ flexShrink: 0 }}>
+          <Box sx={{ width: 58 }}>
+            <Typography sx={colLabelSx}>Start wk</Typography>
+            {canEdit ? (
+              <Tooltip title="Week the phase starts in">
+                <TextField size="small" type="number" value={weekStart} onChange={(e) => setWeekStart(e.target.value)} onBlur={commitWeekStart}
+                  fullWidth sx={weekSx} slotProps={{ htmlInput: { min: 1, style: { fontSize: 13, textAlign: "center" } } }} />
+              </Tooltip>
+            ) : (
+              <Typography sx={colValSx}>{phase.weekStart}</Typography>
+            )}
+          </Box>
+          <Box sx={{ width: 58 }}>
+            <Typography sx={colLabelSx}>Weeks</Typography>
+            {canEdit ? (
+              <Tooltip title="Duration in weeks">
+                <TextField size="small" type="number" value={durationWeeks} onChange={(e) => setDurationWeeks(e.target.value)} onBlur={commitDuration}
+                  fullWidth sx={weekSx} slotProps={{ htmlInput: { min: 1, style: { fontSize: 13, textAlign: "center" } } }} />
+              </Tooltip>
+            ) : (
+              <Typography sx={colValSx}>{phase.durationWeeks}</Typography>
+            )}
+          </Box>
+        </Stack>
+        <Box sx={{ width: 108, flexShrink: 0, textAlign: "center" }}>
+          <Typography sx={colLabelSx}>Available</Typography>
+          <Tooltip title="Available week(s)">
+            <Chip label={availableWeeks} size="small" variant="outlined"
+              sx={{ height: 22, fontSize: 11, fontWeight: 600, borderColor: alpha(accent, 0.4), color: accent, maxWidth: "100%" }} />
+          </Tooltip>
+        </Box>
+        <Box sx={{ width: 104, flexShrink: 0, textAlign: "center" }}>
+          <Typography sx={colLabelSx}>Type</Typography>
+          {phase.discipline
+            ? <Chip label={phase.discipline} size="small" sx={{ height: 22, fontSize: 10.5, fontWeight: 700, bgcolor: alpha(accent, 0.14), color: accent }} />
+            : <Chip label="Common" size="small" variant="outlined" sx={{ height: 22, fontSize: 10.5, color: "text.secondary" }} />}
+        </Box>
+        <Box sx={{ width: 16, flexShrink: 0, display: "flex", justifyContent: "center", alignItems: "center", alignSelf: "stretch" }}>
+          {phase.critical && (
+            <Tooltip title="Critical phase"><Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: DASHBOARD_COLORS.red }} /></Tooltip>
+          )}
+        </Box>
         {canEdit && (
-          <>
+          <Stack direction="row" alignItems="center" sx={{ flexShrink: 0, alignSelf: "stretch" }}>
             <Tooltip title="Edit phase">
               <IconButton size="small" onClick={(e) => { e.stopPropagation(); onEditPhase(); }} sx={{ color: "text.disabled", "&:hover": { color: accent } }}>
                 <EditOutlinedIcon sx={{ fontSize: 16 }} />
@@ -393,17 +485,19 @@ function PhaseCard({ phase, canEdit, seq, expanded, onToggle, onAdd, onSave, onD
                 <DeleteOutlineIcon sx={{ fontSize: 16 }} />
               </IconButton>
             </Tooltip>
-          </>
+          </Stack>
         )}
-        <ExpandMoreIcon sx={{ color: "text.secondary", transform: expanded ? "rotate(180deg)" : "none", transition: "transform .2s ease" }} />
+        <ExpandMoreIcon sx={{ color: "text.secondary", alignSelf: "center", transform: expanded ? "rotate(180deg)" : "none", transition: "transform .2s ease" }} />
       </Stack>
       <Collapse in={expanded} unmountOnExit>
         <Box sx={{ px: 2, pb: 1.75, pt: 0.5 }}>
-          <Stack direction="row" gap={1} sx={{ px: 1, pb: 0.5, color: "text.secondary" }}>
+          <Stack direction="row" gap={1} alignItems="center" sx={{ px: 1, pb: 0.5, color: "text.secondary" }}>
             <Box sx={{ width: canEdit ? 18 : 4, flexShrink: 0 }} />
             <Typography variant="caption" sx={{ flex: 1, fontWeight: 700, textTransform: "uppercase", fontSize: 10, letterSpacing: 0.4 }}>Task</Typography>
-            <Typography variant="caption" sx={{ width: 84, textAlign: "center", fontWeight: 700, textTransform: "uppercase", fontSize: 10, letterSpacing: 0.4 }}>Start Day</Typography>
-            <Typography variant="caption" sx={{ width: 84, textAlign: "center", fontWeight: 700, textTransform: "uppercase", fontSize: 10, letterSpacing: 0.4 }}>Required Days</Typography>
+            <Tooltip title={`Day from the phase's week start — the phase opens on ${availableWeeks.toLowerCase()}`}>
+              <Typography variant="caption" sx={{ width: 58, flexShrink: 0, textAlign: "center", fontWeight: 700, textTransform: "uppercase", fontSize: 10, letterSpacing: 0.4 }}>Day</Typography>
+            </Tooltip>
+            <Typography variant="caption" sx={{ width: 58, flexShrink: 0, textAlign: "center", fontWeight: 700, textTransform: "uppercase", fontSize: 10, letterSpacing: 0.4 }}>Days</Typography>
             <Box sx={{ width: 34, flexShrink: 0 }} />
           </Stack>
           {phase.tasks.map((task, index) => (
@@ -705,6 +799,7 @@ export function TemplateManager() {
       expanded={expanded.has(phase.id)} onToggle={() => toggle(phase.id)}
       onAdd={(t) => run(addTask({ phaseId: phase.id, ...t }).unwrap())}
       onSave={(taskId, patch) => run(updateTask({ taskId, ...patch }).unwrap())}
+      onSavePhase={(patch) => run(updatePhase({ phaseId: phase.id, ...patch }).unwrap())}
       onDelete={(taskId) => run(deleteTask({ taskId }).unwrap())}
       onReorder={(taskIds) => run(reorderTasks({ phaseId: phase.id, taskIds }).unwrap())}
       onEditPhase={() => setPhaseDialog({ open: true, initial: phase })}

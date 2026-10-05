@@ -22,7 +22,7 @@ import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import { OrgSelect } from "./common";
 import { TemplatePreviewDialog } from "./TemplatePreviewDialog";
 import { TEMPLATE, WEEKDAY_SHORT, WEEKDAY_LABELS, MAX_WEEK_OFF_DAYS, PHASE_DISCIPLINE_OPTIONS, FINANCIAL_YEAR_OPTIONS } from "@/lib/data";
-import { suggestedEndDate, guessEmployeeIdFromFreeText } from "@/lib/businessLogic";
+import { suggestedEndDate, phaseWindow, guessEmployeeIdFromFreeText } from "@/lib/businessLogic";
 import { todayISO, DEFAULT_WEEK_OFF, addWorkingDays, nextWorkingDay } from "@/lib/dateUtils";
 import { useOrgContext } from "@/context/OrgContext";
 import { useGetProjectTemplatesQuery, useGetTemplatePhasesQuery } from "@/store/api/projectTemplatesApi";
@@ -155,15 +155,17 @@ export function ProjectForm({
       ? templatePhases.map(p => ({ discipline: p.discipline, taskCount: p.tasks.length }))
       : TEMPLATE.map(p => ({ discipline: p.discipline ?? null, taskCount: p.tasks.length }))
   ), [templatePhases]);
-  // Latest planned finish across the template, for the default end date.
-  const templateMaxSpan = useMemo<number | null>(() => {
-    if (!templatePhases?.length) return null;
-    let m = 0;
-    templatePhases.forEach(p => p.tasks.forEach(t => { m = Math.max(m, t.dayOffset + t.duration); }));
-    return m;
-  }, [templatePhases]);
-  const suggestEnd = (start: string, wo: WeekDay[]) =>
-    templateMaxSpan != null ? addWorkingDays(start, templateMaxSpan, wo) : suggestedEndDate(start, wo);
+  // Default end date = the latest phase finish across the template's week
+  // windows (falls back to the in-code TEMPLATE before the live one loads).
+  const suggestEnd = (start: string, wo: WeekDay[]) => {
+    if (!templatePhases?.length) return suggestedEndDate(start, wo);
+    let end = start;
+    templatePhases.forEach(p => {
+      const { plannedFinish } = phaseWindow(start, p.weekStart, p.durationWeeks, wo);
+      if (plannedFinish > end) end = plannedFinish;
+    });
+    return end;
+  };
 
   // Projects created before the org directory existed stored `owner` as
   // a free-text name (e.g. "Bharat") instead of a real employee id. The
@@ -182,7 +184,7 @@ export function ProjectForm({
   useEffect(() => {
     if (!endTouched) setEndDate(suggestEnd(startDate, weekOff));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startDate, endTouched, weekOff, templateMaxSpan]);
+  }, [startDate, endTouched, weekOff, templatePhases]);
 
   // End date may not be before the start date.
   const endBeforeStart = !!startDate && !!endDate && endDate < startDate;

@@ -50,7 +50,7 @@ export const projectTemplatesApi = baseApi.injectEndpoints({
     }),
 
     // ---- phases ----
-    addTemplatePhase: builder.mutation<PhaseTemplateItem[], { templateId: string; name: string; critical?: boolean; discipline?: PhaseDiscipline | null }>({
+    addTemplatePhase: builder.mutation<PhaseTemplateItem[], { templateId: string; name: string; critical?: boolean; discipline?: PhaseDiscipline | null; weekStart?: number; durationWeeks?: number }>({
       query: ({ templateId, ...body }) => ({
         url: routePath(apiRoutes.projectTemplates.root, apiRoutes.projectTemplates.addPhase(templateId)),
         method: 'POST',
@@ -58,7 +58,7 @@ export const projectTemplatesApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: ['ProjectTemplate'],
     }),
-    updateTemplatePhase: builder.mutation<PhaseTemplateItem[], { phaseId: string; name?: string; critical?: boolean; discipline?: PhaseDiscipline | null }>({
+    updateTemplatePhase: builder.mutation<PhaseTemplateItem[], { phaseId: string; name?: string; critical?: boolean; discipline?: PhaseDiscipline | null; weekStart?: number; durationWeeks?: number }>({
       query: ({ phaseId, ...body }) => ({
         url: routePath(apiRoutes.projectTemplates.root, apiRoutes.projectTemplates.updatePhase(phaseId)),
         method: 'PATCH',
@@ -75,7 +75,7 @@ export const projectTemplatesApi = baseApi.injectEndpoints({
     }),
 
     // ---- tasks ----
-    addTemplateTask: builder.mutation<PhaseTemplateItem[], { phaseId: string; name: string; description?: string; dayOffset: number; duration: number; criticalPoints?: string[] }>({
+    addTemplateTask: builder.mutation<PhaseTemplateItem[], { phaseId: string; name: string; description?: string; dayOffset?: number; duration?: number; criticalPoints?: string[] }>({
       query: ({ phaseId, ...body }) => ({
         url: routePath(apiRoutes.projectTemplates.root, apiRoutes.projectTemplates.addTask(phaseId)),
         method: 'POST',

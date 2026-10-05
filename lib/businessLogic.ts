@@ -8,7 +8,7 @@
  * once; TeamPerformance.tsx just calls GET /team-performance.)
  */
 import { TEMPLATE, genId, newId } from "./data";
-import { addWorkingDays, businessDaysBetween, todayISO, DEFAULT_WEEK_OFF } from "./dateUtils";
+import { addDays, addWorkingDays, businessDaysBetween, nextWorkingDay, todayISO, DEFAULT_WEEK_OFF } from "./dateUtils";
 import type {
   Achievement, Actor, ChecklistItem, Employee, HistoryEntry, LivePhaseRow, Phase, PhaseLite, PhaseSummary,
   ProjectBucket, ProjectDetailData, ProjectIndexRow, ProjectWithLiveStats, StatusColorKey,
@@ -36,12 +36,44 @@ export function computePlanned(startDate: string, dayOffset: number, duration: n
   return { plannedStart, plannedFinish };
 }
 
+/** Working days in a week under this calendar (default Mon–Fri = 5). */
+export function workingDaysPerWeek(weekOff: WeekDay[]): number {
+  return Math.max(1, 7 - (weekOff?.length ?? 0));
+}
+
+/**
+ * The scheduling window for a phase from its 1-based `weekStart` and
+ * `durationWeeks`. Week N begins (N-1)*7 calendar days after the project start
+ * (7-day project weeks), snapped forward to the next working day; the phase
+ * then spans `durationWeeks` working-weeks. Kept identical to the backend's
+ * `phaseWindow` in utils/business-logic.ts.
+ */
+export function phaseWindow(startDate: string, weekStart: number, durationWeeks: number, weekOff: WeekDay[] = DEFAULT_WEEK_OFF): {
+  plannedStart: string; plannedFinish: string; dayOffset: number; duration: number;
+} {
+  const ws = Math.max(1, Math.trunc(weekStart || 1));
+  const dw = Math.max(1, Math.trunc(durationWeeks || 1));
+  const plannedStart = nextWorkingDay(addDays(startDate, (ws - 1) * 7), weekOff);
+  const duration = dw * workingDaysPerWeek(weekOff);
+  const plannedFinish = addWorkingDays(plannedStart, duration - 1, weekOff);
+  const dayOffset = businessDaysBetween(plannedStart, startDate, weekOff);
+  return { plannedStart, plannedFinish, dayOffset, duration };
+}
+
 export function buildTasks(startDate: string, phases: Phase[], weekOff: WeekDay[] = DEFAULT_WEEK_OFF): Task[] {
   const tasks: Task[] = [];
   TEMPLATE.forEach((p, pi) => {
     const phase = phases[pi];
-    p.tasks.forEach(([name, offset, duration, description], ti) => {
-      const { plannedStart, plannedFinish } = computePlanned(startDate, offset, duration, weekOff);
+    // The phase anchors at the start of its configured week; each task then
+    // offsets from that anchor by its own "day from week start" and runs for
+    // its own duration in working days. Kept identical to the backend buildTasks.
+    const phaseStart = phaseWindow(startDate, p.weekStart, p.durationWeeks, weekOff).plannedStart;
+    p.tasks.forEach(([name, offset, dur, description], ti) => {
+      const off = Math.max(0, Math.trunc(offset || 0));
+      const duration = Math.max(1, Math.trunc(dur || 1));
+      const plannedStart = addWorkingDays(phaseStart, off, weekOff);
+      const plannedFinish = addWorkingDays(plannedStart, duration - 1, weekOff);
+      const dayOffset = businessDaysBetween(plannedStart, startDate, weekOff);
       tasks.push({
         id: newId(),
         phaseId: phase.id,
@@ -52,7 +84,7 @@ export function buildTasks(startDate: string, phases: Phase[], weekOff: WeekDay[
         assignees: [],
         priority: "Medium",
         dependencies: [],
-        dayOffset: offset,
+        dayOffset,
         duration,
         plannedStart,
         plannedFinish,
@@ -70,11 +102,17 @@ export function buildTasks(startDate: string, phases: Phase[], weekOff: WeekDay[
 }
 
 export function suggestedEndDate(startDate: string, weekOff: WeekDay[] = DEFAULT_WEEK_OFF): string {
-  let maxOffsetPlusDuration = 0;
-  TEMPLATE.forEach(p => p.tasks.forEach(([, offset, duration]) => {
-    maxOffsetPlusDuration = Math.max(maxOffsetPlusDuration, offset + duration);
-  }));
-  return addWorkingDays(startDate, maxOffsetPlusDuration, weekOff);
+  // Latest task finish across the template (phase week-start + task offset).
+  let end = nextWorkingDay(startDate, weekOff);
+  TEMPLATE.forEach(p => {
+    const phaseStart = phaseWindow(startDate, p.weekStart, p.durationWeeks, weekOff).plannedStart;
+    p.tasks.forEach(([, offset, dur]) => {
+      const start = addWorkingDays(phaseStart, Math.max(0, Math.trunc(offset || 0)), weekOff);
+      const finish = addWorkingDays(start, Math.max(1, Math.trunc(dur || 1)) - 1, weekOff);
+      if (finish > end) end = finish;
+    });
+  });
+  return end;
 }
 
 /* ---------------------------------------------------------------------

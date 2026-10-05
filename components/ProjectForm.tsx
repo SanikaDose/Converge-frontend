@@ -155,14 +155,29 @@ export function ProjectForm({
       ? templatePhases.map(p => ({ discipline: p.discipline, taskCount: p.tasks.length }))
       : TEMPLATE.map(p => ({ discipline: p.discipline ?? null, taskCount: p.tasks.length }))
   ), [templatePhases]);
-  // Default end date = the latest phase finish across the template's week
-  // windows (falls back to the in-code TEMPLATE before the live one loads).
-  const suggestEnd = (start: string, wo: WeekDay[]) => {
+  // Default end date = the latest TASK finish the chosen template + disciplines
+  // actually generate, so the prefilled end matches the project that will be
+  // created. Each phase anchors at the start of its configured week; each task
+  // then offsets by its own day-from-week-start and runs for its own duration
+  // (mirrors buildTasks). Falls back to the in-code TEMPLATE before the live
+  // one loads, and to the phase window for any phase that has no tasks yet.
+  const suggestEnd = (start: string, wo: WeekDay[], disc: PhaseDiscipline[]) => {
     if (!templatePhases?.length) return suggestedEndDate(start, wo);
-    let end = start;
-    templatePhases.forEach(p => {
-      const { plannedFinish } = phaseWindow(start, p.weekStart, p.durationWeeks, wo);
-      if (plannedFinish > end) end = plannedFinish;
+    const included = disc.length === 0
+      ? templatePhases
+      : templatePhases.filter(p => !p.discipline || disc.includes(p.discipline));
+    let end = nextWorkingDay(start, wo);
+    included.forEach(p => {
+      const { plannedStart: phaseStart, plannedFinish: windowFinish } = phaseWindow(start, p.weekStart, p.durationWeeks, wo);
+      if (!p.tasks.length) {
+        if (windowFinish > end) end = windowFinish;
+        return;
+      }
+      p.tasks.forEach(t => {
+        const s = addWorkingDays(phaseStart, Math.max(0, Math.trunc(t.dayOffset || 0)), wo);
+        const f = addWorkingDays(s, Math.max(1, Math.trunc(t.duration || 1)) - 1, wo);
+        if (f > end) end = f;
+      });
     });
     return end;
   };
@@ -181,10 +196,13 @@ export function ProjectForm({
     if (guessed) setOwner(guessed);
   }, [initial?.owner, employeeById, employees]);
 
+  // Re-derive the end date whenever the start date, the selected template
+  // (templatePhases), the discipline filter, or the week-off calendar changes —
+  // unless the user has manually overridden it (endTouched).
   useEffect(() => {
-    if (!endTouched) setEndDate(suggestEnd(startDate, weekOff));
+    if (!endTouched) setEndDate(suggestEnd(startDate, weekOff, disciplines));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startDate, endTouched, weekOff, templatePhases]);
+  }, [startDate, endTouched, weekOff, templatePhases, disciplines]);
 
   // End date may not be before the start date.
   const endBeforeStart = !!startDate && !!endDate && endDate < startDate;

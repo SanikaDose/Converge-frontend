@@ -24,6 +24,30 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 const STORAGE_KEY = "converge_projects_session_v1";
 
 /**
+ * Reads a JWT's `exp` without verifying it (verification is the server's job) —
+ * just enough to know, locally and with no network call, whether a stored token
+ * is already past its expiry. Returns null when the token can't be parsed, so
+ * callers fall back to letting the server decide.
+ */
+function tokenExpMs(token: string): number | null {
+  try {
+    const payload = token.split(".")[1];
+    const json = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/"))) as { exp?: number };
+    return typeof json.exp === "number" ? json.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+/** True when the token is parseable and its expiry is in the past. An
+ *  unparseable token returns false — we let the first API call's 401 handle it
+ *  rather than wrongly discarding a session we can't read. */
+function isTokenExpired(token: string): boolean {
+  const exp = tokenExpMs(token);
+  return exp !== null && Date.now() >= exp;
+}
+
+/**
  * Sign-in state for the whole app. Credentials are verified server-side
  * (POST /auth/login, bcrypt-compared against the employees table); only the
  * returned non-secret profile is kept here, and the bearer token it comes
@@ -42,12 +66,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
+      const token = getToken();
+      // An expired stored token is worse than no session: AuthGate would render
+      // the whole app, fire its data queries, and only discover the dead token
+      // when each one 401s over the (remote) network — seconds of "login is
+      // slow" before the redirect to /login. Incognito skips all that because it
+      // has no stored token. So drop an expired/orphaned session up front and
+      // land on /login immediately, exactly like a fresh browser.
+      if (token && isTokenExpired(token)) {
+        clearToken();
+        localStorage.removeItem(STORAGE_KEY);
+      } else if (raw && token) {
         const parsed = JSON.parse(raw) as AuthedUser;
         // Guard against a stale/garbled record from an older shape — and
         // require the token, so a session saved before tokens existed lands
         // on /login instead of rendering a shell over 401s.
-        if (parsed && parsed.id && parsed.employeeCode && getToken()) setUser(parsed);
+        if (parsed && parsed.id && parsed.employeeCode) setUser(parsed);
+      } else if (raw || token) {
+        // A session without its token (or vice versa) can't authenticate —
+        // clear the orphan so it doesn't drive a doomed authed render.
+        clearToken();
+        localStorage.removeItem(STORAGE_KEY);
       }
     } catch { /* no stored session */ }
     setReady(true);

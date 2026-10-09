@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
@@ -19,7 +19,7 @@ import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import VisibilityOffOutlinedIcon from "@mui/icons-material/VisibilityOffOutlined";
 import { ConvergeLogo } from "@/components/Logo";
 import { ForgotPasswordDialog } from "@/components/ForgotPasswordDialog";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth, takeLogoutReason } from "@/context/AuthContext";
 
 const NAVY_GRADIENT = "linear-gradient(150deg, #0F172A 0%, #1E3A5F 100%)";
 
@@ -37,6 +37,14 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [forgotOpen, setForgotOpen] = useState(false);
+  // If the last session ended automatically (idle timeout or 12h expiry), say so
+  // once — read-and-clear so it doesn't persist across future visits.
+  const [notice, setNotice] = useState<string | null>(null);
+  useEffect(() => {
+    const reason = takeLogoutReason();
+    if (reason === "idle") setNotice("You were signed out after 2 hours of inactivity. Please sign in again.");
+    else if (reason === "expired") setNotice("Your session expired. Please sign in again.");
+  }, []);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,6 +102,7 @@ export default function LoginPage() {
             <ConvergeLogo height={140} />
           </Box>
 
+          {notice && !error && <Alert severity="info" sx={{ mb: 2.5 }} onClose={() => setNotice(null)}>{notice}</Alert>}
           {error && <Alert severity="error" sx={{ mb: 2.5 }}>{error}</Alert>}
 
           <TextField

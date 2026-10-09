@@ -712,7 +712,10 @@ export function TemplateManager() {
       setActiveId((templates.find(t => t.isDefault) ?? templates[0]).id);
     }
   }, [templates, activeId]);
-  const { data: phases = [], isFetching: phasesLoading } = useGetTemplatePhasesQuery(activeId, { skip: !activeId });
+  // Gate the skeletons on isLoading (first fetch of this template only), NOT
+  // isFetching — a background refetch after an edit/add must keep the current
+  // list on screen, or the list collapses to skeletons and the scroll jumps up.
+  const { data: phases = [], isLoading: phasesLoading } = useGetTemplatePhasesQuery(activeId, { skip: !activeId });
 
   const [createTemplate, { isLoading: creating }] = useCreateProjectTemplateMutation();
   const [updateTemplate, { isLoading: renaming }] = useUpdateProjectTemplateMutation();
@@ -797,7 +800,7 @@ export function TemplateManager() {
       key={phase.id} phase={phase} canEdit={isAdmin}
       seq={phases.findIndex(p => p.id === phase.id) + 1}
       expanded={expanded.has(phase.id)} onToggle={() => toggle(phase.id)}
-      onAdd={(t) => run(addTask({ phaseId: phase.id, ...t }).unwrap())}
+      onAdd={(t) => run(addTask({ phaseId: phase.id, templateId: activeId, ...t }).unwrap())}
       onSave={(taskId, patch) => run(updateTask({ taskId, ...patch }).unwrap())}
       onSavePhase={(patch) => run(updatePhase({ phaseId: phase.id, ...patch }).unwrap())}
       onDelete={(taskId) => run(deleteTask({ taskId }).unwrap())}

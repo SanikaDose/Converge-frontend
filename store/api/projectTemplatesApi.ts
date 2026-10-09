@@ -75,12 +75,29 @@ export const projectTemplatesApi = baseApi.injectEndpoints({
     }),
 
     // ---- tasks ----
-    addTemplateTask: builder.mutation<PhaseTemplateItem[], { phaseId: string; name: string; description?: string; dayOffset?: number; duration?: number; criticalPoints?: string[] }>({
-      query: ({ phaseId, ...body }) => ({
+    // `templateId` is carried only to key the cache update below — it's stripped
+    // from the request body (the route is phase-scoped).
+    addTemplateTask: builder.mutation<PhaseTemplateItem[], { phaseId: string; templateId: string; name: string; description?: string; dayOffset?: number; duration?: number; criticalPoints?: string[] }>({
+      query: ({ phaseId, templateId: _templateId, ...body }) => ({
         url: routePath(apiRoutes.projectTemplates.root, apiRoutes.projectTemplates.addTask(phaseId)),
         method: 'POST',
         body,
       }),
+      // Write the server's updated phase list straight into the open template's
+      // cache, so the new task shows up in place the instant the request
+      // resolves. Without this the `invalidatesTags` refetch is what the UI
+      // waits on, and that round trip (plus the skeleton it used to trigger) is
+      // what bounced the scroll position to the top. The tag invalidation is
+      // kept so the sidebar's task counts stay correct; it now just reconciles
+      // data that already matches, with no visible change.
+      async onQueryStarted({ templateId }, { dispatch, queryFulfilled }) {
+        try {
+          const { data } = await queryFulfilled;
+          dispatch(projectTemplatesApi.util.updateQueryData('getTemplatePhases', templateId, () => data));
+        } catch {
+          /* mutation failed — the caller surfaces the error; cache is untouched */
+        }
+      },
       invalidatesTags: ['ProjectTemplate'],
     }),
     reorderTemplateTasks: builder.mutation<PhaseTemplateItem[], { phaseId: string; taskIds: string[] }>({
